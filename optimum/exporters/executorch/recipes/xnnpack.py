@@ -14,14 +14,15 @@ from typing import Union
 
 import torch
 import torch.export._trace
+from torch.nn.attention import SDPBackend
+from transformers import PreTrainedModel, TorchExportableModuleWithStaticCache
+
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.exir import (
     EdgeCompileConfig,
     ExecutorchBackendConfig,
     to_edge_transform_and_lower,
 )
-from torch.nn.attention import SDPBackend
-from transformers import PreTrainedModel, TorchExportableModuleWithStaticCache
 
 from ..recipe_registry import register_recipe
 
