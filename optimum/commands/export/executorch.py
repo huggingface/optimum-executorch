@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...exporters import TasksManager
-from ..base import BaseOptimumCLICommand
+from ..base import BaseOptimumCLICommand, CommandInfo
 
 
 if TYPE_CHECKING:
@@ -52,6 +52,8 @@ def parse_args_executorch(parser):
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
+    COMMAND = CommandInfo(name="executorch", help="Export models to ExecuTorch.")
+
     @staticmethod
     def parse_args(parser: "ArgumentParser"):
         return parse_args_executorch(parser)
