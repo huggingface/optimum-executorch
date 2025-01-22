@@ -18,11 +18,9 @@ import unittest
 import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoTokenizer
-from transformers.testing_utils import (
-    slow,
-)
+from transformers.testing_utils import slow
 
-from optimum.executorchruntime import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForCausalLM
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
