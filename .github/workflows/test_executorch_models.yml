@@ -39,4 +39,4 @@ jobs:
       - name: Run tests
         working-directory: tests
         run: |
-          RUN_SLOW=1 pytest runtime/${{ matrix.test-modeling }} -s -vvvv --durations=0
+          RUN_SLOW=1 pytest models/${{ matrix.test-modeling }} -s -vvvv --durations=0
