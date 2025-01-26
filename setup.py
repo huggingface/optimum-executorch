@@ -15,7 +15,7 @@ INSTALL_REQUIRE = [
     # "optimum~=1.24",
     "executorch>=0.4.0",
     "optimum@git+https://github.com/huggingface/optimum.git",
-    "transformers@git+https://github.com/huggingface/transformers.git@tensor-cache",
+    "transformers@git+https://github.com/huggingface/transformers.git@make-cache-traceable",
 ]
 
 TESTS_REQUIRE = [
