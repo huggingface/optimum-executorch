@@ -13,9 +13,9 @@ except Exception as error:
 
 INSTALL_REQUIRE = [
     # "optimum~=1.24",
-    "optimum@git+https://github.com/huggingface/optimum.git",
     "executorch>=0.4.0",
-    "transformers>=4.46",
+    "optimum@git+https://github.com/huggingface/optimum.git",
+    "transformers@git+https://github.com/huggingface/transformers.git@tensor-cache",
 ]
 
 TESTS_REQUIRE = [
