@@ -16,12 +16,12 @@
 
 import logging
 import os
-import warnings
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import List, Optional, Union
 
 import torch
+from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from transformers import (
     AutoModelForCausalLM,
@@ -29,10 +29,7 @@ from transformers import (
     PreTrainedTokenizer,
 )
 
-from executorch.extension.pybindings.portable_lib import (
-    ExecuTorchModule,
-    _load_for_executorch,
-)
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
@@ -53,7 +50,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
     Attributes:
         auto_model_class (`Type`):
             Associated Transformers class, `AutoModelForCausalLM`.
-        et_model (`ExecuTorchModule`):
+        model (`ExecuTorchModule`):
             The loaded ExecuTorch model.
         use_kv_cache (`bool`):
             Whether key-value caching is enabled. For performance reasons, the exported model is
@@ -74,29 +71,25 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
     auto_model_class = AutoModelForCausalLM
 
-    def __init__(
-        self,
-        model: "ExecuTorchModule",
-        config: "PretrainedConfig",
-    ):
+    def __init__(self, model: "ExecuTorchModule", config: "PretrainedConfig"):
         super().__init__(model, config)
-        self.et_model = model
-        metadata = self.et_model.method_names()
+        # self.model = model
+        metadata = self.model.method_names()
         logging.info(f"Load all static methods: {metadata}")
         if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.et_model.run_method("use_kv_cache")[0]
+            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
-            self.max_cache_size = self.et_model.run_method("get_max_seq_len")[0]
+            self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
         if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.et_model.run_method("get_max_batch_size")[0]
+            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
         if "get_dtype" in metadata:
-            self.dtype = self.et_model.run_method("get_dtype")[0]
+            self.dtype = self.model.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
-            self.bos_token_id = self.et_model.run_method("get_bos_id")[0]
+            self.bos_token_id = self.model.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
-            self.eos_token_id = self.et_model.run_method("get_eos_id")[0]
+            self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
-            self.vocab_size = self.et_model.run_method("get_vocab_size")[0]
+            self.vocab_size = self.model.run_method("get_vocab_size")[0]
 
     def forward(
         self,
@@ -113,28 +106,33 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        return self.et_model.forward((input_ids, cache_position))[0]
-    
+        return self.model.forward((input_ids, cache_position))[0]
+
     @classmethod
     def _from_pretrained(
         cls,
-        model_dir_path: Union[str, Path],
+        model_id: Union[str, Path],
         config: PretrainedConfig,
+        token: Optional[Union[bool, str]] = None,
         subfolder: str = "",
         revision: Optional[str] = None,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[bool, str]] = None,
+        **kwargs,
+        # model_save_dir: Optional[Union[str, Path, TemporaryDirectory]] = None,
     ) -> "ExecuTorchModelForCausalLM":
         """
-        Load a pre-trained ExecuTorch model from a local directory.
+        Load a pre-trained ExecuTorch model from a local directory or hosted on the HF hub.
 
         Args:
-            model_dir_path (`Union[str, Path]`):
+            model_id (`Union[str, Path]`):
                 Path to the directory containing the ExecuTorch model file (`model.pte`).
             config (`PretrainedConfig`, *optional*):
                 Configuration of the pre-trained model.
+            token (`Optional[Union[bool,str]]`, defaults to `None`):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
             subfolder (`str`, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo either locally or on huggingface.co, you can
                 specify the folder name here.
@@ -147,29 +145,57 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                 cached versions if they exist.
             local_files_only (`Optional[bool]`, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            token (`Optional[Union[bool,str]]`, defaults to `None`):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
 
         Returns:
             `ExecuTorchModelForCausalLM`: The initialized ExecuTorch model.
 
         """
-        full_path = os.path.join(f"{model_dir_path}", "model.pte")
-        model = _load_for_executorch(full_path)
-        logging.info(f"Loaded model from {full_path}")
-        logging.debug(f"{model.method_meta('forward')}")
-        return cls(
-            model=model,
-            config=config,
-        )
+        model_path = Path(model_id)
+        default_file_name = "model.pte"
 
-    def _save_pretrained(self, save_directory):
-        """
-        Saves a model weights into a directory, so that it can be re-loaded using the
-        [`from_pretrained`] class method.
-        """
-        raise NotImplementedError
+        model_cache_path = cls._cached_file(
+            model_path=model_path,
+            token=token,
+            revision=revision,
+            force_download=force_download,
+            cache_dir=cache_dir,
+            file_name=default_file_name,
+            subfolder=subfolder,
+            local_files_only=local_files_only,
+        )
+        model = _load_for_executorch(model_cache_path)
+        logging.info(f"Loaded model from {model_cache_path}")
+
+        return cls(model, config=config)
+
+    @staticmethod
+    def _cached_file(
+        model_path: Union[Path, str],
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        force_download: bool = False,
+        cache_dir: Optional[str] = None,
+        file_name: Optional[str] = None,
+        subfolder: str = "",
+        local_files_only: bool = False,
+    ):
+        model_path = Path(model_path)
+        # locates a file in a local folder and repo, downloads and cache it if necessary.
+        if model_path.is_dir():
+            model_cache_path = os.path.join(model_path, subfolder, file_name)
+        else:
+            model_cache_path = hf_hub_download(
+                repo_id=model_path.as_posix(),
+                filename=file_name,
+                subfolder=subfolder,
+                token=token,
+                revision=revision,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                local_files_only=local_files_only,
+            )
+
+        return model_cache_path
 
     @classmethod
     def _export(
@@ -177,13 +203,13 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         model_id: str,
         recipe: str,
         config: PretrainedConfig,
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
         trust_remote_code: bool = False,
         subfolder: str = "",
-        revision: Optional[str] = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[bool, str]] = None,
         **kwargs,
     ):
         """
@@ -228,6 +254,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
         save_dir = TemporaryDirectory()
         save_dir_path = Path(save_dir.name)
+
         # Export to ExecuTorch and save the pte file to the temporary directory
         main_export(
             model_name_or_path=model_id,
@@ -243,17 +270,14 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             trust_remote_code=trust_remote_code,
             **kwargs,
         )
+        return cls._from_pretrained(model_id=save_dir_path, config=config)
 
-        return cls._from_pretrained(
-            model_dir_path=save_dir_path,
-            config=config,
-            subfolder=subfolder,
-            revision=revision,
-            cache_dir=cache_dir,
-            token=token,
-            local_files_only=local_files_only,
-            force_download=force_download,
-        )
+    def _save_pretrained(self, save_directory):
+        """
+        Saves a model weights into a directory, so that it can be re-loaded using the
+        [`from_pretrained`] class method.
+        """
+        raise NotImplementedError
 
     def generate(
         self,
