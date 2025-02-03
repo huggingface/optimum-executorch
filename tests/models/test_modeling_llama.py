@@ -36,7 +36,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_name_or_path=model_id,
             export=True,
-            task="text-generation",
             recipe="xnnpack",
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
@@ -61,7 +60,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_name_or_path=model_id,
             export=True,
-            task="text-generation",
             recipe="xnnpack",
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
