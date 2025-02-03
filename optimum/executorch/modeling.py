@@ -34,6 +34,7 @@ from executorch.extension.pybindings.portable_lib import (
     _load_for_executorch,
 )
 
+from ..exporters import TasksManager
 from ..exporters.executorch import main_export
 from ..modeling_base import OptimizedModel
 
@@ -119,7 +120,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         cls,
         model_name_or_path: Union[str, Path],
         export: bool = True,
-        task: str = "",
         recipe: str = "",
         config: "PretrainedConfig" = None,
         subfolder: str = "",
@@ -140,8 +140,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             export (`bool`, *optional*, defaults to `True`):
                 If `True`, the model will be exported from eager to ExecuTorch after fetched from huggingface.co. `model_name_or_path` must be a valid model ID on huggingface.co.
                 If `False`, the previously exported ExecuTorch model will be loaded from a local path. `model_name_or_path` must be a valid local directory where a `model.pte` is stored.
-            task (`str`, defaults to `""`):
-                The task to export the model for, e.g. "text-generation". It is required to specify a task when `export` is `True`.
             recipe (`str`, defaults to `""`):
                 The recipe to use to do the export, e.g. "xnnpack". It is required to specify a task when `export` is `True`.
             config (`PretrainedConfig`, *optional*):
@@ -180,13 +178,10 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
         if export:
             # Fetch the model from huggingface.co and export it to ExecuTorch
-            if task == "":
-                raise ValueError("Please specify a task to export the model for.")
             if recipe == "":
                 raise ValueError("Please specify a recipe to export the model for.")
             return cls._export(
                 model_id=model_name_or_path,
-                task=task,
                 recipe=recipe,
                 config=config,
                 **kwargs,
@@ -258,7 +253,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
     def _export(
         cls,
         model_id: str,
-        task: str,
         recipe: str,
         config: PretrainedConfig,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
@@ -276,8 +270,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         Args:
             model_id (`str`):
                 Model ID on huggingface.co, for example: `model_name_or_path="meta-llama/Llama-3.2-1B"`.
-            task (`str`):
-                The task to export the model for, e.g. "text-generation".
             recipe (`str`):
                 The recipe to use to do the export, e.g. "xnnpack".
             config (`PretrainedConfig`, *optional*):
@@ -308,15 +300,17 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             `ExecuTorchModelForCausalLM`: The loaded and exported ExecuTorch model.
 
         """
+        task = kwargs.pop("task", None)
+        if task is not None:
+            logger.warning(f"task was provided and set to {task} but not used, will be ignored")
 
         save_dir = TemporaryDirectory()
         save_dir_path = Path(save_dir.name)
-
         # Export to ExecuTorch and save the pte file to the temporary directory
         main_export(
             model_name_or_path=model_id,
             output_dir=save_dir_path,
-            task=task,
+            task=TasksManager.infer_task_from_model(cls.auto_model_class),
             recipe=recipe,
             subfolder=subfolder,
             revision=revision,
