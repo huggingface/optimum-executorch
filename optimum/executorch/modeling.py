@@ -73,7 +73,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
     def __init__(self, model: "ExecuTorchModule", config: "PretrainedConfig"):
         super().__init__(model, config)
-        # self.model = model
         metadata = self.model.method_names()
         logging.info(f"Load all static methods: {metadata}")
         if "use_kv_cache" in metadata:
@@ -120,7 +119,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         force_download: bool = False,
         local_files_only: bool = False,
         **kwargs,
-        # model_save_dir: Optional[Union[str, Path, TemporaryDirectory]] = None,
     ) -> "ExecuTorchModelForCausalLM":
         """
         Load a pre-trained ExecuTorch model from a local directory or hosted on the HF hub.

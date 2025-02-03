@@ -17,38 +17,40 @@ import os
 import tempfile
 import unittest
 
-import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.exporters.executorch import main_export
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @slow
-    @pytest.mark.run_slow
     def test_load_model_from_hub(self):
-        model = ExecuTorchModelForCausalLM.from_pretrained("NousResearch/Llama-3.2-1B", export=True, recipe="xnnpack")
+        model_id = "optimum-internal-testing/tiny-random-llama"
+
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, export=True, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-    @slow
-    @pytest.mark.run_slow
-    def test_load_model_from_local_path(self):
-        from optimum.exporters.executorch import main_export
+    def test_load_et_model_from_hub(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
 
-        model_id = "NousResearch/Llama-3.2-1B"
-        task = "text-generation"
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id, export=False, revision="executorch", recipe="xnnpack"
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+    def test_load_model_from_local_path(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
         recipe = "xnnpack"
 
         with tempfile.TemporaryDirectory() as tempdir:
             # Export to a local dir
             main_export(
                 model_name_or_path=model_id,
-                task=task,
                 recipe=recipe,
                 output_dir=tempdir,
             )
