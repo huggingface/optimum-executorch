@@ -114,85 +114,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             torch.Tensor: Logits output from the model.
         """
         return self.et_model.forward((input_ids, cache_position))[0]
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        model_name_or_path: Union[str, Path],
-        export: bool = True,
-        recipe: str = "",
-        config: "PretrainedConfig" = None,
-        subfolder: str = "",
-        revision: Optional[str] = None,
-        cache_dir: str = HUGGINGFACE_HUB_CACHE,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        use_auth_token: Optional[Union[bool, str]] = None,
-        token: Optional[Union[bool, str]] = None,
-        **kwargs,
-    ) -> "ExecuTorchModelForCausalLM":
-        """
-        Load a pre-trained ExecuTorch model.
-
-        Args:
-            model_name_or_path (`Union[str, Path]`):
-                Model ID on huggingface.co or path on disk to the model repository to export. Example: `model_name_or_path="meta-llama/Llama-3.2-1B"` or `mode_name_or_path="/path/to/model_folder`.
-            export (`bool`, *optional*, defaults to `True`):
-                If `True`, the model will be exported from eager to ExecuTorch after fetched from huggingface.co. `model_name_or_path` must be a valid model ID on huggingface.co.
-                If `False`, the previously exported ExecuTorch model will be loaded from a local path. `model_name_or_path` must be a valid local directory where a `model.pte` is stored.
-            recipe (`str`, defaults to `""`):
-                The recipe to use to do the export, e.g. "xnnpack". It is required to specify a task when `export` is `True`.
-            config (`PretrainedConfig`, *optional*):
-                Configuration of the pre-trained model.
-            subfolder (`str`, defaults to `""`):
-                In case the relevant files are located inside a subfolder of the model repo either locally or on huggingface.co, you can
-                specify the folder name here.
-            revision (`str`, defaults to `"main"`):
-                Revision is the specific model version to use. It can be a branch name, a tag name, or a commit id.
-            cache_dir (`Optional[str]`, defaults to `None`):
-                Path indicating where to store cache. The default Hugging Face cache path will be used by default.
-            force_download (`bool`, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            local_files_only (`Optional[bool]`, defaults to `False`):
-                Whether or not to only look at local files (i.e., do not try to download the model).
-            use_auth_token (`Optional[Union[bool,str]]`, defaults to `None`):
-                Deprecated. Please use the `token` argument instead.
-            token (`Optional[Union[bool,str]]`, defaults to `None`):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
-            **kwargs:
-                Additional configuration options to tasks and recipes.
-
-        Returns:
-            `ExecuTorchModelForCausalLM`: An instance of the ExecuTorch model for text generation task.
-        """
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed soon. Please use the `token` argument instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError("You cannot use both `use_auth_token` and `token` arguments at the same time.")
-            token = use_auth_token
-
-        if export:
-            # Fetch the model from huggingface.co and export it to ExecuTorch
-            if recipe == "":
-                raise ValueError("Please specify a recipe to export the model for.")
-            return cls._export(
-                model_id=model_name_or_path,
-                recipe=recipe,
-                config=config,
-                **kwargs,
-            )
-        else:
-            # Load the ExecuTorch model from a local path
-            return cls._from_pretrained(
-                model_dir_path=model_name_or_path,
-                config=config,
-            )
-
+    
     @classmethod
     def _from_pretrained(
         cls,
@@ -269,7 +191,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
         Args:
             model_id (`str`):
-                Model ID on huggingface.co, for example: `model_name_or_path="meta-llama/Llama-3.2-1B"`.
+                Model ID on huggingface.co, for example: `model_id="meta-llama/Llama-3.2-1B"`.
             recipe (`str`):
                 The recipe to use to do the export, e.g. "xnnpack".
             config (`PretrainedConfig`, *optional*):
@@ -440,3 +362,9 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             max_seq_len=max_seq_len,
         )
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+    @classmethod
+    def _from_transformers(cls, *args, **kwargs):
+        # TODO : add warning when from_pretrained_method is set to cls._export instead of cls._from_transformers when export=True
+        # logger.warning("The method `_from_transformers` is deprecated, please use `_export` instead")
+        return cls._export(*args, **kwargs)

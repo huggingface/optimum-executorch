@@ -31,11 +31,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     def test_load_model_from_hub(self):
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_name_or_path="NousResearch/Llama-3.2-1B",
-            export=True,
-            recipe="xnnpack",
-        )
+        model = ExecuTorchModelForCausalLM.from_pretrained("NousResearch/Llama-3.2-1B", export=True, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -59,9 +55,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             self.assertTrue(os.path.exists(f"{tempdir}/model.pte"))
 
             # Load the exported model from a local dir
-            model = ExecuTorchModelForCausalLM.from_pretrained(
-                model_name_or_path=tempdir,
-                export=False,
-            )
+            model = ExecuTorchModelForCausalLM.from_pretrained(tempdir, export=False)
             self.assertIsInstance(model, ExecuTorchModelForCausalLM)
             self.assertIsInstance(model.model, ExecuTorchModule)

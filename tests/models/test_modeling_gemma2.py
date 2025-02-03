@@ -33,11 +33,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # TODO: Switch to use google/gemma-2-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "google/gemma-2-2b"
         model_id = "unsloth/gemma-2-2b-it"
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_name_or_path=model_id,
-            export=True,
-            recipe="xnnpack",
-        )
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, export=True, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 

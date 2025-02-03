@@ -31,11 +31,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.run_slow
     def test_qwen2_5_text_generation_with_xnnpack(self):
         model_id = "Qwen/Qwen2.5-0.5B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_name_or_path=model_id,
-            export=True,
-            recipe="xnnpack",
-        )
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, export=True, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
