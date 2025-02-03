@@ -53,6 +53,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 model_name_or_path=model_id,
                 recipe=recipe,
                 output_dir=tempdir,
+                task="text-generation",
             )
             self.assertTrue(os.path.exists(f"{tempdir}/model.pte"))
 
