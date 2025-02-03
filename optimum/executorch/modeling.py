@@ -208,7 +208,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
         force_download: bool = False,
         local_files_only: bool = False,
-        use_auth_token: Optional[Union[bool, str]] = None,
         token: Optional[Union[bool, str]] = None,
     ) -> "ExecuTorchModelForCausalLM":
         """
@@ -231,8 +230,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                 cached versions if they exist.
             local_files_only (`Optional[bool]`, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            use_auth_token (`Optional[Union[bool,str]]`, defaults to `None`):
-                Deprecated. Please use the `token` argument instead.
             token (`Optional[Union[bool,str]]`, defaults to `None`):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
@@ -270,7 +267,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         revision: Optional[str] = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        use_auth_token: Optional[Union[bool, str]] = None,
         token: Optional[Union[bool, str]] = None,
         **kwargs,
     ):
@@ -302,8 +298,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                 cached versions if they exist.
             local_files_only (`Optional[bool]`, defaults to `False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
-            use_auth_token (`Optional[Union[bool,str]]`, defaults to `None`):
-                Deprecated. Please use the `token` argument instead.
             token (`Optional[Union[bool,str]]`, defaults to `None`):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
@@ -314,14 +308,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             `ExecuTorchModelForCausalLM`: The loaded and exported ExecuTorch model.
 
         """
-        if use_auth_token is not None:
-            warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed soon. Please use the `token` argument instead.",
-                FutureWarning,
-            )
-            if token is not None:
-                raise ValueError("You cannot use both `use_auth_token` and `token` arguments at the same time.")
-            token = use_auth_token
 
         save_dir = TemporaryDirectory()
         save_dir_path = Path(save_dir.name)
@@ -345,7 +331,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         return cls._from_pretrained(
             model_dir_path=save_dir_path,
             config=config,
-            use_auth_token=use_auth_token,
             subfolder=subfolder,
             revision=revision,
             cache_dir=cache_dir,
