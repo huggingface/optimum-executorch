@@ -35,6 +35,7 @@ from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
+from ..utils.file_utils import _find_files_matching_pattern
 
 
 logger = logging.getLogger(__name__)
@@ -413,6 +414,43 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
         if isinstance(model_id, Path):
             model_id = model_id.as_posix()
+
+        _export = export
+        try:
+            if local_files_only:
+                object_id = model_id.replace("/", "--")
+                cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
+                refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
+                with open(refs_file) as f:
+                    revision = f.read()
+                model_dir = os.path.join(cached_model_dir, "snapshots", revision)
+            else:
+                model_dir = model_id
+
+            pte_files = _find_files_matching_pattern(
+                model_dir,
+                pattern=r"(.*).pte$",
+                subfolder=subfolder,
+                token=token,
+                revision=revision,
+            )
+            _export = len(pte_files) == 0
+            if _export ^ export:
+                if export:
+                    logger.warning(
+                        f"The model {model_id} was already converted to the ExecuTorch IR but got `export=True`, the model will be converted to ExecuTorch once again. "
+                        # "Don't forget to save the resulting model with `.save_pretrained()`"
+                    )
+                    _export = True
+                else:
+                    logger.warning(
+                        f"No ExecuTorch files were found for {model_id}, setting `export=True` to convert the model to the OpenVINO IR. "
+                        # "Don't forget to save the resulting model with `.save_pretrained()`"
+                    )
+        except Exception as exception:
+            logger.warning(
+                f"Could not infer whether the model was already converted or not to the ExecuTorch IR, keeping `export={export}`.\n{exception}"
+            )
 
         from_pretrained_method = cls._export if export else cls._from_pretrained
 
