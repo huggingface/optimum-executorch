@@ -27,13 +27,14 @@ from transformers import (
     AutoModelForCausalLM,
     PretrainedConfig,
     PreTrainedTokenizer,
+    add_start_docstrings,
 )
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
-from ..modeling_base import OptimizedModel
+from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 
 
 logger = logging.getLogger(__name__)
@@ -113,11 +114,11 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         model_id: Union[str, Path],
         config: PretrainedConfig,
         token: Optional[Union[bool, str]] = None,
-        subfolder: str = "",
         revision: Optional[str] = None,
-        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        subfolder: str = "",
         force_download: bool = False,
         local_files_only: bool = False,
+        cache_dir: str = HUGGINGFACE_HUB_CACHE,
         **kwargs,
     ) -> "ExecuTorchModelForCausalLM":
         """
@@ -386,7 +387,44 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
     @classmethod
-    def _from_transformers(cls, *args, **kwargs):
-        # TODO : add warning when from_pretrained_method is set to cls._export instead of cls._from_transformers when export=True
-        # logger.warning("The method `_from_transformers` is deprecated, please use `_export` instead")
-        return cls._export(*args, **kwargs)
+    @add_start_docstrings(FROM_PRETRAINED_START_DOCSTRING)
+    def from_pretrained(
+        cls,
+        model_id: Union[str, Path],
+        export: bool = False,
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        subfolder: str = "",
+        trust_remote_code: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        config: Optional[PretrainedConfig] = None,
+        **kwargs,
+    ):
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            logger.warning(
+                "The `use_auth_token` argument is deprecated and will be removed soon. Please use the `token` argument instead."
+            )
+            if token is not None:
+                raise ValueError("You cannot use both `use_auth_token` and `token` arguments at the same time.")
+            token = use_auth_token
+
+        if isinstance(model_id, Path):
+            model_id = model_id.as_posix()
+
+        from_pretrained_method = cls._export if export else cls._from_pretrained
+
+        return from_pretrained_method(
+            model_id=model_id,
+            config=config,
+            revision=revision,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            token=token,
+            subfolder=subfolder,
+            local_files_only=local_files_only,
+            trust_remote_code=trust_remote_code,
+            **kwargs,
+        )
