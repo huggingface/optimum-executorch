@@ -16,11 +16,15 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from huggingface_hub import HfApi
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 from optimum.exporters.executorch import main_export
+from optimum.utils.file_utils import _find_files_matching_pattern
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -30,7 +34,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_load_model_from_hub(self):
         model_id = "optimum-internal-testing/tiny-random-llama"
 
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, export=True, recipe="xnnpack")
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -58,6 +62,26 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             self.assertTrue(os.path.exists(f"{tempdir}/model.pte"))
 
             # Load the exported model from a local dir
-            model = ExecuTorchModelForCausalLM.from_pretrained(tempdir, export=False)
+            model = ExecuTorchModelForCausalLM.from_pretrained(tempdir)
             self.assertIsInstance(model, ExecuTorchModelForCausalLM)
             self.assertIsInstance(model.model, ExecuTorchModule)
+
+    def test_find_files_matching_pattern(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
+        pattern = r"(.*).pte$"
+
+        # hub model
+        for revision in ("main", "executorch"):
+            pte_files = _find_files_matching_pattern(model_id, pattern=pattern, revision=revision)
+            self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
+
+        # local model
+        api = HfApi()
+        with TemporaryDirectory() as tmpdirname:
+            for revision in ("main", "executorch"):
+                local_dir = Path(tmpdirname) / revision
+                api.snapshot_download(repo_id=model_id, local_dir=local_dir, revision=revision)
+                pte_files = _find_files_matching_pattern(
+                    local_dir, pattern=pattern, revision=revision, subfolder=revision
+                )
+                self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
