@@ -23,6 +23,7 @@ from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from huggingface_hub import HfApi
 
 from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch.modeling import _FILE_PATTERN
 from optimum.exporters.executorch import main_export
 from optimum.utils.file_utils import _find_files_matching_pattern
 
@@ -68,11 +69,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     def test_find_files_matching_pattern(self):
         model_id = "optimum-internal-testing/tiny-random-llama"
-        pattern = r"(.*).pte$"
 
         # hub model
         for revision in ("main", "executorch"):
-            pte_files = _find_files_matching_pattern(model_id, pattern=pattern, revision=revision)
+            pte_files = _find_files_matching_pattern(model_id, pattern=_FILE_PATTERN, revision=revision)
             self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
 
         # local model
@@ -81,5 +81,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             for revision in ("main", "executorch"):
                 local_dir = Path(tmpdirname) / revision
                 api.snapshot_download(repo_id=model_id, local_dir=local_dir, revision=revision)
-                pte_files = _find_files_matching_pattern(local_dir, pattern=pattern, revision=revision)
+                pte_files = _find_files_matching_pattern(local_dir, pattern=_FILE_PATTERN, revision=revision)
                 self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)

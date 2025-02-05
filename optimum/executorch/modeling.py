@@ -38,6 +38,9 @@ from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import _find_files_matching_pattern
 
 
+_FILE_PATTERN = r"^.*\.pte$"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -429,7 +432,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
             pte_files = _find_files_matching_pattern(
                 model_dir,
-                pattern=r"(.*).pte$",
+                pattern=_FILE_PATTERN,
                 subfolder=subfolder,
                 token=token,
                 revision=revision,
