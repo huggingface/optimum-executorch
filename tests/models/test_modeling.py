@@ -81,7 +81,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             for revision in ("main", "executorch"):
                 local_dir = Path(tmpdirname) / revision
                 api.snapshot_download(repo_id=model_id, local_dir=local_dir, revision=revision)
-                pte_files = _find_files_matching_pattern(
-                    local_dir, pattern=pattern, revision=revision, subfolder=revision
-                )
+                pte_files = _find_files_matching_pattern(local_dir, pattern=pattern, revision=revision)
                 self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
