@@ -406,15 +406,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         config: Optional[PretrainedConfig] = None,
         **kwargs,
     ):
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            logger.warning(
-                "The `use_auth_token` argument is deprecated and will be removed soon. Please use the `token` argument instead."
-            )
-            if token is not None:
-                raise ValueError("You cannot use both `use_auth_token` and `token` arguments at the same time.")
-            token = use_auth_token
-
         if isinstance(model_id, Path):
             model_id = model_id.as_posix()
 
@@ -447,7 +438,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                     _export = True
                 else:
                     logger.warning(
-                        f"No ExecuTorch files were found for {model_id}, setting `export=True` to convert the model to the OpenVINO IR. "
+                        f"No ExecuTorch files were found for {model_id}, setting `export=True` to convert the model to the ExecuTorch IR. "
                         # "Don't forget to save the resulting model with `.save_pretrained()`"
                     )
         except Exception as exception:
@@ -455,7 +446,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                 f"Could not infer whether the model was already converted or not to the ExecuTorch IR, keeping `export={export}`.\n{exception}"
             )
 
-        from_pretrained_method = cls._export if export else cls._from_pretrained
+        from_pretrained_method = cls._export if _export else cls._from_pretrained
 
         return from_pretrained_method(
             model_id=model_id,
