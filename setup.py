@@ -12,8 +12,7 @@ except Exception as error:
     assert False, "Error: Could not open '%s' due %s\n" % (filepath, error)
 
 INSTALL_REQUIRE = [
-    # "optimum~=1.24",
-    "optimum@git+https://github.com/huggingface/optimum.git@infer-export",
+    "optimum~=1.24",
     "executorch>=0.4.0",
     "transformers>=4.46",
 ]

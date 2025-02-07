@@ -29,16 +29,17 @@ from transformers import (
     PreTrainedTokenizer,
     add_start_docstrings,
 )
+from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
-from ..utils.file_utils import _find_files_matching_pattern
+from ..utils.file_utils import find_files_matching_pattern
 
 
-_FILE_PATTERN = r"^.*\.pte$"
+_FILE_PATTERN = r".*\.pte$"
 
 
 logger = logging.getLogger(__name__)
@@ -409,6 +410,10 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         if isinstance(model_id, Path):
             model_id = model_id.as_posix()
 
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: setting `local_files_only=True`")
+            local_files_only = True
+
         _export = export
         try:
             if local_files_only:
@@ -416,18 +421,19 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                 cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
                 refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
                 with open(refs_file) as f:
-                    revision = f.read()
-                model_dir = os.path.join(cached_model_dir, "snapshots", revision)
+                    _revision = f.read()
+                model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
             else:
                 model_dir = model_id
 
-            pte_files = _find_files_matching_pattern(
+            pte_files = find_files_matching_pattern(
                 model_dir,
                 pattern=_FILE_PATTERN,
                 subfolder=subfolder,
                 token=token,
                 revision=revision,
             )
+
             _export = len(pte_files) == 0
             if _export ^ export:
                 if export:
