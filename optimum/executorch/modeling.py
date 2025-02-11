@@ -124,38 +124,57 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         force_download: bool = False,
         local_files_only: bool = False,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        file_name: Optional[str] = None,
         **kwargs,
     ) -> "ExecuTorchModelForCausalLM":
-        """
-        Load a pre-trained ExecuTorch model from a local directory or hosted on the HF hub.
 
-        Args:
-            model_id (`Union[str, Path]`):
-                Path to the directory containing the ExecuTorch model file (`model.pte`).
-            config (`PretrainedConfig`, *optional*):
-                Configuration of the pre-trained model.
-            token (`Optional[Union[bool,str]]`, defaults to `None`):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
-            subfolder (`str`, defaults to `""`):
-                In case the relevant files are located inside a subfolder of the model repo either locally or on huggingface.co, you can
-                specify the folder name here.
-            revision (`str`, defaults to `"main"`):
-                Revision is the specific model version to use. It can be a branch name, a tag name, or a commit id.
-            cache_dir (`Optional[str]`, defaults to `None`):
-                Path indicating where to store cache. The default Hugging Face cache path will be used by default.
-            force_download (`bool`, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            local_files_only (`Optional[bool]`, defaults to `False`):
-                Whether or not to only look at local files (i.e., do not try to download the model).
-
-        Returns:
-            `ExecuTorchModelForCausalLM`: The initialized ExecuTorch model.
-
-        """
         model_path = Path(model_id)
-        default_file_name = "model.pte"
+        default_file_name = file_name or "model.pte"
+
+        if local_files_only:
+            object_id = str(model_id).replace(os.sep, "--")
+            cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
+            refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
+            with open(refs_file) as f:
+                _revision = f.read()
+            model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
+        else:
+            model_dir = str(model_id)
+
+        pte_files = find_files_matching_pattern(
+            model_dir,
+            _FILE_PATTERN,
+            glob_pattern="**/*.pte",
+            subfolder=subfolder,
+            token=token,
+            revision=revision,
+        )
+
+        model_path = Path(model_dir)
+        if len(pte_files) == 0:
+            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_dir}")
+        if len(pte_files) == 1 and file_name and file_name != pte_files[0].name:
+            raise FileNotFoundError(f"Trying to load {file_name} but only found {pte_files[0].name}")
+
+        file_name = pte_files[0].name
+        subfolder = pte_files[0].parent
+
+        if len(pte_files) > 1:
+            for file in pte_files:
+                if file.name == default_file_name:
+                    file_name = file.name
+                    subfolder = file.parent
+                    break
+
+            logger.warning(
+                f"Too many ExecuTorch model files were found in {' ,'.join(map(str, pte_files))}. "
+                "specify which one to load by using the `file_name` and/or the `subfolder` arguments. "
+                f"Loading the file {file_name} in the subfolder {subfolder}."
+            )
+
+        if model_path.is_dir():
+            model_path = subfolder
+            subfolder = ""
 
         model_cache_path = cls._cached_file(
             model_path=model_path,
@@ -216,42 +235,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         local_files_only: bool = False,
         **kwargs,
     ):
-        """
-        Fetch a model from the Hugging Face Hub and export it to ExecuTorch format.
-
-        Args:
-            model_id (`str`):
-                Model ID on huggingface.co, for example: `model_id="meta-llama/Llama-3.2-1B"`.
-            recipe (`str`):
-                The recipe to use to do the export, e.g. "xnnpack".
-            config (`PretrainedConfig`, *optional*):
-                Configuration of the pre-trained model.
-            cache_dir (`Optional[str]`, defaults to `None`):
-                Path indicating where to store cache. The default Hugging Face cache path will be used by default.
-            trust_remote_code (`bool`, defaults to `False`):
-                Allows to use custom code for the modeling hosted in the model repository. This option should only be set for repositories
-                you trust and in which you have read the code, as it will execute on your local machine arbitrary code present in the
-                model repository.
-            subfolder (`str`, defaults to `""`):
-                In case the relevant files are located inside a subfolder of the model repo either locally or on huggingface.co, you can
-                specify the folder name here.
-            revision (`str`, defaults to `"main"`):
-                Revision is the specific model version to use. It can be a branch name, a tag name, or a commit id.
-            force_download (`bool`, defaults to `False`):
-                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
-                cached versions if they exist.
-            local_files_only (`Optional[bool]`, defaults to `False`):
-                Whether or not to only look at local files (i.e., do not try to download the model).
-            token (`Optional[Union[bool,str]]`, defaults to `None`):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `huggingface-cli login` (stored in `huggingface_hub.constants.HF_TOKEN_PATH`).
-            **kwargs:
-                Additional configuration options to tasks and recipes.
-
-        Returns:
-            `ExecuTorchModelForCausalLM`: The loaded and exported ExecuTorch model.
-
-        """
         task = kwargs.pop("task", None)
         if task is not None:
             logger.warning(f"task was provided and set to {task} but not used, will be ignored")
@@ -417,7 +400,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         _export = export
         try:
             if local_files_only:
-                object_id = model_id.replace("/", "--")
+                object_id = model_id.replace(os.sep, "--")
                 cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
                 refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
                 with open(refs_file) as f:
@@ -429,6 +412,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             pte_files = find_files_matching_pattern(
                 model_dir,
                 pattern=_FILE_PATTERN,
+                glob_pattern="**/*.pte",
                 subfolder=subfolder,
                 token=token,
                 revision=revision,
