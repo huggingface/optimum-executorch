@@ -46,7 +46,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-    def test_load_model_from_local_path(self):
+    def test_load_cached_model_from_local_path(self):
         model_id = "optimum-internal-testing/tiny-random-llama"
         recipe = "xnnpack"
 
