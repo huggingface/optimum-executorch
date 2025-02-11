@@ -32,7 +32,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def test_load_model_from_hub(self):
+    def test_load_cached_model_from_hub(self):
         model_id = "optimum-internal-testing/tiny-random-llama"
 
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
