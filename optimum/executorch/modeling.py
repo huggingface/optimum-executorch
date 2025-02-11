@@ -95,7 +95,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
             self.vocab_size = self.model.run_method("get_vocab_size")[0]
-
+            
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -130,18 +130,16 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         model_path = Path(model_id)
         default_file_name = file_name or "model.pte"
 
-        if local_files_only:
-            object_id = str(model_id).replace(os.sep, "--")
+        if local_files_only and not model_path.is_dir():
+            object_id = str(model_id).replace("/", "--")
             cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
             refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
             with open(refs_file) as f:
                 _revision = f.read()
-            model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
-        else:
-            model_dir = str(model_id)
+            model_path = Path(os.path.join(cached_model_dir, "snapshots", _revision))
 
         pte_files = find_files_matching_pattern(
-            model_dir,
+            str(model_path),
             _FILE_PATTERN,
             glob_pattern="**/*.pte",
             subfolder=subfolder,
@@ -149,9 +147,8 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             revision=revision,
         )
 
-        model_path = Path(model_dir)
         if len(pte_files) == 0:
-            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_dir}")
+            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_path}")
         if len(pte_files) == 1 and file_name and file_name != pte_files[0].name:
             raise FileNotFoundError(f"Trying to load {file_name} but only found {pte_files[0].name}")
 
@@ -398,8 +395,8 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
 
         _export = export
         try:
-            if local_files_only:
-                object_id = model_id.replace(os.sep, "--")
+            if local_files_only and not os.path.isdir(model_id):
+                object_id = model_id.replace("/", "--")
                 cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
                 refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
                 with open(refs_file) as f:
