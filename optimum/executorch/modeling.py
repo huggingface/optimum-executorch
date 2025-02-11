@@ -127,7 +127,6 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         file_name: Optional[str] = None,
         **kwargs,
     ) -> "ExecuTorchModelForCausalLM":
-
         model_path = Path(model_id)
         default_file_name = file_name or "model.pte"
 
