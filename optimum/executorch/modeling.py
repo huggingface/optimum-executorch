@@ -95,7 +95,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
             self.vocab_size = self.model.run_method("get_vocab_size")[0]
-            
+
     def forward(
         self,
         input_ids: torch.Tensor,
