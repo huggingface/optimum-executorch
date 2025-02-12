@@ -16,52 +16,72 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers.testing_utils import slow
+from huggingface_hub import HfApi
 
 from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch.modeling import _FILE_PATTERN
+from optimum.exporters.executorch import main_export
+from optimum.utils.file_utils import find_files_matching_pattern
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @slow
-    @pytest.mark.run_slow
-    def test_load_model_from_hub(self):
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_name_or_path="NousResearch/Llama-3.2-1B",
-            export=True,
-            recipe="xnnpack",
-        )
+    def test_load_cached_model_from_hub(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
+
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-    @slow
-    @pytest.mark.run_slow
-    def test_load_model_from_local_path(self):
-        from optimum.exporters.executorch import main_export
+    def test_load_et_model_from_hub(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
 
-        model_id = "NousResearch/Llama-3.2-1B"
-        task = "text-generation"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch-subfolder")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+    def test_load_cached_model_from_local_path(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
         recipe = "xnnpack"
 
         with tempfile.TemporaryDirectory() as tempdir:
             # Export to a local dir
             main_export(
                 model_name_or_path=model_id,
-                task=task,
                 recipe=recipe,
                 output_dir=tempdir,
+                task="text-generation",
             )
             self.assertTrue(os.path.exists(f"{tempdir}/model.pte"))
 
             # Load the exported model from a local dir
-            model = ExecuTorchModelForCausalLM.from_pretrained(
-                model_name_or_path=tempdir,
-                export=False,
-            )
+            model = ExecuTorchModelForCausalLM.from_pretrained(tempdir)
             self.assertIsInstance(model, ExecuTorchModelForCausalLM)
             self.assertIsInstance(model.model, ExecuTorchModule)
+
+    def test_find_files_matching_pattern(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
+
+        # hub model
+        for revision in ("main", "executorch"):
+            pte_files = find_files_matching_pattern(model_id, pattern=_FILE_PATTERN, revision=revision)
+            self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
+
+        # local model
+        api = HfApi()
+        with TemporaryDirectory() as tmpdirname:
+            for revision in ("main", "executorch"):
+                local_dir = Path(tmpdirname) / revision
+                api.snapshot_download(repo_id=model_id, local_dir=local_dir, revision=revision)
+                pte_files = find_files_matching_pattern(local_dir, pattern=_FILE_PATTERN, revision=revision)
+                self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
