@@ -42,7 +42,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_load_et_model_from_hub(self):
         model_id = "optimum-internal-testing/tiny-random-llama"
 
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch", recipe="xnnpack")
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch-subfolder")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 

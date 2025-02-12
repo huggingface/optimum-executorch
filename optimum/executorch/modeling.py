@@ -127,19 +127,13 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         file_name: Optional[str] = None,
         **kwargs,
     ) -> "ExecuTorchModelForCausalLM":
-        model_path = Path(model_id)
+        if isinstance(model_id, Path):
+            model_id = model_id.as_posix()
+
         default_file_name = file_name or "model.pte"
 
-        if local_files_only and not model_path.is_dir():
-            object_id = str(model_id).replace("/", "--")
-            cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
-            refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
-            with open(refs_file) as f:
-                _revision = f.read()
-            model_path = Path(os.path.join(cached_model_dir, "snapshots", _revision))
-
         pte_files = find_files_matching_pattern(
-            str(model_path),
+            model_id,
             _FILE_PATTERN,
             glob_pattern="**/*.pte",
             subfolder=subfolder,
@@ -148,7 +142,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         )
 
         if len(pte_files) == 0:
-            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_path}")
+            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_id}")
         if len(pte_files) == 1 and file_name and file_name != pte_files[0].name:
             raise FileNotFoundError(f"Trying to load {file_name} but only found {pte_files[0].name}")
 
@@ -168,12 +162,12 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
                 f"Loading the file {file_name} in the subfolder {subfolder}."
             )
 
-        if model_path.is_dir():
-            model_path = subfolder
+        if os.path.isdir(model_id):
+            model_id = subfolder
             subfolder = ""
 
         model_cache_path = cls._cached_file(
-            model_path=model_path,
+            model_path=model_id,
             token=token,
             revision=revision,
             force_download=force_download,
