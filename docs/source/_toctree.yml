@@ -1,0 +1,15 @@
+- sections:
+  - local: index
+    title: 🤗 Optimum ExecuTorch
+  - local: installation
+    title: Installation
+  - local: quickstart
+    title: Quickstart
+  - sections:
+    - local: usage_guides/export
+      title: Export
+    - local: usage_guides/contribution
+      title: Contribution
+    title: Reference
+  title: Optimum ExecuTorch
+  isExpanded: true
