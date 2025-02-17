@@ -8,7 +8,7 @@
   - sections:
     - local: usage_guides/export
       title: Export
-    - local: usage_guides/contribution
+    - local: usage_guides/contribute
       title: Contribution
     title: Reference
   title: Optimum ExecuTorch
