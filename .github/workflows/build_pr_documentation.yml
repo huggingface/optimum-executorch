@@ -48,7 +48,7 @@ jobs:
           git pull origin main
           pip install .
           cd ../optimum-executorch
-          pip install .
+          pip install .[quality]
 
       - name: Make documentation
         shell: bash
