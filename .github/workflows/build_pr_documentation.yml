@@ -63,6 +63,7 @@ jobs:
 
       - name: Save commit_sha & pr_number
         run: |
+          cd optimum-executorch
           sudo chmod -R ugo+rwx executorch-doc-build
           cd executorch-doc-build
           sudo mv optimum.executorch optimum-executorch
