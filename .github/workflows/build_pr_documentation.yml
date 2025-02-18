@@ -20,16 +20,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: 'huggingface/doc-builder'
-          path: doc-builder
-
-      - uses: actions/checkout@v4
-        with:
-          repository: 'huggingface/optimum-executorch'
-          path: optimum-executorch
-
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache-dependency-path: "kit/package-lock.json"
@@ -42,17 +33,12 @@ jobs:
       - name: Setup environment
         run: |
           pip install --upgrade pip
-          pip uninstall -y doc-builder
-          cd doc-builder
-          git pull origin main
-          pip install .
-          cd ../optimum-executorch
+          pip install git+https://github.com/huggingface/doc-builder
           pip install .[quality]
 
       - name: Make documentation
         shell: bash
         run: |
-          cd optimum-executorch
           doc-builder build optimum.executorch docs/source/ \
             --repo_name optimum-executorch \
             --build_dir executorch-doc-build/ \
@@ -63,7 +49,6 @@ jobs:
 
       - name: Save commit_sha & pr_number
         run: |
-          cd optimum-executorch
           sudo chmod -R ugo+rwx executorch-doc-build
           cd executorch-doc-build
           sudo mv optimum.executorch optimum-executorch
