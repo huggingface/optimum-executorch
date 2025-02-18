@@ -6,10 +6,10 @@
   - local: quickstart
     title: Quickstart
   - sections:
-    - local: usage_guides/export
+    - local: guides/export
       title: Export
-    - local: usage_guides/contribute
+    - local: guides/contribute
       title: Contribution
-    title: Reference
+    title: How-To Guides
   title: Optimum ExecuTorch
   isExpanded: true
