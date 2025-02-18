@@ -41,11 +41,13 @@ jobs:
 
       - name: Setup environment
         run: |
+          pip install --upgrade pip
           pip uninstall -y doc-builder
           cd doc-builder
           git pull origin main
           pip install .
-          cd ..
+          cd ../optimum-executorch
+          pip install .
 
       - name: Make documentation
         shell: bash
