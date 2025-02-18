@@ -52,6 +52,7 @@ jobs:
       - name: Make documentation
         shell: bash
         run: |
+          cd optimum-executorch
           doc-builder build optimum.executorch docs/source/ \
             --repo_name optimum-executorch \
             --build_dir executorch-doc-build/ \
