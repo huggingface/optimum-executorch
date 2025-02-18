@@ -28,6 +28,7 @@ jobs:
         with:
           repository: 'huggingface/optimum-executorch'
           path: optimum-executorch
+          ref: add-doc
 
       - uses: actions/setup-node@v3
         with:
