@@ -48,8 +48,8 @@ jobs:
           cd ..
 
       - name: Make documentation
+        shell: bash
         run: |
-          cd optimum-executorch
           doc-builder build optimum.executorch docs/source/ \
             --repo_name optimum-executorch \
             --build_dir executorch-doc-build/ \
@@ -57,11 +57,9 @@ jobs:
             --version_tag_suffix "" \
             --html \
             --clean \
-          cd ..
 
       - name: Save commit_sha & pr_number
         run: |
-          cd optimum-executorch
           sudo chmod -R ugo+rwx executorch-doc-build
           cd executorch-doc-build
           sudo mv optimum.executorch optimum-executorch
@@ -71,4 +69,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: doc-build-artifact
-          path: optimum-executorch/executorch-doc-build/
+          path: executorch-doc-build/
