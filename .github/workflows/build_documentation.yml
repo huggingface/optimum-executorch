@@ -61,6 +61,9 @@ jobs:
             --version_tag_suffix "" \
             --html \
             --clean \
+
+      - name: Push documentation
+        run: |
           sudo chmod -R ugo+rwx executorch-doc-build
           cd executorch-doc-build
           sudo mv optimum.executorch optimum-executorch
