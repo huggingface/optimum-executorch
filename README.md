@@ -52,10 +52,7 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from transformers import AutoTokenizer
 
 # Load the exported model
-model = ExecuTorchModelForCausalLM.from_pretrained(
-    "./meta_llama3_2_1b",
-    export=False
-)
+model = ExecuTorchModelForCausalLM.from_pretrained("./meta_llama3_2_1b")
 
 # Initialize tokenizer and generate text
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
@@ -71,15 +68,12 @@ generated_text = model.text_generation(
 from optimum.executorch import ExecuTorchModelForCausalLM
 from transformers import AutoTokenizer
 
-# Load and export model in one step
-model = ExecuTorchModelForCausalLM.from_pretrained(
-    "meta-llama/Llama-3.2-1B",
-    export=True,
-    recipe="xnnpack"
-)
+# Load and export the model on-the-fly
+model_id = "meta-llama/Llama-3.2-1B"
+model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
 
 # Generate text right away
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 generated_text = model.text_generation(
     tokenizer=tokenizer,
     prompt="Simply put, the theory of relativity states that",

@@ -34,7 +34,7 @@ To load a model and run inference, you can just replace your `AutoModelForCausal
 + from optimum.executorch import ExecuTorchModelForCausalLM
   from transformers import AutoTokenizer
 
-  model_id = "meta-llama/Llama-3.2-1B" # you can also load the model that was exported with the CLI
+  model_id = "meta-llama/Llama-3.2-1B"
   tokenizer = AutoTokenizer.from_pretrained(model_id)
 - model = AutoModelForCausalLM.from_pretrained(model_id)
 + model = ExecuTorchModelForCausalLM.from_pretrained(model_id)
