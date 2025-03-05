@@ -12,18 +12,19 @@ except Exception as error:
     assert False, "Error: Could not open '%s' due %s\n" % (filepath, error)
 
 INSTALL_REQUIRE = [
-    "optimum~=1.24",
+    "accelerate>=0.26.0",
+    "datasets",
     "executorch>=0.4.0",
+    "optimum~=1.24",
+    "safetensors",
+    "sentencepiece",
+    "tiktoken",
     "transformers>=4.46",
 ]
 
 TESTS_REQUIRE = [
-    "accelerate>=0.26.0",
-    "pytest",
     "parameterized",
-    "sentencepiece",
-    "datasets",
-    "safetensors",
+    "pytest",
 ]
 
 
