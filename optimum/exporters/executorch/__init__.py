@@ -31,6 +31,7 @@ _import_structure = {
     ],
     "tasks": [
         "causal_lm",
+        "seq2seq_lm",
     ],
     "recipes": [
         "xnnpack",
