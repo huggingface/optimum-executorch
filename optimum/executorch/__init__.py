@@ -20,11 +20,17 @@ from transformers.utils import _LazyModule
 _import_structure = {
     "modeling": [
         "ExecuTorchModelForCausalLM",
+        "ExecuTorchModelForMaskedLM",
+        "ExecuTorchModelForSeq2SeqLM",
     ],
 }
 
 if TYPE_CHECKING:
-    from .modeling import ExecuTorchModelForCausalLM
+    from .modeling import (
+        ExecuTorchModelForCausalLM,
+        ExecuTorchModelForMaskedLM,
+        ExecuTorchModelForSeq2SeqLM,
+    )
 else:
     import sys
 

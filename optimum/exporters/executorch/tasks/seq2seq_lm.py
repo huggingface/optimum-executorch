@@ -12,34 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import AutoModelForCausalLM, GenerationConfig
+from transformers import AutoModelForSeq2SeqLM
 
+from ..integrations import Seq2SeqLMExportableModule
 from ..task_registry import register_task
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
-@register_task("text-generation")
-def load_causal_lm_model(model_name_or_path: str, **kwargs):
+@register_task("text2text-generation")
+def load_seq2seq_lm_model(model_name_or_path: str, **kwargs):
     """
-    Loads a causal language model for text generation and registers it under the task
-    'text-generation' using Hugging Face's AutoModelForCausalLM.
+    Loads a seq2seq language model for conditional text generation and registers it under the task
+    'text2text-generation' using Hugging Face's `AutoModelForSeq2SeqLM`.
 
     Args:
         model_name_or_path (str):
             Model ID on huggingface.co or path on disk to the model repository to export. For example:
-            `model_name_or_path="meta-llama/Llama-3.2-1B"` or `mode_name_or_path="/path/to/model_folder`
+            `model_name_or_path="google-t5/t5-small"` or `mode_name_or_path="/path/to/model_folder`
         **kwargs:
             Additional configuration options for the model:
                 - dtype (str, optional):
                     Data type for model weights (default: "float32").
                     Options include "float16" and "bfloat16".
-                - attn_implementation (str, optional):
-                    Attention mechanism implementation (default: "sdpa").
-                - cache_implementation (str, optional):
-                    Cache management strategy (default: "static").
-                - max_length (int, optional):
-                    Maximum sequence length for generation (default: 2048).
+                - max_hidden_seq_length (int, optional):
+                    Maximum hidden sequence length (default: 4096).
+                - max_cache_length (int, optional):
+                    Maximum sequence length for generation (default: 1024).
 
     Returns:
         transformers.PreTrainedModel:
@@ -48,23 +47,13 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs):
     """
     device = "cpu"
     batch_size = 1
-    dtype = kwargs.get("dtype", "float32")
-    attn_implementation = kwargs.get("attn_implementation", "sdpa")
-    cache_implementation = kwargs.get("cache_implementation", "static")
-    max_length = kwargs.get("max_length", 2048)
+    max_hidden_seq_length = kwargs.get("max_hidden_seq_length", 4096)
+    max_cache_length = kwargs.get("max_cache_length", 1024)
 
-    return AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        device_map=device,
-        torch_dtype=dtype,
-        attn_implementation=attn_implementation,
-        generation_config=GenerationConfig(
-            use_cache=True,
-            cache_implementation=cache_implementation,
-            max_length=max_length,
-            cache_config={
-                "batch_size": batch_size,
-                "max_cache_len": max_length,
-            },
-        ),
+    full_model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path).to(device).eval()
+    return Seq2SeqLMExportableModule(
+        full_model,
+        batch_size=batch_size,
+        max_hidden_seq_length=max_hidden_seq_length,
+        max_cache_length=max_cache_length,
     )

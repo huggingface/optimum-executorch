@@ -13,8 +13,8 @@ except Exception as error:
 
 INSTALL_REQUIRE = [
     "optimum~=1.24",
-    "executorch>=0.4.0",
-    "transformers>=4.46",
+    "executorch==0.4.0",
+    "transformers==4.48.3",
 ]
 
 TESTS_REQUIRE = [

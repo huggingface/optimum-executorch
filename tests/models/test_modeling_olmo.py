@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import subprocess
+import tempfile
 import unittest
 
 import pytest
@@ -26,6 +29,20 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    @slow
+    @pytest.mark.run_slow
+    def test_olmo_export_to_executorch(self):
+        model_id = "allenai/OLMo-1B-hf"
+        task = "text-generation"
+        recipe = "xnnpack"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
     @slow
     @pytest.mark.run_slow

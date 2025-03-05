@@ -82,11 +82,12 @@ def export_to_executorch(
     except KeyError as e:
         raise RuntimeError(f"The recipe '{recipe}' isn't registered. Detailed error: {e}")
 
-    executorch_prog = recipe_func(model, task, **kwargs)
+    executorch_progs = recipe_func(model, task, **kwargs)
 
-    full_path = os.path.join(f"{output_dir}", "model.pte")
-    with open(full_path, "wb") as f:
-        executorch_prog.write_to_file(f)
-        logging.info(f"Saved exported program to {full_path}")
+    for name, prog in executorch_progs.items():
+        full_path = os.path.join(f"{output_dir}", f"{name}.pte")
+        with open(full_path, "wb") as f:
+            prog.write_to_file(f)
+            logger.info(f"Saved exported program to {full_path}")
 
-    return executorch_prog
+    return executorch_progs

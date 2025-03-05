@@ -31,9 +31,16 @@ _import_structure = {
     ],
     "tasks": [
         "causal_lm",
+        "seq2seq_lm",
     ],
     "recipes": [
         "xnnpack",
+    ],
+    "utils": [
+        "save_config_to_constant_methods",
+    ],
+    "integrations": [
+        "Seq2SeqLMExportableModule",
     ],
     "__main__": ["main_export"],
 }

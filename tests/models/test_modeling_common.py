@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,6 +32,13 @@ from optimum.utils.file_utils import find_files_matching_pattern
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def test_export_cli_helps_no_raise(self):
+        subprocess.run(
+            "optimum-cli export executorch --help",
+            shell=True,
+            check=True,
+        )
 
     def test_load_cached_model_from_hub(self):
         model_id = "optimum-internal-testing/tiny-random-llama"

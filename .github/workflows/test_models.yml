@@ -1,4 +1,4 @@
-name: ExecuTorch Runtime / Python - Test
+name: ExecuTorch E2E / Python - Test
 
 on:
   push:
@@ -15,17 +15,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        test-modeling:
+          - common
+          - albert
+          - bert
+          - distilbert
+          - eurobert
+          - gemma
+          - gemma
+          - llama
+          - olmo
+          - qwen2
+          - roberta
+          - t5
+        executorch-version: ['0.4.0', 'nightly']
         python-version: ['3.10', '3.11', '3.12']
         os: [macos-15]
-        test-modeling:
-          - test_modeling_gemma2.py
-          - test_modeling_gemma.py
-          - test_modeling_llama.py
-          - test_modeling_olmo.py
-          - test_modeling.py
-          - test_modeling_qwen2.py
 
+    # Custom job name, now shortened and cleaner
+    name: build (${{ matrix.test-modeling }}, et=${{ matrix.executorch-version }}, py=${{ matrix.python-version }}, matrix.os)
     runs-on: ${{ matrix.os }}
+    env:
+      MODEL_NAME: ${{ matrix.test-modeling }}
     steps:
       - uses: actions/checkout@v2
       - name: Setup Python ${{ matrix.python-version }}
@@ -39,4 +50,4 @@ jobs:
       - name: Run tests
         working-directory: tests
         run: |
-          RUN_SLOW=1 pytest models/${{ matrix.test-modeling }} -s -vvvv --durations=0
+          RUN_SLOW=1 pytest models/test_modeling_${{ matrix.test-modeling }}.py -s -vvvv --durations=0
