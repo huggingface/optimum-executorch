@@ -87,6 +87,6 @@ def export_to_executorch(
     full_path = os.path.join(f"{output_dir}", "model.pte")
     with open(full_path, "wb") as f:
         executorch_prog.write_to_file(f)
-        logging.info(f"Saved exported program to {full_path}")
+        print(f"Saved exported program to {full_path}")
 
     return executorch_prog

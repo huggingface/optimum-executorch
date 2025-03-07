@@ -51,6 +51,13 @@ def parse_args_executorch(parser):
         default="xnnpack",
         help='Pre-defined recipes for export to ExecuTorch. Defaults to "xnnpack".',
     )
+    required_group.add_argument(
+        "--dtype",
+        type=str,
+        default="float32",
+        choices=["float32", "bfloat16", "float16"],
+        help='Data type of the pretrained checkpoint to load. Defaults to "float32".',
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -63,9 +70,14 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
     def run(self):
         from ...exporters.executorch import main_export
 
+        kwargs = {}
+        if self.args.dtype:
+            kwargs["dtype"] = self.args.dtype
+
         main_export(
             model_name_or_path=self.args.model,
             task=self.args.task,
             recipe=self.args.recipe,
             output_dir=self.args.output_dir,
+            **kwargs,
         )

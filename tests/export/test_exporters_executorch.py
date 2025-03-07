@@ -30,6 +30,18 @@ class TestExportToExecuTorchCLI(unittest.TestCase):
             check=True,
         )
 
+    def test_export_with_ckp_dtype(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
+        recipe = "xnnpack"
+        ckp_dtype = "float16"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --recipe {recipe} --dtype {ckp_dtype} --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
     @slow
     @pytest.mark.run_slow
     def test_llama3_2_1b_export_to_executorch(self):

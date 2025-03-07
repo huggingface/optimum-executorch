@@ -65,7 +65,7 @@ def export_to_executorch_with_xnnpack(
                 "get_head_dim": model.config.hidden_size / model.config.num_attention_heads,
                 "get_max_batch_size": model.generation_config.cache_config.batch_size,
                 "get_max_seq_len": model.generation_config.cache_config.max_cache_len,
-                "get_n_kv_heads": model.config.num_key_value_heads,
+                "get_n_kv_heads": getattr(model.config, "num_key_value_heads", None),
                 "get_n_layers": model.config.num_hidden_layers,
                 "get_vocab_size": model.config.vocab_size,
                 "use_kv_cache": model.generation_config.use_cache,
