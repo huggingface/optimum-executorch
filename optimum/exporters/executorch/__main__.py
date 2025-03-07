@@ -96,7 +96,6 @@ def main_export(
     >>> main_export("meta-llama/Llama-3.2-1B", "text-generation", "xnnpack", "meta_llama3_2_1b/")
     ```
     """
-
     if is_transformers_version("<", "4.46"):
         raise ValueError(
             "The minimum Transformers version compatible with ExecuTorch is 4.46.0. Please upgrade to Transformers 4.46.0 or later."

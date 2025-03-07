@@ -24,6 +24,7 @@ jobs:
           - test_modeling_olmo.py
           - test_modeling.py
           - test_modeling_qwen2.py
+          - test_modeling_t5.py
 
     runs-on: ${{ matrix.os }}
     steps:
