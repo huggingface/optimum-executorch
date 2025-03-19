@@ -31,7 +31,7 @@ conda activate optimum-executorch
 ```
 git clone https://github.com/huggingface/optimum-executorch.git
 cd optimum-executorch
-pip install .
+pip install .[tests]
 ```
 
 - 🔜 Install from pypi coming soon...
@@ -128,14 +128,28 @@ print(generated_text)
 
 **Optimum-ExecuTorch** currently supports the following transformer models:
 
-- [meta-llama/Llama-3.2-1B](https://huggingface.co/meta-llama/Llama-3.2-1B) and its variants
-- [HuggingFaceTB/SmolLM2-135M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M) and its variants
-- [Qwen/Qwen2.5-0.5B](https://huggingface.co/Qwen/Qwen2.5-0.5B) and its variants
-- [deepseek-ai/DeepSeek-R1-Distill-Llama-8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B) and its variants
-- [google/gemma-2-2b](https://huggingface.co/google/gemma-2-2b) and its variants
-- [allenai/OLMo-1B-hf](https://huggingface.co/allenai/OLMo-1B-hf) and its variants
+### Text Models
+We currently support a wide range of popular transformer models, including encoder-only, decoder-only, and encoder-decoder architectures, as well as models specialized for various tasks like text generation, translation, summarization, and mask prediction, etc. These models reflect the current trends and popularity across the Hugging Face community:
+- [Albert](https://huggingface.co/albert/albert-base-v2): `albert-base-v2` and its variants
+- [Bert](https://huggingface.co/google-bert/bert-base-uncased): Google's `bert-base-uncased` and its variants
+- [Distilbert](https://huggingface.co/distilbert/distilbert-base-uncased): `distilbert-base-uncased` and its variants
+- [Eurobert](https://huggingface.co/EuroBERT/EuroBERT-210m): `EuroBERT-210m` and its variants
+- [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
+- [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
+- [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B): `Llama-3.2-1B` and its variants
+- [Qwen2](https://huggingface.co/Qwen/Qwen2.5-0.5B): `Qwen2.5-0.5B` and its variants
+- [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
+- [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
+- [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
+- [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
-*Note: This list is continuously expanding. As we continue to expand support, more models and variants will be added.*
+### Vision Models
+🚀 Coming soon
+
+### Audio Models
+🔊 Coming later
+
+*📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
 
 **Supported Backend:**
 

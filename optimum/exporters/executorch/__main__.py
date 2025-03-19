@@ -96,7 +96,6 @@ def main_export(
     >>> main_export("meta-llama/Llama-3.2-1B", "text-generation", "xnnpack", "meta_llama3_2_1b/")
     ```
     """
-
     if is_transformers_version("<", "4.46"):
         raise ValueError(
             "The minimum Transformers version compatible with ExecuTorch is 4.46.0. Please upgrade to Transformers 4.46.0 or later."
@@ -119,6 +118,13 @@ def main_export(
         task_func = task_registry.get(task)
     except KeyError as e:
         raise RuntimeError(f"The task '{task}' isn't registered. Detailed error: {e}")
+
+    kwargs = {}
+    kwargs["cache_dir"] = cache_dir
+    kwargs["trust_remote_code"] = trust_remote_code
+    kwargs["subfolder"] = subfolder
+    kwargs["revision"] = revision
+    kwargs["force_download"] = force_download
 
     model = task_func(model_name_or_path, **kwargs)
 

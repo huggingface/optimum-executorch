@@ -33,8 +33,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_export_to_executorch(self):
-        model_id = "weqweasdas/RM-Gemma-2B"
+    def test_smollm_export_to_executorch(self):
+        model_id = "HuggingFaceTB/SmolLM2-135M"
         task = "text-generation"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
@@ -47,19 +47,17 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_text_generation(self):
-        # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
-        # model_id = "google/gemma-2b"
-        model_id = "weqweasdas/RM-Gemma-2B"
+    def test_smollm_text_generation(self):
+        model_id = "HuggingFaceTB/SmolLM2-135M"
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-        EXPECTED_GENERATED_TEXT = "Hello I am doing a project for my school and I need to write a report on the history of the United States."
+        EXPECTED_GENERATED_TEXT = "My favourite condiment is iced tea. I love it with my breakfast, my lunch"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
-            prompt="Hello I am doing a project for my school",
+            prompt="My favourite condiment is ",
             max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")

@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+import os
+import subprocess
+import tempfile
 import unittest
 
 import pytest
@@ -29,7 +33,21 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_llama3_2_1b_text_generation_with_xnnpack(self):
+    def test_llama3_2_1b_export_to_executorch(self):
+        model_id = "NousResearch/Llama-3.2-1B"
+        task = "text-generation"
+        recipe = "xnnpack"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
+    @slow
+    @pytest.mark.run_slow
+    def test_llama3_2_1b_text_generation(self):
         # TODO: Switch to use meta-llama/Llama-3.2-1B once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "lama/Llama-3.2-1B"
         model_id = "NousResearch/Llama-3.2-1B"
@@ -44,29 +62,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             prompt="Simply put, the theory of relativity states that",
             max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
         )
-        self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
-
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skip(reason="OOMs with macos-15 CI instances on GH.")
-    def test_llama3_2_3b_text_generation_with_xnnpack(self):
-        # TODO: Switch to use meta-llama/Llama-3.2-3B once https://github.com/huggingface/optimum/issues/2127 is fixed
-        # model_id = "lama/Llama-3.2-3B"
-        model_id = "NousResearch/Hermes-3-Llama-3.2-3B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
-
-        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
-        self.assertIsInstance(model.model, ExecuTorchModule)
-
-        EXPECTED_GENERATED_TEXT = (
-            "Simply put, the theory of relativity states that time is relative and can be affected "
-            "by an object's speed. This theory was developed by Albert Einstein in the early 20th "
-            "century. The theory has two parts"
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        generated_text = model.text_generation(
-            tokenizer=tokenizer,
-            prompt="Simply put, the theory of relativity states that",
-            max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
-        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
         self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
