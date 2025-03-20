@@ -12,9 +12,99 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Dict
+
 import torch
+from torch.export import ExportedProgram
+from torch.nn.attention import SDPBackend
 from transformers import PreTrainedModel, StaticCache
 from transformers.generation.configuration_utils import GenerationConfig
+
+from optimum.utils.import_utils import is_transformers_version
+
+from .utils import save_config_to_constant_methods
+
+
+if is_transformers_version(">=", "4.46"):
+    from transformers.integrations.executorch import (
+        TorchExportableModuleWithStaticCache,
+        convert_and_export_with_cache,
+    )
+
+    class CausalLMExportableModule(TorchExportableModuleWithStaticCache):
+        """
+        A wrapper module designed to make a Causal LM model exportable with `torch.export`.
+        This module ensures that the exported model is compatible with ExecuTorch.
+        """
+
+        def __init__(self, model):
+            super().__init__(model)
+            self.config = model.config
+            self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+
+        def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
+            example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+            example_cache_position = (
+                cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+            )
+
+            return {"model": convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)}
+
+
+class MaskedLMExportableModule(torch.nn.Module):
+    """
+    A wrapper module designed to make a Masked LM model exportable with `torch.export`.
+    This module ensures that the exported model is compatible with ExecuTorch.
+    """
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self.config = model.config
+        # Metadata to be recorded in the pte model file
+        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+
+    def forward(self, input_ids, attention_mask):
+        return self.model(input_ids, attention_mask)
+
+    def export(self, input_ids=None, attention_mask=None) -> Dict[str, ExportedProgram]:
+        max_position_embeddings = getattr(self.model.config, "max_position_embeddings", 64)
+        max_seq_length = max(max_position_embeddings - 1, 1)
+        # Create dummy inputs with expected shapes
+        batch_size = 1
+        seq_length = max_seq_length
+        vocab_size = self.model.config.vocab_size
+
+        # Create example inputs (no need for tokenizer)
+        dummy_input_ids = (
+            torch.randint(0, vocab_size, (batch_size, seq_length), dtype=torch.long)
+            if input_ids is None
+            else input_ids
+        )
+        dummy_attention_mask = (
+            torch.ones((batch_size, seq_length), dtype=torch.long) if attention_mask is None else attention_mask
+        )
+
+        # Define dynamic dimensions using Dim class
+        seq_dim = torch.export.Dim("sequence_length", min=1, max=max_seq_length)  # Allow sequences up to max_length
+
+        # Define dynamic shapes with Dim objects
+        dynamic_shapes = {
+            "input_ids": {1: seq_dim},
+            "attention_mask": {1: seq_dim},
+        }
+
+        # Export the model with dynamic dimensions
+        with torch.no_grad():
+            return {
+                "model": torch.export.export(
+                    self.model,
+                    args=(dummy_input_ids,),
+                    kwargs={"attention_mask": dummy_attention_mask},
+                    dynamic_shapes=dynamic_shapes,
+                    strict=True,
+                )
+            }
 
 
 class Seq2SeqLMEncoderExportableModule(torch.nn.Module):
@@ -26,6 +116,7 @@ class Seq2SeqLMEncoderExportableModule(torch.nn.Module):
     def __init__(self, encoder_model):
         super().__init__()
         self.encoder = encoder_model
+        self.config = encoder_model.config
 
     def forward(self, input_ids):
         return self.encoder(input_ids=input_ids).last_hidden_state
@@ -100,6 +191,14 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 "max_cache_len": max_cache_length,
             },
         )
+        additional_configs = {}
+        additional_configs["max_hidden_seq_length"] = max_hidden_seq_length
+        # Metadata to be recorded in the pte model file
+        self.metadata = save_config_to_constant_methods(
+            self.config,
+            self.generation_config,
+            **{"max_hidden_seq_length": max_hidden_seq_length},
+        )
         self.exported_encoder = None
         self.exported_decoder = None
 
@@ -132,7 +231,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
 
         # Export the decoder
-        with torch.no_grad():
+        with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
             exported_decoder = torch.export.export(
                 wrapped_decoder,
                 (decoder_input_ids, encoder_hidden_states, cache_position),
@@ -146,7 +245,13 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         return exported_decoder
 
-    def export(self, encoder_input_ids=None, decoder_input_ids=None, encoder_hidden_states=None, cache_position=None):
+    def export(
+        self,
+        encoder_input_ids=None,
+        decoder_input_ids=None,
+        encoder_hidden_states=None,
+        cache_position=None,
+    ) -> Dict[str, ExportedProgram]:
         example_encoder_input_ids = (
             encoder_input_ids if encoder_input_ids is not None else torch.ones((1, 10), dtype=torch.long)
         )
@@ -166,8 +271,10 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             example_decoder_input_ids, example_encoder_hidden_states, example_cache_position
         )
 
-        # Return self to allow chaining
-        return self
+        return {
+            "encoder": self.exported_encoder,
+            "decoder": self.exported_decoder,
+        }
 
     def generate(self, prompt_token_ids, max_new_tokens):
         with torch.no_grad():

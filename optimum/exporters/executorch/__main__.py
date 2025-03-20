@@ -119,7 +119,6 @@ def main_export(
     except KeyError as e:
         raise RuntimeError(f"The task '{task}' isn't registered. Detailed error: {e}")
 
-    kwargs = {}
     kwargs["cache_dir"] = cache_dir
     kwargs["trust_remote_code"] = trust_remote_code
     kwargs["subfolder"] = subfolder
@@ -127,11 +126,6 @@ def main_export(
     kwargs["force_download"] = force_download
 
     model = task_func(model_name_or_path, **kwargs)
-
-    if task == "text-generation":
-        from transformers.integrations.executorch import TorchExportableModuleWithStaticCache
-
-        model = TorchExportableModuleWithStaticCache(model)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

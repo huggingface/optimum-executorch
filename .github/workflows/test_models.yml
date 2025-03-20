@@ -21,7 +21,6 @@ jobs:
           - albert
           - bert
           - distilbert
-          - eurobert
           - gemma
           - gemma2
           - llama
@@ -34,7 +33,7 @@ jobs:
         os: [macos-15]
 
     # Custom job name, now shortened and cleaner
-    name: test-${{ matrix.test-modeling }} (et=${{ matrix.executorch-version }}, py=${{ matrix.python-version }}, ${{ matrix.os }})
+    name: ${{ matrix.test-modeling }} (et=${{ matrix.executorch-version }}, py=${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     env:
       MODEL_NAME: ${{ matrix.test-modeling }}

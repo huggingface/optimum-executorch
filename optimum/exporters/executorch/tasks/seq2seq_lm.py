@@ -21,7 +21,7 @@ from ..task_registry import register_task
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("text2text-generation")
-def load_seq2seq_lm_model(model_name_or_path: str, **kwargs):
+def load_seq2seq_lm_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExportableModule:
     """
     Loads a seq2seq language model for conditional text generation and registers it under the task
     'text2text-generation' using Hugging Face's `AutoModelForSeq2SeqLM`.
@@ -41,9 +41,8 @@ def load_seq2seq_lm_model(model_name_or_path: str, **kwargs):
                     Maximum sequence length for generation (default: 1024).
 
     Returns:
-        transformers.PreTrainedModel:
-            An instance of a model subclass (e.g., Llama, Gemma) with the configuration for exporting
-            and lowering to ExecuTorch.
+        Seq2SeqLMExportableModule:
+            An instance of `Seq2SeqLMExportableModule` for exporting and lowering to ExecuTorch.
     """
     device = "cpu"
     batch_size = 1

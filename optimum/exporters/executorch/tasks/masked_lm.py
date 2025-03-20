@@ -14,13 +14,14 @@
 
 from transformers import AutoModelForMaskedLM
 
+from ..integrations import MaskedLMExportableModule
 from ..task_registry import register_task
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("fill-mask")
-def load_masked_lm_model(model_name_or_path: str, **kwargs):
+def load_masked_lm_model(model_name_or_path: str, **kwargs) -> MaskedLMExportableModule:
     """
     Loads a seq2seq language model for conditional text generation and registers it under the task
     'fill-mask' using Hugging Face's `AutoModelForMaskedLM`.
@@ -33,9 +34,9 @@ def load_masked_lm_model(model_name_or_path: str, **kwargs):
             Additional configuration options for the model.
 
     Returns:
-        transformers.PreTrainedModel:
-            An instance of a model subclass (e.g., BERT) with the configuration for exporting
-            and lowering to ExecuTorch.
+        MaskedLMExportableModule:
+            An instance of `MaskedLMExportableModule` for exporting and lowering to ExecuTorch.
     """
 
-    return AutoModelForMaskedLM.from_pretrained(model_name_or_path, **kwargs).to("cpu").eval()
+    eager_model = AutoModelForMaskedLM.from_pretrained(model_name_or_path, **kwargs).to("cpu").eval()
+    return MaskedLMExportableModule(eager_model)
