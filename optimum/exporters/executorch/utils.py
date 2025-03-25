@@ -34,6 +34,7 @@ def save_config_to_constant_methods(
         "get_vocab_size": config.vocab_size,
         "get_max_batch_size": 1,
         "get_max_seq_len": getattr(config, "max_position_embeddings", None),
+        "decoder_start_token_id": getattr(config, "decoder_start_token_id", None),
     }
 
     # Safely access fields from generation_config if it exists

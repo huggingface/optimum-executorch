@@ -20,6 +20,7 @@ import warnings
 from pathlib import Path
 
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from transformers import PretrainedConfig
 from transformers.utils import is_torch_available
 
 from optimum.utils.import_utils import is_transformers_version
@@ -40,6 +41,7 @@ def main_export(
     task: str,
     recipe: str,
     output_dir: Union[str, Path],
+    config: Optional[PretrainedConfig] = None,
     cache_dir: str = HUGGINGFACE_HUB_CACHE,
     trust_remote_code: bool = False,
     pad_token_id: Optional[int] = None,
@@ -63,6 +65,8 @@ def main_export(
             The recipe to use to do the export, e.g. "xnnpack".
         output_dir (`Union[str, Path]`):
             Path indicating the directory where to store the generated ExecuTorch model.
+        config (`Optional[PretrainedConfig]`, defaults to `None`):
+            The model configuration to use to load the model.
         cache_dir (`Optional[str]`, defaults to `None`):
             Path indicating where to store cache. The default Hugging Face cache path will be used by default.
         trust_remote_code (`bool`, defaults to `False`):
@@ -124,6 +128,7 @@ def main_export(
     kwargs["subfolder"] = subfolder
     kwargs["revision"] = revision
     kwargs["force_download"] = force_download
+    kwargs["config"] = config
 
     model = task_func(model_name_or_path, **kwargs)
 
