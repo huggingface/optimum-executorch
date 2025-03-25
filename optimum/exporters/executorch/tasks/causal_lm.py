@@ -14,11 +14,14 @@
 
 from transformers import AutoModelForCausalLM, GenerationConfig
 
+from ..integrations import CausalLMExportableModule
 from ..task_registry import register_task
 
 
+# NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
+# This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("text-generation")
-def load_causal_lm_model(model_name_or_path: str, **kwargs):
+def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportableModule:
     """
     Loads a causal language model for text generation and registers it under the task
     'text-generation' using Hugging Face's AutoModelForCausalLM.
@@ -40,9 +43,8 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs):
                     Maximum sequence length for generation (default: 2048).
 
     Returns:
-        transformers.PreTrainedModel:
-            An instance of a model subclass (e.g., Llama, Gemma) with the configuration for exporting
-            and lowering to ExecuTorch.
+        CausalLMExportableModule:
+            An instance of `CausalLMExportableModule` for exporting and lowering to ExecuTorch.
     """
     device = "cpu"
     batch_size = 1
@@ -50,11 +52,13 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs):
     attn_implementation = kwargs.get("attn_implementation", "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
     max_length = kwargs.get("max_length", 2048)
+    config = kwargs.get("config", None)
 
-    return AutoModelForCausalLM.from_pretrained(
+    eager_model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
         device_map=device,
         torch_dtype=dtype,
+        config=config,
         attn_implementation=attn_implementation,
         generation_config=GenerationConfig(
             use_cache=True,
@@ -66,3 +70,4 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs):
             },
         ),
     )
+    return CausalLMExportableModule(eager_model)

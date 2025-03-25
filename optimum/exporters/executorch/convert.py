@@ -19,26 +19,14 @@ import os
 from pathlib import Path
 from typing import Union
 
-from transformers.utils import is_torch_available
-
-from optimum.utils.import_utils import is_transformers_version
-
 from .recipe_registry import discover_recipes, recipe_registry
 
-
-if is_torch_available():
-    from transformers.modeling_utils import PreTrainedModel
-
-if is_transformers_version(">=", "4.46"):
-    from transformers.integrations.executorch import (
-        TorchExportableModuleWithStaticCache,
-    )
 
 logger = logging.getLogger(__name__)
 
 
 def export_to_executorch(
-    model: Union["PreTrainedModel", "TorchExportableModuleWithStaticCache"],
+    model,
     task: str,
     recipe: str,
     output_dir: Union[str, Path],
@@ -82,11 +70,12 @@ def export_to_executorch(
     except KeyError as e:
         raise RuntimeError(f"The recipe '{recipe}' isn't registered. Detailed error: {e}")
 
-    executorch_prog = recipe_func(model, task, **kwargs)
+    executorch_progs = recipe_func(model, **kwargs)
 
-    full_path = os.path.join(f"{output_dir}", "model.pte")
-    with open(full_path, "wb") as f:
-        executorch_prog.write_to_file(f)
-        logging.info(f"Saved exported program to {full_path}")
+    for name, prog in executorch_progs.items():
+        full_path = os.path.join(f"{output_dir}", f"{name}.pte")
+        with open(full_path, "wb") as f:
+            prog.write_to_file(f)
+            logger.info(f"Saved exported program to {full_path}")
 
-    return executorch_prog
+    return executorch_progs

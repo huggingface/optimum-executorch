@@ -24,7 +24,7 @@ from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForMaskedLM
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -33,9 +33,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_export_to_executorch(self):
-        model_id = "weqweasdas/RM-Gemma-2B"
-        task = "text-generation"
+    def test_bert_export_to_executorch(self):
+        model_id = "google-bert/bert-base-uncased"
+        task = "fill-mask"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
@@ -47,20 +47,28 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_text_generation(self):
-        # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
-        # model_id = "google/gemma-2b"
-        model_id = "weqweasdas/RM-Gemma-2B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
-        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+    def test_bert_fill_mask(self):
+        model_id = "google-bert/bert-base-uncased"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # Test fetching and lowering the model to ExecuTorch
+        model = ExecuTorchModelForMaskedLM.from_pretrained(model_id=model_id, recipe="xnnpack")
+        self.assertIsInstance(model, ExecuTorchModelForMaskedLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-        EXPECTED_GENERATED_TEXT = "Hello I am doing a project for my school and I need to write a report on the history of the United States."
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        generated_text = model.text_generation(
-            tokenizer=tokenizer,
-            prompt="Hello I am doing a project for my school",
-            max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
+        input_text = f"Paris is the {tokenizer.mask_token} of France."
+        inputs = tokenizer(
+            input_text,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=10,
         )
-        logging.info(f"\nGenerated text:\n\t{generated_text}")
-        self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
+
+        # Test inference using ExecuTorch model
+        exported_outputs = model.forward(inputs["input_ids"], inputs["attention_mask"])
+        predicted_masks = tokenizer.decode(exported_outputs[0, 4].topk(5).indices)
+        logging.info(f"\nInput text:\n\t{input_text}\nPredicted masks:\n\t{predicted_masks}")
+        self.assertTrue(
+            any(word in predicted_masks for word in ["capital", "center", "heart", "birthplace"]),
+            f"Exported model predictions {predicted_masks} don't contain any of the most common expected words",
+        )
