@@ -85,7 +85,7 @@ class MaskedLMExportableModule(torch.nn.Module):
             torch.ones((batch_size, seq_length), dtype=torch.long) if attention_mask is None else attention_mask
         )
 
-        # Define dynamic shapes with Dim objects
+        # Define dynamic shapes with Dim objects, always use Auto
         dynamic_shapes = {
             "input_ids": {1: torch.export.Dim.AUTO},
             "attention_mask": {1: torch.export.Dim.AUTO},
