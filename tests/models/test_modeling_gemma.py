@@ -17,6 +17,7 @@ import gc
 import logging
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -32,6 +33,10 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from ..utils import check_causal_lm_output_quality
 
 
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+@pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
