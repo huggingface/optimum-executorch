@@ -197,7 +197,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         self.metadata = save_config_to_constant_methods(
             self.config,
             self.generation_config,
-            **{"max_hidden_seq_length": max_hidden_seq_length},
+            **additional_configs,
         )
         self.exported_encoder = None
         self.exported_decoder = None

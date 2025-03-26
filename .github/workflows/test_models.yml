@@ -25,6 +25,7 @@ jobs:
           - gemma2
           - llama
           - olmo
+          - phi4
           - qwen2
           - roberta
           - t5

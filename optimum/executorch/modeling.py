@@ -100,6 +100,8 @@ class ExecuTorchModelForSeq2SeqLM(OptimizedModel):
             self.vocab_size = self.et_decoder.run_method("get_vocab_size")[0]
         if "max_hidden_seq_length" in metadata:
             self.max_hidden_seq_length = self.et_decoder.run_method("max_hidden_seq_length")[0]
+        if "decoder_start_token_id" in metadata:
+            self.decoder_start_token_id = self.et_decoder.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
@@ -382,8 +384,9 @@ class ExecuTorchModelForSeq2SeqLM(OptimizedModel):
             )
             max_seq_len = self.max_cache_size
 
-        # Initialize with start token (0 for T5)
-        decoder_input_ids = torch.tensor([[0]], dtype=torch.long)
+        if not hasattr(self, "decoder_start_token_id"):
+            raise AttributeError("'decoder_start_token_id' is missing in the metadata of the PTE.")
+        decoder_input_ids = torch.tensor([[self.decoder_start_token_id]], dtype=torch.long)
         encoder_input_ids = input_ids
         encoder_outputs = None
         generated_ids = [0]
@@ -512,7 +515,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
     def _from_pretrained(
         cls,
         model_id: Union[str, Path],
-        config: PretrainedConfig,
+        config: Optional[PretrainedConfig] = None,
         token: Optional[Union[bool, str]] = None,
         revision: Optional[str] = None,
         subfolder: str = "",
@@ -610,7 +613,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
         cls,
         model_id: str,
         recipe: str,
-        config: PretrainedConfig,
+        config: Optional[PretrainedConfig] = None,
         token: Optional[Union[bool, str]] = None,
         revision: Optional[str] = None,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
@@ -633,6 +636,7 @@ class ExecuTorchModelForCausalLM(OptimizedModel):
             output_dir=save_dir_path,
             task=TasksManager.infer_task_from_model(cls.auto_model_class),
             recipe=recipe,
+            config=config,
             subfolder=subfolder,
             revision=revision,
             cache_dir=cache_dir,

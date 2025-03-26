@@ -14,52 +14,40 @@
 # limitations under the License.
 
 import logging
-import os
-import subprocess
-import tempfile
 import unittest
 
 import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 
 
+@pytest.mark.skip(reason="Test Phi-4-mini (3.8B) will require runner to be configured with larger RAM")
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma2_export_to_executorch(self):
-        model_id = "unsloth/gemma-2-2b-it"
-        task = "text-generation"
-        recipe = "xnnpack"
-        with tempfile.TemporaryDirectory() as tempdir:
-            subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
-                shell=True,
-                check=True,
-            )
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
-
-    @slow
-    @pytest.mark.run_slow
-    def test_gemma2_text_generation(self):
-        # TODO: Switch to use google/gemma-2-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
-        # model_id = "google/gemma-2-2b"
-        model_id = "unsloth/gemma-2-2b-it"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
+    def test_phi4_text_generation(self):
+        model_id = "microsoft/Phi-4-mini-instruct"
+        config = AutoConfig.from_pretrained(model_id)
+        # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
+        # the data-dependent control flow in _longrope_frequency_update. Alternatively, we can rewrite
+        # that function to avoid the data-dependent control flow.
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            config.rope_scaling["type"] = "default"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack", config=config)
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-        EXPECTED_GENERATED_TEXT = "Hello I am doing a project for my school about the history of the internet."
+        EXPECTED_GENERATED_TEXT = "My favourite condiment is  [salsa]. I like to use it on my"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
-            prompt="Hello I am doing a project for my school",
+            prompt="My favourite condiment is ",
             max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
