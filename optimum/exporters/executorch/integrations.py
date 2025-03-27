@@ -51,6 +51,56 @@ if is_transformers_version(">=", "4.46"):
             return {"model": convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)}
 
 
+class VisionEncoderExportableModule(torch.nn.Module):
+    """
+    A wrapper module designed to make a vision encoder-only model exportable with `torch.export`.
+    This module ensures that the exported model is compatible with ExecuTorch.
+    """
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self.config = model.config
+        # Metadata to be recorded in the pte model file
+        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+
+    def forward(self, pixel_values):
+        print(f"DEBUG: pixel_values: {pixel_values.shape}")
+        print(f"DEBUG: forward: {self.model.method_meta('forward')}")
+        return self.model(pixel_values=pixel_values)
+
+    def export(self, pixel_values=None) -> Dict[str, ExportedProgram]:
+        if pixel_values is None:
+            batch_size = 1
+            num_channels = self.config.num_channels
+            height = self.config.image_size
+            width = self.config.image_size
+            pixel_values = torch.rand(batch_size, num_channels, height, width)
+
+        # Define dynamic shapes with Dim objects
+        # dynamic_shapes = (
+        #     {
+        #         "pixel_values": {
+        #             0: torch.export.Dim.AUTO,
+        #             2: torch.export.Dim.AUTO,
+        #             3: torch.export.Dim.AUTO,
+        #         },
+        #     },
+        # )
+
+        # Export the model with dynamic dimensions
+        with torch.no_grad():
+            return {
+                "model": torch.export.export(
+                    self.model,
+                    args=(),
+                    kwargs={"pixel_values": pixel_values},
+                    # dynamic_shapes=dynamic_shapes,
+                    strict=False,
+                )
+            }
+
+
 class MaskedLMExportableModule(torch.nn.Module):
     """
     A wrapper module designed to make a Masked LM model exportable with `torch.export`.

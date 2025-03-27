@@ -25,6 +25,7 @@ from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
     PretrainedConfig,
@@ -1027,6 +1028,275 @@ class ExecuTorchModelForMaskedLM(OptimizedModel):
             model_name_or_path=model_id,
             output_dir=save_dir_path,
             task="fill-mask",
+            recipe=recipe,
+            subfolder=subfolder,
+            revision=revision,
+            cache_dir=cache_dir,
+            token=token,
+            local_files_only=local_files_only,
+            force_download=force_download,
+            trust_remote_code=trust_remote_code,
+            **kwargs,
+        )
+        return cls._from_pretrained(model_id=save_dir_path, config=config)
+
+    def _save_pretrained(self, save_directory):
+        """
+        Saves a model weights into a directory, so that it can be re-loaded using the
+        [`from_pretrained`] class method.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    @add_start_docstrings(FROM_PRETRAINED_START_DOCSTRING)
+    def from_pretrained(
+        cls,
+        model_id: Union[str, Path],
+        export: bool = False,
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        subfolder: str = "",
+        trust_remote_code: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        config: Optional[PretrainedConfig] = None,
+        **kwargs,
+    ):
+        if isinstance(model_id, Path):
+            model_id = model_id.as_posix()
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: setting `local_files_only=True`")
+            local_files_only = True
+
+        _export = export
+        try:
+            if local_files_only and not os.path.isdir(model_id):
+                object_id = model_id.replace("/", "--")
+                cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
+                refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
+                with open(refs_file) as f:
+                    _revision = f.read()
+                model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
+            else:
+                model_dir = model_id
+
+            pte_files = find_files_matching_pattern(
+                model_dir,
+                pattern=_FILE_PATTERN,
+                glob_pattern="**/*.pte",
+                subfolder=subfolder,
+                token=token,
+                revision=revision,
+            )
+
+            _export = len(pte_files) == 0
+            if _export ^ export:
+                if export:
+                    logger.warning(
+                        f"The model {model_id} was already converted to the ExecuTorch IR but got `export=True`, the model will be converted to ExecuTorch once again. "
+                        # "Don't forget to save the resulting model with `.save_pretrained()`"
+                    )
+                    _export = True
+                else:
+                    logger.warning(
+                        f"No ExecuTorch files were found for {model_id}, setting `export=True` to convert the model to the ExecuTorch IR. "
+                        # "Don't forget to save the resulting model with `.save_pretrained()`"
+                    )
+        except Exception as exception:
+            logger.warning(
+                f"Could not infer whether the model was already converted or not to the ExecuTorch IR, keeping `export={export}`.\n{exception}"
+            )
+
+        from_pretrained_method = cls._export if _export else cls._from_pretrained
+
+        return from_pretrained_method(
+            model_id=model_id,
+            config=config,
+            revision=revision,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            token=token,
+            subfolder=subfolder,
+            local_files_only=local_files_only,
+            trust_remote_code=trust_remote_code,
+            **kwargs,
+        )
+
+
+class ExecuTorchModelForImageClassification(OptimizedModel):
+    """
+    ExecuTorch model with an image classification head for inference using the ExecuTorch Runtime.
+
+    This class provides an interface for loading, running, and generating outputs from a vision transformer model
+    optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models
+    compatible with ExecuTorch runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForImageClassification`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+        use_kv_cache (`bool`):
+            Whether key-value caching is enabled. For performance reasons, the exported model is
+            optimized to use a static cache.
+        max_cache_size (`int`):
+            Maximum sequence length supported by the cache.
+        max_batch_size (`int`):
+            Maximum supported batch size.
+        dtype (`str`):
+            Data type of the model parameters.
+        bos_token_id (`int`):
+            Beginning-of-sequence token ID.
+        eos_token_id (`int`):
+            End-of-sequence token ID.
+        vocab_size (`int`):
+            Size of the model vocabulary.
+    """
+
+    auto_model_class = AutoModelForImageClassification
+
+    def __init__(self, model: "ExecuTorchModule", config: "PretrainedConfig"):
+        super().__init__(model, config)
+        metadata = self.model.method_names()
+        logging.debug(f"Load all static methods: {metadata}")
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the model.
+
+        Args:
+            pixel_values (`torch.Tensor`): Tensor representing an image input to the model.
+
+        Returns:
+            torch.Tensor: Logits output from the model.
+        """
+        return self.model.forward((pixel_values,))[0]
+
+    @classmethod
+    def _from_pretrained(
+        cls,
+        model_id: Union[str, Path],
+        config: PretrainedConfig,
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        subfolder: str = "",
+        force_download: bool = False,
+        local_files_only: bool = False,
+        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        file_name: Optional[str] = None,
+        **kwargs,
+    ) -> "ExecuTorchModelForImageClassification":
+        if isinstance(model_id, Path):
+            model_id = model_id.as_posix()
+
+        default_file_name = file_name or "model.pte"
+
+        pte_files = find_files_matching_pattern(
+            model_id,
+            _FILE_PATTERN,
+            glob_pattern="**/*.pte",
+            subfolder=subfolder,
+            token=token,
+            revision=revision,
+        )
+
+        if len(pte_files) == 0:
+            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_id}")
+        if len(pte_files) == 1 and file_name and file_name != pte_files[0].name:
+            raise FileNotFoundError(f"Trying to load {file_name} but only found {pte_files[0].name}")
+
+        file_name = pte_files[0].name
+        subfolder = pte_files[0].parent
+
+        if len(pte_files) > 1:
+            for file in pte_files:
+                if file.name == default_file_name:
+                    file_name = file.name
+                    subfolder = file.parent
+                    break
+
+            logger.warning(
+                f"Too many ExecuTorch model files were found in {' ,'.join(map(str, pte_files))}. "
+                "specify which one to load by using the `file_name` and/or the `subfolder` arguments. "
+                f"Loading the file {file_name} in the subfolder {subfolder}."
+            )
+
+        if os.path.isdir(model_id):
+            model_id = subfolder
+            subfolder = ""
+
+        model_cache_path = cls._cached_file(
+            model_path=model_id,
+            token=token,
+            revision=revision,
+            force_download=force_download,
+            cache_dir=cache_dir,
+            file_name=default_file_name,
+            subfolder=subfolder,
+            local_files_only=local_files_only,
+        )
+        model = _load_for_executorch(model_cache_path)
+        logging.info(f"Loaded model from {model_cache_path}")
+
+        return cls(model, config=config)
+
+    @staticmethod
+    def _cached_file(
+        model_path: Union[Path, str],
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        force_download: bool = False,
+        cache_dir: Optional[str] = None,
+        file_name: Optional[str] = None,
+        subfolder: str = "",
+        local_files_only: bool = False,
+    ):
+        model_path = Path(model_path)
+        # locates a file in a local folder and repo, downloads and cache it if necessary.
+        if model_path.is_dir():
+            model_cache_path = os.path.join(model_path, subfolder, file_name)
+        else:
+            model_cache_path = hf_hub_download(
+                repo_id=model_path.as_posix(),
+                filename=file_name,
+                subfolder=subfolder,
+                token=token,
+                revision=revision,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                local_files_only=local_files_only,
+            )
+
+        return model_cache_path
+
+    @classmethod
+    def _export(
+        cls,
+        model_id: str,
+        recipe: str,
+        config: PretrainedConfig,
+        token: Optional[Union[bool, str]] = None,
+        revision: Optional[str] = None,
+        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        trust_remote_code: bool = False,
+        subfolder: str = "",
+        force_download: bool = False,
+        local_files_only: bool = False,
+        **kwargs,
+    ):
+        save_dir = TemporaryDirectory()
+        save_dir_path = Path(save_dir.name)
+
+        # Export to ExecuTorch and save the pte file to the temporary directory
+        main_export(
+            model_name_or_path=model_id,
+            output_dir=save_dir_path,
+            task="image-classification",
             recipe=recipe,
             subfolder=subfolder,
             revision=revision,
