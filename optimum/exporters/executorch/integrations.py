@@ -85,13 +85,10 @@ class MaskedLMExportableModule(torch.nn.Module):
             torch.ones((batch_size, seq_length), dtype=torch.long) if attention_mask is None else attention_mask
         )
 
-        # Define dynamic dimensions using Dim class
-        seq_dim = torch.export.Dim("sequence_length", min=1, max=max_seq_length)  # Allow sequences up to max_length
-
-        # Define dynamic shapes with Dim objects
+        # Define dynamic shapes with Dim objects, always use Auto
         dynamic_shapes = {
-            "input_ids": {1: seq_dim},
-            "attention_mask": {1: seq_dim},
+            "input_ids": {1: torch.export.Dim.AUTO},
+            "attention_mask": {1: torch.export.Dim.AUTO},
         }
 
         # Export the model with dynamic dimensions
