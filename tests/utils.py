@@ -61,3 +61,19 @@ def check_causal_lm_output_quality(model_id, generated_text, max_perplexity_thre
         logging.warning(f"✗ Perplexity check failed: {perplexity:.2f} > {max_perplexity_threshold}")
 
     return is_quality_ok
+
+
+def check_close_recursively(eager_outputs, exported_outputs, atol=1e-4, rtol=1e-4):
+    is_close = False
+    if isinstance(eager_outputs, torch.Tensor):
+        torch.testing.assert_close(eager_outputs, exported_outputs, atol=atol, rtol=rtol)
+        return True
+    elif isinstance(eager_outputs, (tuple, list)):
+        for eager_output, exported_output in zip(eager_outputs, exported_outputs):
+            is_close = is_close or check_close_recursively(eager_output, exported_output)
+        return is_close
+    elif isinstance(eager_outputs, dict):
+        for key in eager_outputs:
+            is_close = is_close or check_close_recursively(eager_outputs[key], exported_outputs[key])
+        return is_close
+    return is_close

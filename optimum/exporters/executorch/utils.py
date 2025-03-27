@@ -24,14 +24,22 @@ def save_config_to_constant_methods(
     **kwargs,
 ):
     # Initialize metadata with values from model config
+    head_dim = None
+    if (
+        hasattr(config, "hidden_size")
+        and hasattr(config, "num_attention_heads")
+        and isinstance(config.num_attention_heads, int)
+    ):
+        head_dim = config.hidden_size / config.num_attention_heads
+
     metadata = {
         "get_dtype": 5 if config.torch_dtype == torch.float16 else 6,
         "get_bos_id": getattr(config, "bos_token_id", None),
         "get_eos_id": getattr(config, "eos_token_id", None),
-        "get_head_dim": config.hidden_size / config.num_attention_heads,
+        "get_head_dim": head_dim,
         "get_n_kv_heads": getattr(config, "num_key_value_heads", None),
-        "get_n_layers": config.num_hidden_layers,
-        "get_vocab_size": config.vocab_size,
+        "get_n_layers": getattr(config, "num_hidden_layers", None),
+        "get_vocab_size": getattr(config, "vocab_size", None),
         "get_max_batch_size": 1,
         "get_max_seq_len": getattr(config, "max_position_embeddings", None),
         "decoder_start_token_id": getattr(config, "decoder_start_token_id", None),
