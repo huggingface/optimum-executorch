@@ -29,7 +29,7 @@ jobs:
           - qwen2
           - roberta
           - t5
-        executorch-version: ['0.4.0', 'nightly']
+        executorch-version: ['0.4.0', 'stable']
         python-version: ['3.10', '3.11', '3.12']
         os: [macos-15]
 
@@ -46,7 +46,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies for ExecuTorch
         run: |
-          pip install .[tests]
+          if [ "${{ matrix.executorch-version }}" == "stable" ]; then
+            git clone --branch viable/strict --single-branch https://github.com/pytorch/executorch.git
+            pushd executorch
+            python ./install_executorch.py
+            popd
+          else
+            pip install executorch==${{ matrix.executorch-version }}
+          fi
+          pip install '.[tests]'
           pip list
       - name: Run tests
         working-directory: tests

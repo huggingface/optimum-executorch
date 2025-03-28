@@ -19,11 +19,11 @@ INSTALL_REQUIRE = [
 
 TESTS_REQUIRE = [
     "accelerate>=0.26.0",
-    "pytest",
-    "parameterized",
-    "sentencepiece",
     "datasets",
+    "parameterized",
+    "pytest",
     "safetensors",
+    "sentencepiece",
 ]
 
 
