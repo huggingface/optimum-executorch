@@ -14,6 +14,7 @@
 
 from typing import Dict, Union
 
+import torch
 from torch.export import ExportedProgram
 
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
@@ -63,7 +64,10 @@ def export_to_executorch_with_xnnpack(
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=[XnnpackPartitioner()],
-                compile_config=EdgeCompileConfig(_skip_dim_order=True),
+                compile_config=EdgeCompileConfig(
+                    _skip_dim_order=True,
+                    _core_aten_ops_exception_list=[torch.ops.aten.linalg_vector_norm.default],
+                ),
                 constant_methods=metadata,
             ).to_executorch(
                 config=ExecutorchBackendConfig(
