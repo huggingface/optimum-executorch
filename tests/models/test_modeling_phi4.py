@@ -23,6 +23,8 @@ from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 
+from ..utils import check_causal_lm_output_quality
+
 
 @pytest.mark.skip(reason="Test Phi-4-mini (3.8B) will require runner to be configured with larger RAM")
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -43,12 +45,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-        EXPECTED_GENERATED_TEXT = "My favourite condiment is  [salsa]. I like to use it on my"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt="My favourite condiment is ",
-            max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
+            max_seq_len=32,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
-        self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_text))

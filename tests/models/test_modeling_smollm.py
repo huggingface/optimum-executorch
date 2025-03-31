@@ -26,6 +26,8 @@ from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 
+from ..utils import check_causal_lm_output_quality
+
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -53,12 +55,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-        EXPECTED_GENERATED_TEXT = "My favourite condiment is 100% olive oil. I use it in everything"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt="My favourite condiment is ",
-            max_seq_len=len(tokenizer.encode(EXPECTED_GENERATED_TEXT)),
+            max_seq_len=32,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
-        self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_text))

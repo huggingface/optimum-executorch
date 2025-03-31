@@ -52,7 +52,7 @@ cd executorch
 # Checkout the stable branch to ensure stability
 git checkout viable/strict
 # Install ExecuTorch
-bash ./install_executorch.sh
+python ./install_executorch.py
 cd ..
 ```
 
