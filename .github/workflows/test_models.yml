@@ -46,7 +46,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies for ExecuTorch
         run: |
-          pip install .[tests]
+          if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
+            pip install executorch==0.7.0.dev20250330 --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
+          else
+            pip install executorch==${{ matrix.executorch-version }}
+          fi
+          pip install '.[tests]'
           pip list
       - name: Run tests
         working-directory: tests

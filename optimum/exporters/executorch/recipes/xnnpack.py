@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Dict, Union
 
 from torch.export import ExportedProgram
@@ -70,6 +71,7 @@ def export_to_executorch_with_xnnpack(
                     extract_delegate_segments=True,
                 ),
             )
+            logging.debug(f"Exported program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}")
         return et_progs
 
     exported_progs = model.export()

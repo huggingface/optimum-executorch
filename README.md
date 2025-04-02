@@ -31,7 +31,7 @@ conda activate optimum-executorch
 ```
 git clone https://github.com/huggingface/optimum-executorch.git
 cd optimum-executorch
-pip install .[tests]
+pip install '.[tests]'
 ```
 
 - 🔜 Install from pypi coming soon...
@@ -52,7 +52,7 @@ cd executorch
 # Checkout the stable branch to ensure stability
 git checkout viable/strict
 # Install ExecuTorch
-bash ./install_executorch.sh
+python ./install_executorch.py
 cd ..
 ```
 
