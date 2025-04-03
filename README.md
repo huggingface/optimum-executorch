@@ -130,21 +130,25 @@ print(generated_text)
 
 ### Text Models
 We currently support a wide range of popular transformer models, including encoder-only, decoder-only, and encoder-decoder architectures, as well as models specialized for various tasks like text generation, translation, summarization, and mask prediction, etc. These models reflect the current trends and popularity across the Hugging Face community:
+#### Encoder-only models
 - [Albert](https://huggingface.co/albert/albert-base-v2): `albert-base-v2` and its variants
 - [Bert](https://huggingface.co/google-bert/bert-base-uncased): Google's `bert-base-uncased` and its variants
 - [Distilbert](https://huggingface.co/distilbert/distilbert-base-uncased): `distilbert-base-uncased` and its variants
 - [Eurobert](https://huggingface.co/EuroBERT/EuroBERT-210m): `EuroBERT-210m` and its variants
+- [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
+#### Decoder-only models
 - [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
 - [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
 - [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B): `Llama-3.2-1B` and its variants
 - [Qwen2](https://huggingface.co/Qwen/Qwen2.5-0.5B): `Qwen2.5-0.5B` and its variants
 - [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
 - [Phi4](https://huggingface.co/microsoft/Phi-4-mini-instruct): `Phi-4-mini-instruct` and its variants
-- [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
+#### Decoder-decoder models
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
 ### Vision Models
+#### Encoder-only models
 - [Cvt](https://huggingface.co/microsoft/cvt-13): Convolutional Vision Transformer
 - [Deit](https://huggingface.co/facebook/deit-base-distilled-patch16-224): Distilled Data-efficient Image Transformer (base-sized)
 - [Dit](https://huggingface.co/microsoft/dit-base-finetuned-rvlcdip): Document Image Transformer (base-sized)
@@ -153,7 +157,8 @@ We currently support a wide range of popular transformer models, including encod
 - [Mobilevit2](https://huggingface.co/apple/mobilevitv2-1.0-imagenet1k-256): Apple's MobileViTv2
 - [Pvt](https://huggingface.co/Zetatech/pvt-tiny-224): Pyramid Vision Transformer (tiny-sized)
 - [Swin](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224): Swin Transformer (tiny-sized)
--🚀 Coming more soon...
+
+🚀 Coming more soon...
 
 ### Audio Models
 🔊 Coming later
@@ -178,12 +183,12 @@ Check our [ExecuTorch GitHub repo](https://github.com/pytorch/executorch) direct
 
 We love your input! We want to make contributing to Optimum ExecuTorch as easy and transparent as possible. Check out our:
 
-- [Contributing Guidelines](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributing Guidelines](https://github.com/huggingface/optimum/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/huggingface/optimum/blob/main/CODE_OF_CONDUCT.md)
 
 ## 📝 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](https://github.com/huggingface/optimum/blob/main/LICENSE) file for details.
 
 ## 📫 Get in Touch
 
