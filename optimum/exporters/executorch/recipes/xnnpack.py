@@ -64,7 +64,9 @@ def export_to_executorch_with_xnnpack(
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=[XnnpackPartitioner()],
-                compile_config=EdgeCompileConfig(_skip_dim_order=True),
+                compile_config=EdgeCompileConfig(
+                    _skip_dim_order=True,
+                ),
                 constant_methods=metadata,
             ).to_executorch(
                 config=ExecutorchBackendConfig(

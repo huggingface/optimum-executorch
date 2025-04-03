@@ -13,20 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import os
 import subprocess
 import tempfile
 import unittest
 
 import pytest
+import torch
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoModelForImageClassification
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForImageClassification
 
-from ..utils import check_causal_lm_output_quality
+from ..utils import check_close_recursively
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -35,9 +35,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_export_to_executorch(self):
-        model_id = "weqweasdas/RM-Gemma-2B"
-        task = "text-generation"
+    def test_focalnet_export_to_executorch(self):
+        model_id = "microsoft/focalnet-tiny"
+        task = "image-classification"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
@@ -49,22 +49,25 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_text_generation(self):
-        # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
-        # model_id = "google/gemma-2b"
-        model_id = "weqweasdas/RM-Gemma-2B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
-        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
-        self.assertIsInstance(model.model, ExecuTorchModule)
+    def test_focalnet_image_classification(self):
+        model_id = "microsoft/focalnet-tiny"
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        generated_text = model.text_generation(
-            tokenizer=tokenizer,
-            prompt="Hello I am doing",
-            max_seq_len=21,
-        )
-        logging.info(f"\nGenerated text:\n\t{generated_text}")
-        # Free memory before loading eager for quality check
-        del model
-        del tokenizer
-        self.assertTrue(check_causal_lm_output_quality(model_id, generated_text))
+        config = AutoConfig.from_pretrained(model_id)
+        batch_size = 1
+        num_channels = config.num_channels
+        height = config.image_size
+        width = config.image_size
+        pixel_values = torch.rand(batch_size, num_channels, height, width)
+
+        # Test fetching and lowering the model to ExecuTorch
+        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="xnnpack")
+        self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
+        self.assertIsInstance(et_model.model, ExecuTorchModule)
+
+        eager_model = AutoModelForImageClassification.from_pretrained(model_id).eval().to("cpu")
+        with torch.no_grad():
+            eager_output = eager_model(pixel_values)
+            et_output = et_model.forward(pixel_values)
+
+        # Compare with eager outputs
+        self.assertTrue(check_close_recursively(eager_output.logits, et_output))

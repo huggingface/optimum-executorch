@@ -145,7 +145,15 @@ We currently support a wide range of popular transformer models, including encod
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
 ### Vision Models
-🚀 Coming soon
+- [Cvt](https://huggingface.co/microsoft/cvt-13): Convolutional Vision Transformer
+- [Deit](https://huggingface.co/facebook/deit-base-distilled-patch16-224): Distilled Data-efficient Image Transformer (base-sized)
+- [Dit](https://huggingface.co/microsoft/dit-base-finetuned-rvlcdip): Document Image Transformer (base-sized)
+- [Focalnet](https://huggingface.co/microsoft/focalnet-tiny): FocalNet (tiny-sized)
+- [Mobilevit](https://huggingface.co/apple/mobilevit-xx-small): Apple's MobileViT xx-small
+- [Mobilevit2](https://huggingface.co/apple/mobilevitv2-1.0-imagenet1k-256): Apple's MobileViTv2
+- [Pvt](https://huggingface.co/Zetatech/pvt-tiny-224): Pyramid Vision Transformer (tiny-sized)
+- [Swin](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224): Swin Transformer (tiny-sized)
+-🚀 Coming more soon...
 
 ### Audio Models
 🔊 Coming later

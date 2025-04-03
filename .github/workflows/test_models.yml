@@ -20,14 +20,22 @@ jobs:
           - common
           - albert
           - bert
+          - cvt
+          - deit
           - distilbert
+          - dit
+          - focalnet
           - gemma
           - gemma2
           - llama
+          - mobilevit
+          - mobilevit2
           - olmo
           - phi4
+          - pvt
           - qwen2
           - roberta
+          - swin
           - t5
         executorch-version: ['0.4.0', 'nightly']
         python-version: ['3.10', '3.11', '3.12']
