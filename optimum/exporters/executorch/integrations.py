@@ -21,6 +21,8 @@ from transformers import PreTrainedModel, StaticCache
 from transformers.generation.configuration_utils import GenerationConfig
 
 from optimum.utils.import_utils import is_transformers_version
+from transformers import PreTrainedModel, StaticCache, WhisperForConditionalGeneration
+from transformers.generation.configuration_utils import GenerationConfig
 
 from .utils import save_config_to_constant_methods
 
@@ -153,7 +155,7 @@ class Seq2SeqLMEncoderExportableModule(torch.nn.Module):
         self.config = encoder_model.config
 
     def forward(self, input_ids):
-        return self.encoder(input_ids=input_ids).last_hidden_state
+        return self.encoder(input_ids).last_hidden_state
 
 
 class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
@@ -168,7 +170,10 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         # Get the decoder component
         self.decoder = model.get_decoder()
-        self.lm_head = model.lm_head
+        if isinstance(model, WhisperForConditionalGeneration):
+            self.proj_out = model.proj_out
+        else:
+            self.proj_out = model.lm_head
         self.config = model.config
 
         # Initialize static cache
@@ -195,10 +200,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             cache_position=cache_position,
         )
 
-        # Apply language model head
-        lm_logits = self.lm_head(outputs[0])
-
-        return lm_logits
+        # Apply linear projection (lm head) to obtain logits
+        logits = self.proj_out(outputs[0])
+        return logits
 
 
 class Seq2SeqLMExportableModule(torch.nn.Module):
@@ -240,14 +244,20 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         wrapped_encoder = Seq2SeqLMEncoderExportableModule(self.encoder).to("cpu").eval()
 
         # Define dynamic sequence length for encoder
-        seq_len_dim = torch.export.Dim("encoder_seq_length", max=self.max_hidden_seq_length)
+        if isinstance(self.full_model, WhisperForConditionalGeneration):
+            assert encoder_input_ids.shape == torch.Size([1, 80, 3000]), (
+                f"Whisper only accepts a log-mel spectrogram of shape [1, 80, 3000], passed shape: {encoder_input_ids.shape}"
+            )
+            dynamic_shapes = None
+        else:
+            seq_len_dim = torch.export.Dim("encoder_seq_length", max=self.max_hidden_seq_length)
+            dynamic_shapes = {"input_ids": {1: seq_len_dim}}
 
         # Export the encoder
         with torch.no_grad():
             exported_encoder = torch.export.export(
-                wrapped_encoder, (encoder_input_ids,), dynamic_shapes={"input_ids": {1: seq_len_dim}}, strict=True
+                wrapped_encoder, (encoder_input_ids,), dynamic_shapes=dynamic_shapes, strict=True
             )
-
         return exported_encoder
 
     def _export_decoder(self, decoder_input_ids, encoder_hidden_states, cache_position):
@@ -261,19 +271,23 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             .eval()
         )
 
-        # Define dynamic dimension for encoder output sequence length
-        encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
+        if isinstance(self.full_model, WhisperForConditionalGeneration):
+            dynamic_shapes = None
+        else:
+            # Define dynamic dimension for encoder output sequence length
+            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
+            dynamic_shapes = {
+                "decoder_input_ids": None,
+                "encoder_hidden_states": {1: encoder_seq_len_dim},
+                "cache_position": None,
+            }
 
         # Export the decoder
         with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
             exported_decoder = torch.export.export(
                 wrapped_decoder,
                 (decoder_input_ids, encoder_hidden_states, cache_position),
-                dynamic_shapes={
-                    "decoder_input_ids": None,
-                    "encoder_hidden_states": {1: encoder_seq_len_dim},
-                    "cache_position": None,
-                },
+                dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
 
@@ -286,21 +300,26 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         encoder_hidden_states=None,
         cache_position=None,
     ) -> Dict[str, ExportedProgram]:
-        example_encoder_input_ids = (
-            encoder_input_ids if encoder_input_ids is not None else torch.ones((1, 10), dtype=torch.long)
-        )
+        if encoder_input_ids is None:
+            if isinstance(self.full_model, WhisperForConditionalGeneration):
+                example_encoder_input_ids = torch.rand((1, 80, 3000))
+            else:
+                example_encoder_input_ids = torch.ones((1, 10), dtype=torch.long)
+        else:
+            example_encoder_input_ids = encoder_input_ids
+
+        self.exported_encoder = self._export_encoder(example_encoder_input_ids)
+
+        if not encoder_hidden_states:
+            example_encoder_hidden_states = self.exported_encoder.module()(example_encoder_input_ids)
+        else:
+            example_encoder_hidden_states = encoder_hidden_states
+
         example_decoder_input_ids = (
             decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long)
-        )  # Start token
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
-        example_encoder_hidden_states = (
-            encoder_hidden_states
-            if encoder_hidden_states is not None
-            else torch.zeros(
-                (self.generation_config.cache_config.batch_size, 10, self.config.d_model), dtype=torch.float32
-            )
         )
-        self.exported_encoder = self._export_encoder(example_encoder_input_ids)
+        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+
         self.exported_decoder = self._export_decoder(
             example_decoder_input_ids, example_encoder_hidden_states, example_cache_position
         )
