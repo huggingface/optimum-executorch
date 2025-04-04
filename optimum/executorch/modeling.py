@@ -29,6 +29,7 @@ from transformers import (
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
+    AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
     PreTrainedTokenizer,
     add_start_docstrings,
@@ -871,3 +872,165 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
 
     def generate(self):
         raise NotImplementedError
+
+
+class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
+    """
+    A SpeechSeq2Seq ExecuTorch model for inference using the ExecuTorch Runtime.
+
+    This class provides an interface for loading, running, and generating outputs from a seq2seq language model
+    optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models
+    compatible with ExecuTorch runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForSpeechSeq2Seq`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+        use_kv_cache (`bool`):
+            Whether key-value caching is enabled. For performance reasons, the exported model is
+            optimized to use a static cache.
+        max_cache_size (`int`):
+            Maximum sequence length supported by the cache.
+        max_batch_size (`int`):
+            Maximum supported batch size.
+        dtype (`str`):
+            Data type of the model parameters.
+        bos_token_id (`int`):
+            Beginning-of-sequence token ID.
+        eos_token_id (`int`):
+            End-of-sequence token ID.
+        vocab_size (`int`):
+            Size of the model vocabulary.
+    """
+
+    auto_model_class = AutoModelForSpeechSeq2Seq
+
+    def __init__(self, encoder: "ExecuTorchModule", decoder: "ExecuTorchModule", config: "PretrainedConfig"):
+        super().__init__(model=None, config=config)
+        self.et_encoder = encoder
+        self.et_decoder = decoder
+        metadata = self.et_decoder.method_names()
+        if "use_kv_cache" in metadata:
+            self.use_kv_cache = self.et_decoder.run_method("use_kv_cache")[0]
+        if "get_max_seq_len" in metadata:
+            self.max_cache_size = self.et_decoder.run_method("get_max_seq_len")[0]
+        if "get_max_batch_size" in metadata:
+            self.max_batch_size = self.et_decoder.run_method("get_max_batch_size")[0]
+        if "get_dtype" in metadata:
+            self.dtype = self.et_decoder.run_method("get_dtype")[0]
+        if "get_bos_id" in metadata:
+            self.bos_token_id = self.et_decoder.run_method("get_bos_id")[0]
+        if "get_eos_id" in metadata:
+            self.eos_token_id = self.et_decoder.run_method("get_eos_id")[0]
+        if "get_vocab_size" in metadata:
+            self.vocab_size = self.et_decoder.run_method("get_vocab_size")[0]
+        if "max_hidden_seq_length" in metadata:
+            self.max_hidden_seq_length = self.et_decoder.run_method("max_hidden_seq_length")[0]
+        if "decoder_start_token_id" in metadata:
+            self.decoder_start_token_id = self.et_decoder.run_method("decoder_start_token_id")[0]
+
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        decoder_input_ids: torch.Tensor,
+        cache_position: torch.Tensor,
+        encoder_outputs: Optional[torch.Tensor] = None,
+    ):
+        # Encode if needed (first prediction pass)
+        is_first_prediction = encoder_outputs is None
+        if is_first_prediction:
+            encoder_outputs = self.et_encoder.forward((input_features,))[0]
+
+        return (self.et_decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
+
+    def generate(
+        self,
+        input_features: torch.Tensor,
+        echo: bool = False,
+        pos_base: int = 0,
+        max_seq_len: Optional[int] = None,
+    ) -> List[int]:
+        """
+        Generate tokens from a prompt using the ExecuTorch model.
+
+        Args:
+            input_features (List[int]):
+                Log-mel spectrogram for 30-second audio chunk. Can be obtained using the WhisperProcessor. Should be of shape [1, 80, 3000]
+            echo (`bool`, *optional*):
+                Whether to include prompt tokens in the generated output. Defaults to `False`.
+            pos_base (`int`, *optional*):
+                Base position for the prompt tokens. Defaults to 0.
+            max_seq_len (`int`, *optional*):
+                Maximum sequence length for the generated output.
+                Defaults to None and uses the model's `max_cache_size` attribute.
+                Will be truncated to maximal cache size if larger than `max_cache_size`.
+
+        Returns:
+            List[int]: List of generated token IDs.
+        """
+        self.device = torch.device("cpu")
+        if max_seq_len is None:
+            # Default to max_cache_size if max_seq_len is not specified
+            max_seq_len = self.max_cache_size
+        elif max_seq_len > self.max_cache_size:
+            logging.warning(
+                f"max_seq_len={max_seq_len} is larger than max_cache_size={self.max_cache_size}. Generating tokens will be truncated to max_cache_size."
+            )
+            max_seq_len = self.max_cache_size
+
+        if not hasattr(self, "decoder_start_token_id"):
+            raise AttributeError("'decoder_start_token_id' is missing in the metadata of the PTE.")
+        decoder_input_ids = torch.tensor([[self.decoder_start_token_id]], dtype=torch.long)
+        log_mel = input_features
+        encoder_outputs = None
+        generated_ids = []
+
+        # Generate tokens one by one
+        for i in range(max_seq_len - 1):
+            # Run decoder for next token prediction
+            cache_position = torch.tensor([i], dtype=torch.long)
+            logits, encoder_outputs = self.forward(log_mel, decoder_input_ids, cache_position, encoder_outputs)
+
+            # Get next token
+            next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
+            generated_ids.append(next_token)
+
+            # Update input for next iteration
+            decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long)
+
+            # Check if EOS token
+            if next_token == self.eos_token_id:
+                break
+
+        return generated_ids
+
+    def transcribe(
+        self,
+        tokenizer: "PreTrainedTokenizer",
+        input_features: torch.Tensor,
+        echo: bool = True,
+        max_seq_len: Optional[int] = None,
+    ):
+        """
+        Perform text generation task for a given prompt using the ExecuTorch model.
+
+        Args:
+            tokenizer (`PreTrainedTokenizer`):
+                The tokenizer used to encode and decode the prompt and output.
+            input_features (`str`):
+                Log-mel spectrogram for 30-second audio chunk. Can be obtained using the WhisperProcessor. Should be of shape [1, 80, 3000]
+            echo (`bool`, *optional*):
+                Whether to include prompt tokens in the generated output. Defaults to `True`.
+            max_seq_len (`int`, *optional*):
+                Maximum sequence length for the generated output.
+                Defaults to None and uses the model's `max_cache_size` attribute.
+                Will be truncated to maximal cache size if larger than `max_cache_size`.
+        """
+        self.tokenizer = tokenizer
+        generated_tokens = self.generate(
+            input_ids=input_features,
+            echo=echo,
+            max_seq_len=max_seq_len,
+        )
+        return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
