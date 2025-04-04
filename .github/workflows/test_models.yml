@@ -24,6 +24,7 @@ jobs:
           - deit
           - distilbert
           - dit
+          - efficientnet
           - focalnet
           - gemma
           - gemma2
@@ -35,8 +36,10 @@ jobs:
           - pvt
           - qwen2
           - roberta
+          - smollm
           - swin
           - t5
+          - vit
         executorch-version: ['0.4.0', 'nightly']
         python-version: ['3.10', '3.11', '3.12']
         os: [macos-15]
@@ -55,7 +58,7 @@ jobs:
       - name: Install dependencies for ExecuTorch
         run: |
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
-            pip install executorch==0.7.0.dev20250330 --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
+            pip install executorch==0.7.0.dev20250403 --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
           else
             pip install executorch==${{ matrix.executorch-version }}
           fi

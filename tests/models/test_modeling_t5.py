@@ -54,8 +54,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe="xnnpack")
 
         self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
-        self.assertIsInstance(model.et_encoder, ExecuTorchModule)
-        self.assertIsInstance(model.et_decoder, ExecuTorchModule)
+        self.assertTrue(hasattr(model, "encoder"))
+        self.assertIsInstance(model.encoder, ExecuTorchModule)
+        self.assertTrue(hasattr(model, "decoder"))
+        self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         input_text = "translate English to German: How old are you?"
         generated_text = model.text_generation(
@@ -74,8 +76,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe="xnnpack")
 
         self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
-        self.assertIsInstance(model.et_encoder, ExecuTorchModule)
-        self.assertIsInstance(model.et_decoder, ExecuTorchModule)
+        self.assertTrue(hasattr(model, "encoder"))
+        self.assertIsInstance(model.encoder, ExecuTorchModule)
+        self.assertTrue(hasattr(model, "decoder"))
+        self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         article = (
             " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
