@@ -24,6 +24,8 @@ from typing import Dict, List, Optional, Union
 import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageClassification,
@@ -35,8 +37,6 @@ from transformers import (
     add_start_docstrings,
 )
 from transformers.utils import is_offline_mode
-
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
@@ -873,6 +873,7 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
     def generate(self):
         raise NotImplementedError
 
+
 class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
     """
     A SpeechSeq2Seq ExecuTorch model for inference using the ExecuTorch Runtime.
@@ -938,12 +939,11 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         cache_position: torch.Tensor,
         encoder_outputs: Optional[torch.Tensor] = None,
     ):
-        # Encode if needed (first prediction pass)
         is_first_prediction = encoder_outputs is None
         if is_first_prediction:
-            encoder_outputs = self.et_encoder.forward((input_features,))[0]
+            encoder_outputs = self.encoder.forward((input_features,))[0]
 
-        return (self.et_decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
+        return (self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
 
     def generate(
         self,
@@ -1030,7 +1030,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         """
         self.tokenizer = tokenizer
         generated_tokens = self.generate(
-            input_ids=input_features,
+            input_features=input_features,
             echo=echo,
             max_seq_len=max_seq_len,
         )
