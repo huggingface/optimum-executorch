@@ -245,9 +245,9 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         # Define dynamic sequence length for encoder
         if isinstance(self.full_model, WhisperForConditionalGeneration):
-            assert encoder_input_ids.shape == torch.Size([1, 80, 3000]), (
-                f"Whisper only accepts a log-mel spectrogram of shape [1, 80, 3000], passed shape: {encoder_input_ids.shape}"
-            )
+            assert encoder_input_ids.shape == torch.Size(
+                [1, 80, 3000]
+            ), f"Whisper only accepts a log-mel spectrogram of shape [1, 80, 3000], passed shape: {encoder_input_ids.shape}"
             dynamic_shapes = None
         else:
             seq_len_dim = torch.export.Dim("encoder_seq_length", max=self.max_hidden_seq_length)
