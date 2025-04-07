@@ -45,6 +45,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertTrue(hasattr(model, "model"))
         self.assertIsInstance(model.model, ExecuTorchModule)
 
     def test_load_et_model_from_hub(self):
@@ -52,10 +53,12 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertTrue(hasattr(model, "model"))
         self.assertIsInstance(model.model, ExecuTorchModule)
 
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, revision="executorch-subfolder")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertTrue(hasattr(model, "model"))
         self.assertIsInstance(model.model, ExecuTorchModule)
 
     def test_load_cached_model_from_local_path(self):
@@ -75,6 +78,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             # Load the exported model from a local dir
             model = ExecuTorchModelForCausalLM.from_pretrained(tempdir)
             self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+            self.assertTrue(hasattr(model, "model"))
             self.assertIsInstance(model.model, ExecuTorchModule)
 
     def test_find_files_matching_pattern(self):

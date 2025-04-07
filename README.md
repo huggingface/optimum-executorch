@@ -152,6 +152,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Cvt](https://huggingface.co/microsoft/cvt-13): Convolutional Vision Transformer
 - [Deit](https://huggingface.co/facebook/deit-base-distilled-patch16-224): Distilled Data-efficient Image Transformer (base-sized)
 - [Dit](https://huggingface.co/microsoft/dit-base-finetuned-rvlcdip): Document Image Transformer (base-sized)
+- [EfficientNet](https://huggingface.co/google/efficientnet-b0): EfficientNet (b0-b7 sized)
 - [Focalnet](https://huggingface.co/microsoft/focalnet-tiny): FocalNet (tiny-sized)
 - [Mobilevit](https://huggingface.co/apple/mobilevit-xx-small): Apple's MobileViT xx-small
 - [Mobilevit2](https://huggingface.co/apple/mobilevitv2-1.0-imagenet1k-256): Apple's MobileViTv2
