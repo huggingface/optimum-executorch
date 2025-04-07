@@ -23,6 +23,7 @@ _import_structure = {
         "ExecuTorchModelForImageClassification",
         "ExecuTorchModelForMaskedLM",
         "ExecuTorchModelForSeq2SeqLM",
+        "ExecuTorchModelForSpeechSeq2Seq",
     ],
 }
 
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
         ExecuTorchModelForImageClassification,
         ExecuTorchModelForMaskedLM,
         ExecuTorchModelForSeq2SeqLM,
+        ExecuTorchModelForSpeechSeq2Seq,
     )
 else:
     import sys
