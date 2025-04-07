@@ -873,7 +873,6 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
     def generate(self):
         raise NotImplementedError
 
-
 class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
     """
     A SpeechSeq2Seq ExecuTorch model for inference using the ExecuTorch Runtime.
@@ -906,29 +905,31 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForSpeechSeq2Seq
 
-    def __init__(self, encoder: "ExecuTorchModule", decoder: "ExecuTorchModule", config: "PretrainedConfig"):
-        super().__init__(model=None, config=config)
-        self.et_encoder = encoder
-        self.et_decoder = decoder
-        metadata = self.et_decoder.method_names()
+    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+        super().__init__(models=models, config=config)
+        if not hasattr(self, "encoder"):
+            raise AttributeError("Expected attribute 'encoder' not found in the instance.")
+        if not hasattr(self, "decoder"):
+            raise AttributeError("Expected attribute 'decoder' not found in the instance.")
+        metadata = self.decoder.method_names()
         if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.et_decoder.run_method("use_kv_cache")[0]
+            self.use_kv_cache = self.decoder.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
-            self.max_cache_size = self.et_decoder.run_method("get_max_seq_len")[0]
+            self.max_cache_size = self.decoder.run_method("get_max_seq_len")[0]
         if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.et_decoder.run_method("get_max_batch_size")[0]
+            self.max_batch_size = self.decoder.run_method("get_max_batch_size")[0]
         if "get_dtype" in metadata:
-            self.dtype = self.et_decoder.run_method("get_dtype")[0]
+            self.dtype = self.decoder.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
-            self.bos_token_id = self.et_decoder.run_method("get_bos_id")[0]
+            self.bos_token_id = self.decoder.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
-            self.eos_token_id = self.et_decoder.run_method("get_eos_id")[0]
+            self.eos_token_id = self.decoder.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
-            self.vocab_size = self.et_decoder.run_method("get_vocab_size")[0]
+            self.vocab_size = self.decoder.run_method("get_vocab_size")[0]
         if "max_hidden_seq_length" in metadata:
-            self.max_hidden_seq_length = self.et_decoder.run_method("max_hidden_seq_length")[0]
+            self.max_hidden_seq_length = self.decoder.run_method("max_hidden_seq_length")[0]
         if "decoder_start_token_id" in metadata:
-            self.decoder_start_token_id = self.et_decoder.run_method("decoder_start_token_id")[0]
+            self.decoder_start_token_id = self.decoder.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
