@@ -17,11 +17,15 @@ from typing import Dict
 import torch
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
-from transformers import PreTrainedModel, StaticCache
-from transformers.generation.configuration_utils import GenerationConfig
 
 from optimum.utils.import_utils import is_transformers_version
-from transformers import PreTrainedModel, StaticCache, WhisperForConditionalGeneration
+from transformers import (
+    AutoProcessor,
+    PreTrainedModel,
+    StaticCache,
+    T5ForConditionalGeneration,
+    WhisperForConditionalGeneration,
+)
 from transformers.generation.configuration_utils import GenerationConfig
 
 from .utils import save_config_to_constant_methods
@@ -229,6 +233,15 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 "max_cache_len": max_cache_length,
             },
         )
+        if isinstance(self.full_model, WhisperForConditionalGeneration):
+            self._processor = AutoProcessor.from_pretrained(model.config._name_or_path)
+            self._expected_encoder_input_shape = torch.Size(
+                (
+                    1,
+                    self._processor.feature_extractor.feature_size,
+                    self._processor.feature_extractor.nb_max_frames,
+                )
+            )
         additional_configs = {}
         additional_configs["max_hidden_seq_length"] = max_hidden_seq_length
         # Metadata to be recorded in the pte model file
@@ -245,13 +258,18 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         # Define dynamic sequence length for encoder
         if isinstance(self.full_model, WhisperForConditionalGeneration):
-            assert encoder_input_ids.shape == torch.Size(
-                [1, 80, 3000]
-            ), f"Whisper only accepts a log-mel spectrogram of shape [1, 80, 3000], passed shape: {encoder_input_ids.shape}"
+            assert (
+                encoder_input_ids.shape == self._expected_encoder_input_shape
+            ), f"""This version of Whisper only accepts encoder input of shape {self._expected_encoder_input_shape}, passed shape: {encoder_input_ids.shape}.
+                For more infromation, please refer to the Whisper preprocessor config."""
             dynamic_shapes = None
+        elif isinstance(self.full_model, T5ForConditionalGeneration):
+            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
+            dynamic_shapes = {"input_ids": {1: encoder_seq_len_dim}}
         else:
-            seq_len_dim = torch.export.Dim("encoder_seq_length", max=self.max_hidden_seq_length)
-            dynamic_shapes = {"input_ids": {1: seq_len_dim}}
+            raise ValueError(
+                f"Unsupported model type {type(self.full_model)} for Seq2SeqLMExportableModule encoder export."
+            )
 
         # Export the encoder
         with torch.no_grad():
@@ -273,7 +291,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         if isinstance(self.full_model, WhisperForConditionalGeneration):
             dynamic_shapes = None
-        else:
+        elif isinstance(self.full_model, T5ForConditionalGeneration):
             # Define dynamic dimension for encoder output sequence length
             encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
             dynamic_shapes = {
@@ -281,6 +299,10 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 "encoder_hidden_states": {1: encoder_seq_len_dim},
                 "cache_position": None,
             }
+        else:
+            raise ValueError(
+                f"Unsupported model type {type(self.full_model)} for Seq2SeqLMExportableModule decoder export."
+            )
 
         # Export the decoder
         with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
@@ -302,7 +324,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
     ) -> Dict[str, ExportedProgram]:
         if encoder_input_ids is None:
             if isinstance(self.full_model, WhisperForConditionalGeneration):
-                example_encoder_input_ids = torch.rand((1, 80, 3000))
+                example_encoder_input_ids = torch.rand(self._expected_encoder_input_shape)
             else:
                 example_encoder_input_ids = torch.ones((1, 10), dtype=torch.long)
         else:

@@ -940,10 +940,14 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         encoder_outputs: Optional[torch.Tensor] = None,
     ):
         is_first_prediction = encoder_outputs is None
+        self.stats.on_model_execution_start()
         if is_first_prediction:
             encoder_outputs = self.encoder.forward((input_features,))[0]
+            self.stats.on_prompt_eval_end()
 
-        return (self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
+        result = (self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
+        self.stats.on_model_execution_end()
+        return result
 
     def generate(
         self,
@@ -957,7 +961,8 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
 
         Args:
             input_features (List[int]):
-                Log-mel spectrogram for 30-second audio chunk. Can be obtained using the WhisperProcessor. Should be of shape [1, 80, 3000]
+                Log-mel spectrogram for 30-second audio chunk. Can be obtained using the WhisperProcessor. Should be of shape [1, 80, 3000] or
+                [1, 128, 3000]. For details, check out the processor config.
             echo (`bool`, *optional*):
                 Whether to include prompt tokens in the generated output. Defaults to `False`.
             pos_base (`int`, *optional*):
@@ -986,16 +991,22 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         log_mel = input_features
         encoder_outputs = None
         generated_ids = []
+        first_token_generated = False
 
         # Generate tokens one by one
         for i in range(max_seq_len - 1):
             # Run decoder for next token prediction
             cache_position = torch.tensor([i], dtype=torch.long)
+            self.stats.on_sampling_begin()
             logits, encoder_outputs = self.forward(log_mel, decoder_input_ids, cache_position, encoder_outputs)
-
+            self.stats.on_sampling_end()
+            if not first_token_generated:
+                self.stats.on_first_token()
+                first_token_generated = True
             # Get next token
             next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
             generated_ids.append(next_token)
+            self.stats.set_num_generated_tokens(len(generated_ids) - 1)  # Don't count decoder_start_token
 
             # Update input for next iteration
             decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long)
@@ -1020,7 +1031,8 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
             tokenizer (`PreTrainedTokenizer`):
                 The tokenizer used to encode and decode the prompt and output.
             input_features (`str`):
-                Log-mel spectrogram for 30-second audio chunk. Can be obtained using the WhisperProcessor. Should be of shape [1, 80, 3000]
+                Log-mel spectrogram for 30-second audio chunk. Can be obtained using the WhisperProcessor. Should be of shape [1, 80, 3000] or
+                [1, 128, 3000]. For details, check out the processor config.
             echo (`bool`, *optional*):
                 Whether to include prompt tokens in the generated output. Defaults to `True`.
             max_seq_len (`int`, *optional*):
@@ -1029,9 +1041,14 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
                 Will be truncated to maximal cache size if larger than `max_cache_size`.
         """
         self.tokenizer = tokenizer
+
+        self.stats.reset()
+        self.stats.on_inference_start()
         generated_tokens = self.generate(
             input_features=input_features,
             echo=echo,
             max_seq_len=max_seq_len,
         )
+        self.stats.on_inference_end()
+        self.stats.print_report()
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)

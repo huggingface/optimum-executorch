@@ -20,11 +20,11 @@ import tempfile
 import unittest
 
 import pytest
-import torch
+from datasets import load_dataset
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from optimum.executorch import ExecuTorchModelForSpeechSeq2Seq
-from transformers import AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
 
@@ -53,6 +53,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model_id = "openai/whisper-tiny"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(model_id, recipe="xnnpack")
+        processor = AutoProcessor.from_pretrained(model_id)
 
         self.assertIsInstance(model, ExecuTorchModelForSpeechSeq2Seq)
         self.assertTrue(hasattr(model, "encoder"))
@@ -60,12 +61,17 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertTrue(hasattr(model, "decoder"))
         self.assertIsInstance(model.decoder, ExecuTorchModule)
 
-        # Set manual seed for reproducibility, Whisper could possibly hallucinate tokens
-        # in some cases if this is not set.
-        torch.manual_seed(11)
-        input_features = torch.rand(1, 80, 3000)
-        generated_transcription = model.transcribe(tokenizer, input_features)
-        expected_text = ""
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        input_features = processor(
+            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+        ).input_features
+        # Current implementation of the transcibe method accepts up to 30 seconds of audio, therefore I trim the audio here.
+        input_features_trimmed = input_features[:, :, :3000].contiguous()
+
+        generated_transcription = model.transcribe(tokenizer, input_features_trimmed)
+        expected_text = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really Greek after all, and can discover that."
         logging.info(
             f"\nExpected transcription:\n\t{expected_text}\nGenerated transcription:\n\t{generated_transcription}"
         )
