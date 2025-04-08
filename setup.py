@@ -24,6 +24,8 @@ TESTS_REQUIRE = [
     "pytest",
     "safetensors",
     "sentencepiece",
+    "soundfile",
+    "librosa",
 ]
 
 
