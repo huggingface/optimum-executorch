@@ -40,7 +40,7 @@ jobs:
           - swin
           - t5
           - vit
-        executorch-version: ['0.4.0', 'nightly']
+        executorch-version: ['0.4.0', '0.6.0rc', 'nightly']
         python-version: ['3.10', '3.11', '3.12']
         os: [macos-15]
 
@@ -59,6 +59,8 @@ jobs:
         run: |
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
             pip install executorch==0.7.0.dev20250403 --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
+          elif [ "${{ matrix.executorch-version }}" == "0.6.0rc" ]; then
+            pip install --pre executorch==0.6.0 --extra-index-url "https://download.pytorch.org/whl/test/cpu"
           else
             pip install executorch==${{ matrix.executorch-version }}
           fi
