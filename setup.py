@@ -24,8 +24,9 @@ TESTS_REQUIRE = [
     "pytest",
     "safetensors",
     "sentencepiece",
-    "soundfile",
+    "numba!=0.58.0",
     "librosa",
+    "soundfile",
 ]
 
 
