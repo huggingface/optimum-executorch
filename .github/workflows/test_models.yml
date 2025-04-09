@@ -17,29 +17,29 @@ jobs:
       matrix:
         test-modeling:
           # The model name MUST match with the tests/models/test_modeling_<name>.py
-          # - common
-          # - albert
-          # - bert
-          # - cvt
-          # - deit
-          # - distilbert
-          # - dit
-          # - efficientnet
-          # - focalnet
+          - common
+          - albert
+          - bert
+          - cvt
+          - deit
+          - distilbert
+          - dit
+          - efficientnet
+          - focalnet
           - gemma
-          # - gemma2
-          # - llama
-          # - mobilevit
-          # - mobilevit2
-          # - olmo
-          # - phi4
-          # - pvt
-          # - qwen2
-          # - roberta
-          # - smollm
-          # - swin
-          # - t5
-          # - vit
+          - gemma2
+          - llama
+          - mobilevit
+          - mobilevit2
+          - olmo
+          - phi4
+          - pvt
+          - qwen2
+          - roberta
+          - smollm
+          - swin
+          - t5
+          - vit
         executorch-version: ['0.4.0', '0.6.0rc', 'nightly']
         python-version: ['3.10', '3.11', '3.12']
         os: [macos-15]

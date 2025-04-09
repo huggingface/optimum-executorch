@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import logging
 import os
 import subprocess
@@ -64,4 +65,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             max_seq_len=32,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
-        self.assertTrue(check_causal_lm_output_quality(model_id, generated_text))
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
