@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import logging
 import os
 import subprocess
@@ -40,12 +41,19 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         task = "text-generation"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
+            out_dir = f"{tempdir}/executorch"
             subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {out_dir}",
                 shell=True,
                 check=True,
             )
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+            pte_full_path = f"{out_dir}/model.pte"
+            self.assertTrue(os.path.exists(pte_full_path))
+
+            # Explicitly delete the PTE file to free up disk space
+            if os.path.exists(pte_full_path):
+                os.remove(pte_full_path)
+            gc.collect()
 
     @slow
     @pytest.mark.run_slow
@@ -64,7 +72,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             max_seq_len=21,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
         # Free memory before loading eager for quality check
         del model
         del tokenizer
-        self.assertTrue(check_causal_lm_output_quality(model_id, generated_text))
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
