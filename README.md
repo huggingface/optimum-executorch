@@ -144,7 +144,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
 - [Phi4](https://huggingface.co/microsoft/Phi-4-mini-instruct): `Phi-4-mini-instruct` and its variants
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
-#### Decoder-decoder models
+#### Encoder-decoder models
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
 ### Vision Models
@@ -159,7 +159,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Pvt](https://huggingface.co/Zetatech/pvt-tiny-224): Pyramid Vision Transformer (tiny-sized)
 - [Swin](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224): Swin Transformer (tiny-sized)
 
-🚀 Coming more soon...
+🚀 More coming soon...
 
 ### Audio Models
 🔊 Coming later
