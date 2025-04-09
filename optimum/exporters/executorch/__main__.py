@@ -20,10 +20,10 @@ import warnings
 from pathlib import Path
 
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
-from transformers import PretrainedConfig
-from transformers.utils import is_torch_available
 
 from optimum.utils.import_utils import is_transformers_version
+from transformers import PretrainedConfig
+from transformers.utils import is_torch_available
 
 from ...commands.export.executorch import parse_args_executorch
 from .convert import export_to_executorch
