@@ -60,7 +60,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     def test_gemma_text_generation(self):
-        if pkg_version.parse(executorch_version.__version__) >= pkg_version.parse("0.6.0"):
+        if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
             self.skipTest(reason="Support of float16 requires executorch >= 0.6 to run.")
 
         # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
