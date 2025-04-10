@@ -162,7 +162,8 @@ We currently support a wide range of popular transformer models, including encod
 🚀 More coming soon...
 
 ### Audio Models
-🔊 Coming later
+#### Encoder-decoder models
+- [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
 

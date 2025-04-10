@@ -24,6 +24,9 @@ TESTS_REQUIRE = [
     "pytest",
     "safetensors",
     "sentencepiece",
+    "numba!=0.58.0",  # Due to the bug https://github.com/numba/numba/issues/9209
+    "librosa",
+    "soundfile",
 ]
 
 

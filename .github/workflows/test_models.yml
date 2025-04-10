@@ -40,6 +40,7 @@ jobs:
           - swin
           - t5
           - vit
+          - whisper
         executorch-version: ['0.4.0', '0.6.0rc', 'nightly']
         python-version: ['3.10', '3.11', '3.12']
         os: [macos-15]
