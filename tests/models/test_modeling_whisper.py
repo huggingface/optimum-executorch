@@ -21,11 +21,11 @@ import unittest
 
 import pytest
 from datasets import load_dataset
-
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from optimum.executorch import ExecuTorchModelForSpeechSeq2Seq
 from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
+
+from optimum.executorch import ExecuTorchModelForSpeechSeq2Seq
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):

@@ -17,8 +17,6 @@ from typing import Dict
 import torch
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
-
-from optimum.utils.import_utils import is_transformers_version
 from transformers import (
     AutoProcessor,
     PreTrainedModel,
@@ -27,6 +25,8 @@ from transformers import (
     WhisperForConditionalGeneration,
 )
 from transformers.generation.configuration_utils import GenerationConfig
+
+from optimum.utils.import_utils import is_transformers_version
 
 from .utils import save_config_to_constant_methods
 

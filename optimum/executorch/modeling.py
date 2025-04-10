@@ -24,8 +24,6 @@ from typing import Dict, List, Optional, Union
 import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
-
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageClassification,
@@ -37,6 +35,8 @@ from transformers import (
     add_start_docstrings,
 )
 from transformers.utils import is_offline_mode
+
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
