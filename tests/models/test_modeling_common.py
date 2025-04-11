@@ -117,14 +117,12 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires executorch >= 0.6 to run.")
 
         model_id = "optimum-internal-testing/tiny-random-llama"
-        use_custom_sdpa = True
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
                 f"optimum-cli export executorch \
                     --model {model_id} \
                     --task 'text-generation' \
                     --recipe 'xnnpack' \
-                    --use_custom_sdpa {use_custom_sdpa} \
                     --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,

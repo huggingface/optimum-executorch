@@ -56,8 +56,8 @@ def parse_args_executorch(parser):
     )
     required_group.add_argument(
         "--use_custom_sdpa",
-        type=bool,
-        default=False,
+        required=False,
+        action="store_true",
         help="For decoder-only models to use custom sdpa with static kv cache to boost performance. Defaults to False.",
     )
 

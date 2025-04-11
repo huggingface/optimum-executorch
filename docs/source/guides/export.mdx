@@ -35,7 +35,12 @@ performance.
 Exporting a PyTorch model to ExecuTorch is as simple as
 
 ```bash
-optimum-cli export executorch --model meta-llama/Llama-3.2-1B --task text-generation --recipe xnnpack --output_dir meta_llama3_2_1b
+optimum-cli export executorch \
+  --model HuggingFaceTB/SmolLM2-135M \
+  --task text-generation \
+  --recipe xnnpack \
+  --output_dir hf_smollm2 \
+  --use_custom_sdpa
 ```
 
 Check out the help for more options:
@@ -68,13 +73,14 @@ Required arguments:
                         classification', 'text2text-generation', 'token-classification', 'object-detection', 'zero-shot-object-detection', 'zero-shot-image-classification', 'text-
                         generation', 'fill-mask'].
   --recipe RECIPE       Pre-defined recipes for export to ExecuTorch. Defaults to "xnnpack".
+  --use_custom_sdpa     For decoder-only models to use custom sdpa with static kv cache to boost performance. Defaults to False.
 
 ```
 
-You should see a `model.pte` file is stored under "./meta_llama3_2_1b/":
+You should see a `model.pte` file is stored under "./hf_smollm2/":
 
 ```bash
-meta_llama3_2_1b/
+hf_smollm2/
 └── model.pte
 ```
 
@@ -87,16 +93,10 @@ For example, we can load and run the model with [ExecuTorch Runtime](https://pyt
 from transformers import AutoTokenizer
 from optimum.executorch import ExecuTorchModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
-model = ExecuTorchModelForCausalLM.from_pretrained("meta_llama3_2_1b/")
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+model = ExecuTorchModelForCausalLM.from_pretrained("hf_smollm2/")
 prompt = "Simply put, the theory of relativity states that"
-generated_text = model.text_generation(tokenizer=tokenizer, prompt=prompt, max_seq_len=45)
-```
-
-Printing the `generated_text` would give that:
-
-```
-"Simply put, the theory of relativity states that the laws of physics are the same in all inertial frames of reference. In other words, the laws of physics are the same in all inertial frames of reference."
+print(f"\nGenerated texts:\n\t{model.text_generation(tokenizer=tokenizer, prompt=prompt, max_seq_len=45)}")
 ```
 
 As you can see, converting a model to ExecuTorch does not mean leaving the Hugging Face ecosystem. You end up with a similar API as regular 🤗 Transformers models!
@@ -106,5 +106,5 @@ In case your model wasn't already exported to ExecuTorch, it can also be convert
 ```python
 from optimum.executorch import ExecuTorchModelForCausalLM
 
-model = ExecuTorchModelForCausalLM.from_pretrained("meta-llama/Llama-3.2-1B", recipe="xnnpack")
+model = ExecuTorchModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM2-135M", recipe="xnnpack", attn_implementation="custom_sdpa")
 ```

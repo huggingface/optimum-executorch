@@ -77,15 +77,19 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from transformers import AutoTokenizer
 
 # Load and export the model on-the-fly
-model_id = "meta-llama/Llama-3.2-1B"
-model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
+model_id = "HuggingFaceTB/SmolLM2-135M"
+model = ExecuTorchModelForCausalLM.from_pretrained(
+    model_id,
+    recipe="xnnpack",
+    attn_implementation="custom_sdpa",  # Use custom SDPA implementation for better performance
+)
 
 # Generate text right away
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 generated_text = model.text_generation(
     tokenizer=tokenizer,
     prompt="Simply put, the theory of relativity states that",
-    max_seq_len=128
+    max_seq_len=32,
 )
 print(generated_text)
 ```
@@ -99,10 +103,11 @@ print(generated_text)
 Use the CLI tool to convert your model to ExecuTorch format:
 ```
 optimum-cli export executorch \
-    --model "meta-llama/Llama-3.2-1B" \
+    --model "HuggingFaceTB/SmolLM2-135M" \
     --task "text-generation" \
     --recipe "xnnpack" \
-    --output_dir="meta_llama3_2_1b"
+    --output_dir="hf_smollm2" \
+    --use_custom_sdpa
 ```
 
 #### Step 2: Load and run inference
@@ -112,14 +117,14 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from transformers import AutoTokenizer
 
 # Load the exported model
-model = ExecuTorchModelForCausalLM.from_pretrained("./meta_llama3_2_1b")
+model = ExecuTorchModelForCausalLM.from_pretrained("./hf_smollm2")
 
 # Initialize tokenizer and generate text
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
 generated_text = model.text_generation(
     tokenizer=tokenizer,
     prompt="Simply put, the theory of relativity states that",
-    max_seq_len=128
+    max_seq_len=32
 )
 print(generated_text)
 ```
