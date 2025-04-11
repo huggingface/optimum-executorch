@@ -21,13 +21,18 @@ import tempfile
 import unittest
 
 import pytest
+from executorch import version as executorch_version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging import version as pkg_version
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 
 from ..utils import check_causal_lm_output_quality
+
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -61,6 +66,41 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer,
             prompt="My favourite condiment is ",
             max_seq_len=32,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    def test_smollm_text_generation_with_custom_sdpa(self):
+        if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
+            self.skipTest(reason="This test requires executorch >= 0.6 to run.")
+
+        model_id = "HuggingFaceTB/SmolLM2-135M"
+        prompt = "My favourite condiment is "
+        max_seq_len = 32
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # ExecuTorch model + custom sdpa
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=max_seq_len,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids

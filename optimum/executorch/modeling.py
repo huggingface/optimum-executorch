@@ -595,6 +595,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
             self.vocab_size = self.model.run_method("get_vocab_size")[0]
+        if "use_sdpa_with_kv_cache" in metadata:
+            self.use_sdpa_with_kv_cache = self.model.run_method("use_sdpa_with_kv_cache")[0]
 
     def forward(
         self,

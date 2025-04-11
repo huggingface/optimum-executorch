@@ -77,4 +77,14 @@ def export_to_executorch_with_xnnpack(
         return et_progs
 
     exported_progs = model.export()
+
+    if model.config._attn_implementation == "custom_sdpa":
+        # Sanity check to make sure the exported program contains the custom sdpa operator.
+        if not any(
+            node.op == "call_function" and "custom_sdpa" in str(node.target)
+            for exported_program in exported_progs.values()
+            for node in exported_program.graph_module.graph.nodes
+        ):
+            raise ValueError("'custom_sdpa' not found in the graph.")
+
     return _lower_to_executorch(exported_progs, model.metadata)

@@ -19,7 +19,19 @@ import os
 from pathlib import Path
 from typing import Union
 
+from packaging import version as pkg_version
+from transformers.modeling_utils import AttentionInterface
+
+from executorch import version as executorch_version
+
 from .recipe_registry import discover_recipes, recipe_registry
+
+
+if pkg_version.parse(executorch_version.__version__) >= pkg_version.parse("0.6.0"):
+    from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
+
+    # Register custom sdpa via `AttentionInterface` for executorch>=0.6.0
+    AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
 
 
 logger = logging.getLogger(__name__)

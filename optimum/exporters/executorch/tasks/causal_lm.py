@@ -49,7 +49,8 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     device = "cpu"
     batch_size = 1
     dtype = kwargs.get("dtype", "float32")
-    attn_implementation = kwargs.get("attn_implementation", "sdpa")
+    use_custom_sdpa = kwargs.get("use_custom_sdpa", False)
+    attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config", None)
