@@ -92,7 +92,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
-            attn_implementation="executorch_custom_sdpa",
+            attn_implementation="custom_sdpa",
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)

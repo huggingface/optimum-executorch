@@ -31,7 +31,7 @@ if pkg_version.parse(executorch_version.__version__) >= pkg_version.parse("0.6.0
     from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
 
     # Register custom sdpa via `AttentionInterface` for executorch>=0.6.0
-    AttentionInterface.register("executorch_custom_sdpa", custom_sdpa_with_start_pos_forward)
+    AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
 
 
 logger = logging.getLogger(__name__)

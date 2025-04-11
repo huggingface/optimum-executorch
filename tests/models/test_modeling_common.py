@@ -112,6 +112,25 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 pte_files = find_files_matching_pattern(local_dir, pattern=_FILE_PATTERN, revision=revision)
                 self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
 
+    def test_export_with_custom_sdpa(self):
+        if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
+            self.skipTest(reason="This test requires executorch >= 0.6 to run.")
+
+        model_id = "optimum-internal-testing/tiny-random-llama"
+        use_custom_sdpa = True
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task 'text-generation' \
+                    --recipe 'xnnpack' \
+                    --use_custom_sdpa {use_custom_sdpa} \
+                    --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
     def test_eager_text_generation_with_custom_sdpa(self):
         if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
             self.skipTest(reason="This test requires executorch >= 0.6 to run.")
@@ -123,7 +142,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Eager model + custom sdpa
         cache_implementation = "static"
-        attn_implementation = "executorch_custom_sdpa"
+        attn_implementation = "custom_sdpa"
         eager_model = AutoModelForCausalLM.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
@@ -138,7 +157,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 },
             ),
         )
-        self.assertTrue(eager_model.config._attn_implementation, "executorch_custom_sdpa")
+        self.assertTrue(eager_model.config._attn_implementation, attn_implementation)
         eager_inputs = tokenizer(prompt, return_tensors="pt").to(eager_model.device)
         eager_generated_ids = eager_model.generate(**eager_inputs, max_new_tokens=max_seq_len, temperature=0)
         eager_generated_text = tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)[0]

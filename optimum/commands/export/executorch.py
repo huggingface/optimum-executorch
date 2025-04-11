@@ -17,6 +17,9 @@
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from executorch import version as executorch_version
+from packaging import version as pkg_version
+
 from ...exporters import TasksManager
 from ..base import BaseOptimumCLICommand, CommandInfo
 
@@ -51,6 +54,12 @@ def parse_args_executorch(parser):
         default="xnnpack",
         help='Pre-defined recipes for export to ExecuTorch. Defaults to "xnnpack".',
     )
+    required_group.add_argument(
+        "--use_custom_sdpa",
+        type=bool,
+        default=False,
+        help="For decoder-only models to use custom sdpa with static kv cache to boost performance. Defaults to False.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -63,9 +72,16 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
     def run(self):
         from ...exporters.executorch import main_export
 
+        kwargs = {}
+        if self.args.use_custom_sdpa:
+            if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
+                raise ValueError("custom_sdpa is not supported for executorch < 0.6.0")
+            kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
+
         main_export(
             model_name_or_path=self.args.model,
             task=self.args.task,
             recipe=self.args.recipe,
             output_dir=self.args.output_dir,
+            **kwargs,
         )
