@@ -13,7 +13,7 @@ except Exception as error:
 
 INSTALL_REQUIRE = [
     "optimum~=1.24",
-    "executorch>=0.4.0,!=0.5.0",  # https://github.com/huggingface/optimum-executorch/issues/14
+    "executorch>=0.6.0",
     "transformers==4.51.0",
 ]
 
