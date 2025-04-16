@@ -17,6 +17,7 @@ import gc
 import logging
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -32,6 +33,9 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from ..utils import check_causal_lm_output_quality
 
 
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+
+
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -43,15 +47,23 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         task = "text-generation"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
+            out_dir = f"{tempdir}/executorch"
             subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {out_dir}",
                 shell=True,
                 check=True,
             )
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+            pte_full_path = f"{out_dir}/model.pte"
+            self.assertTrue(os.path.exists(pte_full_path))
+
+            # Explicitly delete the PTE file to free up disk space
+            if os.path.exists(pte_full_path):
+                os.remove(pte_full_path)
+            gc.collect()
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_llama3_2_1b_text_generation(self):
         # TODO: Switch to use meta-llama/Llama-3.2-1B once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "lama/Llama-3.2-1B"
