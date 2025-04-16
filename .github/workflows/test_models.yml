@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         test-modeling: ${{ fromJson(needs.discover-tests.outputs.model_names) }}
-        executorch-version: ['0.4.0', '0.6.0rc', 'nightly']
+        executorch-version: ['0.6.0', 'nightly']
         python-version: ['3.11']
         os: [macos-15, ubuntu-22.04]
 
@@ -58,8 +58,6 @@ jobs:
               torchvision==0.22.0.${NIGHTLY_VERSION} \
               torchaudio==2.6.0.${NIGHTLY_VERSION} \
               --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
-          elif [ "${{ matrix.executorch-version }}" == "0.6.0rc" ]; then
-            pip install --pre executorch==0.6.0 torch==2.7.0 torchvision torchaudio --extra-index-url "https://download.pytorch.org/whl/test/cpu"
           else
             pip install executorch==${{ matrix.executorch-version }}
           fi
