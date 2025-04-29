@@ -142,6 +142,15 @@ class Stats:
 
     def print_report(self):
         """Print a report of the stats, similar to the C++ implementation."""
+        print(
+            "\n⚠️ DISCLAIMER: Python-based perf measurements are approximate and may not "
+            "match absolute speeds on Android/iOS apps. They are intended for relative "
+            "comparisons—-e.g. SDPA vs. custom SDPA, FP16 vs. FP32—-so you can gauge "
+            "performance improvements from each optimization step. For end-to-end, "
+            "platform-accurate benchmarks, please use the official ExecuTorch apps:\n"
+            "  • iOS:     https://github.com/pytorch/executorch/tree/main/extension/benchmark/apple/Benchmark\n"
+            "  • Android: https://github.com/pytorch/executorch/tree/main/extension/benchmark/android/benchmark\n"
+        )
         print(f"PyTorchObserver {self.to_json_string()}")
 
         print(f"\tPrompt Tokens: {self.num_prompt_tokens} Generated Tokens: {self.num_generated_tokens}")
