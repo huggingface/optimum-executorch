@@ -17,9 +17,6 @@
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from executorch import version as executorch_version
-from packaging import version as pkg_version
-
 from ...exporters import TasksManager
 from ..base import BaseOptimumCLICommand, CommandInfo
 
@@ -74,8 +71,6 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
 
         kwargs = {}
         if self.args.use_custom_sdpa:
-            if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
-                raise ValueError("custom_sdpa is not supported for executorch < 0.6.0")
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
 
         main_export(

@@ -22,10 +22,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import torch
-from executorch import version as executorch_version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from huggingface_hub import HfApi
-from packaging import version as pkg_version
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -113,9 +111,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 self.assertTrue(len(pte_files) == 0 if revision == "main" else len(pte_files) > 0)
 
     def test_export_with_custom_sdpa(self):
-        if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
-            self.skipTest(reason="This test requires executorch >= 0.6 to run.")
-
         model_id = "optimum-internal-testing/tiny-random-llama"
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
@@ -130,9 +125,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
     def test_eager_text_generation_with_custom_sdpa(self):
-        if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
-            self.skipTest(reason="This test requires executorch >= 0.6 to run.")
-
         model_id = "HuggingFaceTB/SmolLM2-135M"
         prompt = "My favourite condiment is "
         max_seq_len = 32

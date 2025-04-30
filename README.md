@@ -144,7 +144,7 @@ We currently support a wide range of popular transformer models, including encod
 #### Decoder-only models
 - [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
 - [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
-- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants
+- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants *(requires install latest `transformers (4.52.0.dev0)` manually from source)*
 - [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B): `Llama-3.2-1B` and its variants
 - [Qwen2](https://huggingface.co/Qwen/Qwen2.5-0.5B): `Qwen2.5-0.5B` and its variants
 - [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B): `Qwen3-0.6B` and its variants
