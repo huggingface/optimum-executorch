@@ -31,30 +31,41 @@ from optimum.utils.import_utils import is_transformers_version
 from .utils import save_config_to_constant_methods
 
 
-if is_transformers_version(">=", "4.46"):
-    from transformers.integrations.executorch import (
-        TorchExportableModuleWithStaticCache,
-        convert_and_export_with_cache,
-    )
+class CausalLMExportableModule(torch.nn.Module):
+    """
+    A wrapper module designed to make a Causal LM model exportable with `torch.export`.
+    This module ensures that the exported model is compatible with ExecuTorch.
+    """
 
-    class CausalLMExportableModule(TorchExportableModuleWithStaticCache):
-        """
-        A wrapper module designed to make a Causal LM model exportable with `torch.export`.
-        This module ensures that the exported model is compatible with ExecuTorch.
-        """
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self.config = model.config
+        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
-        def __init__(self, model):
-            super().__init__(model)
-            self.config = model.config
-            self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+    def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
+        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
-        def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
-            example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
-            example_cache_position = (
-                cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+        if is_transformers_version(">=", "4.52.0.dev0"):
+            from transformers.integrations.executorch import (
+                TorchExportableModuleForDecoderOnlyLM,
             )
 
-            return {"model": convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)}
+            max_batch_size = 1
+            max_cache_len = 4094
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
+
+            with torch.no_grad():
+                exported_program = exportable_module.export(example_input_ids, example_cache_position)
+        else:
+            from transformers.integrations.executorch import (
+                convert_and_export_with_cache,
+            )
+
+            exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
+
+        return {"model": exported_program}
 
 
 class VisionEncoderExportableModule(torch.nn.Module):
