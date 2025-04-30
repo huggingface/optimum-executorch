@@ -21,9 +21,7 @@ import tempfile
 import unittest
 
 import pytest
-from executorch import version as executorch_version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from packaging import version as pkg_version
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -77,9 +75,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     def test_olmo_text_generation_with_custom_sdpa(self):
-        if pkg_version.parse(executorch_version.__version__) < pkg_version.parse("0.6.0"):
-            self.skipTest(reason="This test requires executorch >= 0.6 to run.")
-
         # ExecuTorch model + custom sdpa
         model_id = "allenai/OLMo-1B-hf"
         model = ExecuTorchModelForCausalLM.from_pretrained(
