@@ -72,6 +72,7 @@ def export_to_executorch_with_xnnpack(
                 constant_methods=metadata,
             ).to_executorch(
                 config=ExecutorchBackendConfig(
+                    do_quant_fusion_and_const_prop=True,
                     extract_delegate_segments=True,
                 ),
             )

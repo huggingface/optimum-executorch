@@ -57,7 +57,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     cache_implementation = kwargs.get("cache_implementation", "static")
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config", None)
-    quantization_recipe = kwargs.get("quantize", None)
+    quantization_mode = kwargs.get("quantization_mode", None)
 
     eager_model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
@@ -77,7 +77,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         ),
     )
 
-    if quantization_recipe == "8da4w":
+    if quantization_mode == "8da4w":
         if parse(torchao.__version__) < parse("0.11.0.dev0"):
             raise RuntimeError("Quantization 8da4w requires torchao >= 0.11.0. Please upgrade torchao.")
 

@@ -26,8 +26,6 @@ from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos
 from .recipe_registry import discover_recipes, recipe_registry
 
 
-logger = logging.getLogger(__name__)
-
 AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
 
 
@@ -82,6 +80,8 @@ def export_to_executorch(
         full_path = os.path.join(f"{output_dir}", f"{name}.pte")
         with open(full_path, "wb") as f:
             prog.write_to_file(f)
-            logger.info(f"Saved exported program to {full_path}")
+            logging.info(
+                f"Saved exported program to {full_path} ({os.path.getsize(full_path) / (1024 * 1024):.2f} MB)"
+            )
 
     return executorch_progs

@@ -177,7 +177,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         reason="Only available on torchao >= 0.11.0.dev0",
     )
     def test_gemma3_text_generation_with_custom_sdpa_8da4w(self):
-        model_id = "google/gemma-3-1b-it"
+        # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
+        # model_id = "google/gemma-3-1b-it"
+        model_id = "unsloth/gemma-3-1b-it"
         prompt = "Write a poem about a machine learning."
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         kwargs = {"quantize": "8da4w"}
