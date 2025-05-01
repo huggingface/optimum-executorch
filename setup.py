@@ -27,6 +27,7 @@ TESTS_REQUIRE = [
     "numba!=0.58.0",  # Due to the bug https://github.com/numba/numba/issues/9209
     "librosa",
     "soundfile",
+    "torchao @ git+https://github.com/pytorch/ao.git@137b0795acb3282ce622948b1537e20914186eea",
 ]
 
 
