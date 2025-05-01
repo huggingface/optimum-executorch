@@ -62,6 +62,13 @@ jobs:
             pip install executorch==${{ matrix.executorch-version }}
           fi
           pip install '.[tests]'
+          if [ "${{ matrix.test-modeling }}" == "gemma3" ]; then
+            git clone https://github.com/huggingface/transformers.git
+            pushd transformers
+            git checkout a57274466f7f72efaa2662d1738cdaf28ae8071f
+            pip install -e .
+            popd
+          fi
           pip list
       - name: Run tests
         run: |

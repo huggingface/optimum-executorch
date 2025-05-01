@@ -17,6 +17,7 @@ import gc
 import logging
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -29,6 +30,9 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from optimum.utils.import_utils import is_transformers_version
 
 from ..utils import check_causal_lm_output_quality
+
+
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -45,7 +49,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     def test_gemma3_export_to_executorch(self):
-        model_id = "google/gemma-3-1b-it"
+        # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
+        # model_id = "google/gemma-3-1b-it"
+        model_id = "unsloth/gemma-3-1b-it"
         task = "text-generation"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
@@ -65,8 +71,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_gemma3_text_generation(self):
-        model_id = "google/gemma-3-1b-it"
+        # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
+        # model_id = "google/gemma-3-1b-it"
+        model_id = "unsloth/gemma-3-1b-it"
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -92,8 +101,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_gemma3_text_generation_with_custom_sdpa(self):
-        model_id = "google/gemma-3-1b-it"
+        # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
+        # model_id = "google/gemma-3-1b-it"
+        model_id = "unsloth/gemma-3-1b-it"
         prompt = "Write a poem about a machine learning."
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
@@ -124,7 +136,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     def test_gemma3_text_generation_with_custom_sdpa_float16(self):
-        model_id = "google/gemma-3-1b-it"
+        # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
+        # model_id = "google/gemma-3-1b-it"
+        model_id = "unsloth/gemma-3-1b-it"
         prompt = "Write a poem about a machine learning."
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         kwargs = {"dtype": "float16"}

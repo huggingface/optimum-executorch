@@ -62,7 +62,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_gemma_text_generation(self):
+    def test_gemma_text_generation_float16(self):
         # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "google/gemma-2b"
         model_id = "weqweasdas/RM-Gemma-2B"
