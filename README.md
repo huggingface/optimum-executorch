@@ -176,7 +176,7 @@ We currently support a wide range of popular transformer models, including encod
 
 **Supported Backend:**
 
-Currently, **Optimum-ExecuTorch** supports only the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) for efficient CPU execution on mobile devices. Quantization support for XNNPACK is planned to be added shortly.
+Currently, **Optimum-ExecuTorch** supports only the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) for efficient execution on mobile CPUs. We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (`8da4w`).
 
 For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
 

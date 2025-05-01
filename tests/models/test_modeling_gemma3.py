@@ -22,7 +22,9 @@ import tempfile
 import unittest
 
 import pytest
+import torchao
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -142,6 +144,43 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         prompt = "Write a poem about a machine learning."
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         kwargs = {"dtype": "float16"}
+
+        # ExecuTorch model + custom sdpa + float16
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            **kwargs,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(torchao.__version__) < parse("0.11.0.dev0"),
+        reason="Only available on torchao >= 0.11.0.dev0",
+    )
+    def test_gemma3_text_generation_with_custom_sdpa_8da4w(self):
+        model_id = "google/gemma-3-1b-it"
+        prompt = "Write a poem about a machine learning."
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        kwargs = {"quantize": "8da4w"}
 
         # ExecuTorch model + custom sdpa + float16
         model = ExecuTorchModelForCausalLM.from_pretrained(

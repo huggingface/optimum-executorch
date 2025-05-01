@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
+import torchao
+from packaging.version import parse
 from transformers import AutoModelForCausalLM, GenerationConfig
 
 from ..integrations import CausalLMExportableModule
@@ -54,12 +57,14 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     cache_implementation = kwargs.get("cache_implementation", "static")
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config", None)
+    quantization_recipe = kwargs.get("quantize", None)
 
     eager_model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
         device_map=device,
         torch_dtype=dtype,
         config=config,
+        # quantization_config=quantization_config,
         attn_implementation=attn_implementation,
         generation_config=GenerationConfig(
             use_cache=True,
@@ -71,4 +76,25 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
             },
         ),
     )
+
+    if quantization_recipe == "8da4w":
+        if parse(torchao.__version__) < parse("0.11.0.dev0"):
+            raise RuntimeError("Quantization 8da4w requires torchao >= 0.11.0. Please upgrade torchao.")
+
+        from torchao.quantization.granularity import PerGroup
+        from torchao.quantization.quant_api import (
+            Int8DynamicActivationIntxWeightConfig,
+        )
+
+        # TODO: Should switch to TorchAoConfig once the quant issue on final lm_head layer is fixed.
+        linear_config = Int8DynamicActivationIntxWeightConfig(
+            weight_dtype=torch.int4,
+            weight_granularity=PerGroup(64),
+        )
+
+        torchao.quantize_(
+            eager_model,
+            linear_config,
+        )
+
     return CausalLMExportableModule(eager_model)

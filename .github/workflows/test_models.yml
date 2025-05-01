@@ -52,11 +52,12 @@ jobs:
       - name: Install dependencies for ExecuTorch
         run: |
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
-            export NIGHTLY_VERSION=dev20250413
+            export NIGHTLY_VERSION=dev20250422
             pip install executorch==0.7.0.${NIGHTLY_VERSION} \
               torch==2.8.0.${NIGHTLY_VERSION} \
               torchvision==0.22.0.${NIGHTLY_VERSION} \
               torchaudio==2.6.0.${NIGHTLY_VERSION} \
+              torchao==0.11.0.${NIGHTLY_VERSION} \
               --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
           else
             pip install executorch==${{ matrix.executorch-version }}

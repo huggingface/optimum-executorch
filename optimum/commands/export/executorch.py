@@ -57,6 +57,13 @@ def parse_args_executorch(parser):
         action="store_true",
         help="For decoder-only models to use custom sdpa with static kv cache to boost performance. Defaults to False.",
     )
+    required_group.add_argument(
+        "-q",
+        "--quantize",
+        required=False,
+        choices=["8da4w"],
+        help="Quantization recipe to use. Defaults to None.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -72,6 +79,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
         kwargs = {}
         if self.args.use_custom_sdpa:
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
+        if self.args.quantize:
+            kwargs["quantize"] = self.args.quantize
 
         main_export(
             model_name_or_path=self.args.model,

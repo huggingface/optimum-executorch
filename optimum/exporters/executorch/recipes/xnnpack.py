@@ -15,9 +15,11 @@
 import logging
 from typing import Dict, Union
 
+from tabulate import tabulate
 from torch.export import ExportedProgram
 
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
     EdgeCompileConfig,
     ExecutorchBackendConfig,
@@ -73,7 +75,15 @@ def export_to_executorch_with_xnnpack(
                     extract_delegate_segments=True,
                 ),
             )
-            logging.debug(f"Exported program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}")
+            logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
+            logging.debug(
+                f"\nExecuTorch program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}"
+            )
+            delegation_info = get_delegation_info(et_progs[pte_name].exported_program().graph_module)
+            logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
+            logging.debug(
+                f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
+            )
         return et_progs
 
     exported_progs = model.export()
