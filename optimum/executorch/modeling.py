@@ -37,6 +37,7 @@ from transformers import (
 from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
+from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export

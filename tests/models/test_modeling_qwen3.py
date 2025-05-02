@@ -145,13 +145,13 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         parse(torchao.__version__) < parse("0.11.0.dev0"),
         reason="Only available on torchao >= 0.11.0.dev0",
     )
-    def test_qwen3_text_generation_with_custom_sdpa_8da4w(self):
+    def test_qwen3_text_generation_with_custom_sdpa_8da4w_8we(self):
         model_id = "Qwen/Qwen3-0.6B"
         prompt = "Give me a short introduction to large language model."
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-        # ExecuTorch model + custom sdpa
-        kwargs = {"quantize": "8da4w"}
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
+        kwargs = {"qlinear": True, "qembedding": True}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -163,7 +163,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt=prompt,
-            max_seq_len=64,
+            max_seq_len=128,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids

@@ -181,10 +181,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # model_id = "google/gemma-3-1b-it"
         model_id = "unsloth/gemma-3-1b-it"
         prompt = "Write a poem about a machine learning."
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        kwargs = {"quantize": "8da4w"}
 
-        # ExecuTorch model + custom sdpa + float16
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization
+        kwargs = {"qlinear": True}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -194,6 +193,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt=prompt,

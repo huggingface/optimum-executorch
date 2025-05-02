@@ -129,7 +129,7 @@ generated_text = model.text_generation(
 print(generated_text)
 ```
 
-## Supported Models and Backend
+## Supported Models
 
 **Optimum-ExecuTorch** currently supports the following transformer models:
 
@@ -166,19 +166,27 @@ We currently support a wide range of popular transformer models, including encod
 - [Pvt](https://huggingface.co/Zetatech/pvt-tiny-224): Pyramid Vision Transformer (tiny-sized)
 - [Swin](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224): Swin Transformer (tiny-sized)
 
-🚀 More coming soon...
-
 ### Audio Models
 #### Encoder-decoder models
 - [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
 
-**Supported Backend:**
 
-Currently, **Optimum-ExecuTorch** supports only the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) for efficient execution on mobile CPUs. We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (`8da4w`).
+## Supported Optimizations
+
+### Custom Operators
+Supported using [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) with Hugging Face Transformers, boosting performance by 3x compared to default SDPA, based on tests with `HuggingFaceTB/SmolLM2-135M`.
+
+### Backends Delegation
+Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) with [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) for efficient execution on mobile CPUs.
 
 For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
+
+### Quantization
+We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (aka `8da4w`), as well as int8 channelwise embedding quantization.
+
+🚀 Stay tuned as more optimizations and performance enhancements are coming soon!
 
 
 ## 🛠️ Advanced Usage

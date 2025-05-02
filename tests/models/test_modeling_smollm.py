@@ -82,8 +82,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_smollm_text_generation_with_custom_sdpa(self):
         model_id = "HuggingFaceTB/SmolLM2-135M"
         prompt = "My favourite condiment is "
-        max_seq_len = 32
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # ExecuTorch model + custom sdpa
         model = ExecuTorchModelForCausalLM.from_pretrained(
@@ -94,10 +92,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt=prompt,
-            max_seq_len=max_seq_len,
+            max_seq_len=32,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
@@ -118,11 +117,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_smollm_text_generation_with_custom_sdpa_8da4w(self):
         model_id = "HuggingFaceTB/SmolLM2-135M"
         prompt = "My favourite condiment is "
-        max_seq_len = 32
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-        # ExecuTorch model + custom sdpa
-        kwargs = {"quantize": "8da4w"}
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization
+        kwargs = {"qlinear": True}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -132,10 +129,48 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt=prompt,
-            max_seq_len=max_seq_len,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(torchao.__version__) < parse("0.11.0.dev0"),
+        reason="Only available on torchao >= 0.11.0.dev0",
+    )
+    def test_smollm_text_generation_with_custom_sdpa_8da4w_8we(self):
+        model_id = "HuggingFaceTB/SmolLM2-135M"
+        prompt = "My favourite condiment is "
+
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
+        kwargs = {"qlinear": True, "qembedding": True}
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            **kwargs,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
