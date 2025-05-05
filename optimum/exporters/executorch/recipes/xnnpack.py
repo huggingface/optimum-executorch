@@ -15,9 +15,13 @@
 import logging
 from typing import Dict, Union
 
+from packaging.version import parse
+from tabulate import tabulate
 from torch.export import ExportedProgram
 
+from executorch import version as executorch_version
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
     EdgeCompileConfig,
     ExecutorchBackendConfig,
@@ -60,7 +64,14 @@ def export_to_executorch_with_xnnpack(
         metadata=None,
     ) -> Dict[str, ExecutorchProgram]:
         et_progs = {}
+        backend_config_dict = {
+            "extract_delegate_segments": True,
+        }
+        if parse(executorch_version.__version__).base_version > "0.6.0":
+            backend_config_dict["do_quant_fusion_and_const_prop"] = True
+
         for pte_name, exported_program in exported_programs.items():
+            logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=[XnnpackPartitioner()],
@@ -69,11 +80,16 @@ def export_to_executorch_with_xnnpack(
                 ),
                 constant_methods=metadata,
             ).to_executorch(
-                config=ExecutorchBackendConfig(
-                    extract_delegate_segments=True,
-                ),
+                config=ExecutorchBackendConfig(**backend_config_dict),
             )
-            logging.debug(f"Exported program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}")
+            logging.debug(
+                f"\nExecuTorch program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}"
+            )
+            delegation_info = get_delegation_info(et_progs[pte_name].exported_program().graph_module)
+            logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
+            logging.debug(
+                f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
+            )
         return et_progs
 
     exported_progs = model.export()

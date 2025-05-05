@@ -22,7 +22,9 @@ import tempfile
 import unittest
 
 import pytest
+import torchao
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -153,6 +155,45 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(torchao.__version__) < parse("0.11.0.dev0"),
+        reason="Only available on torchao >= 0.11.0.dev0",
+    )
+    def test_gemma3_text_generation_with_custom_sdpa_8da4w(self):
+        # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
+        # model_id = "google/gemma-3-1b-it"
+        model_id = "unsloth/gemma-3-1b-it"
+        prompt = "Write a poem about a machine learning."
+
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization
+        kwargs = {"qlinear": True}
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            **kwargs,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt=prompt,

@@ -57,6 +57,18 @@ def parse_args_executorch(parser):
         action="store_true",
         help="For decoder-only models to use custom sdpa with static kv cache to boost performance. Defaults to False.",
     )
+    required_group.add_argument(
+        "--qlinear",
+        required=False,
+        action="store_true",
+        help="Quantization config for linear layers. If set, defaults to '8da4w' w/ groupsize 32.",
+    )
+    required_group.add_argument(
+        "--qembedding",
+        required=False,
+        action="store_true",
+        help="Quantization config for embedding. If set, defaults to int8 channelwise.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -72,6 +84,10 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
         kwargs = {}
         if self.args.use_custom_sdpa:
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
+        if self.args.qlinear:
+            kwargs["qlinear"] = self.args.qlinear
+        if self.args.qembedding:
+            kwargs["qembedding"] = self.args.qembedding
 
         main_export(
             model_name_or_path=self.args.model,

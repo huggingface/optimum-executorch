@@ -37,6 +37,7 @@ from transformers import (
 from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
+from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
@@ -180,7 +181,9 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             local_files_only=local_files_only,
         )
         model = _load_for_executorch(model_cache_path)
-        logging.info(f"Loaded model from {model_cache_path}")
+        logging.info(
+            f"Loaded model from {model_cache_path} ({os.path.getsize(model_cache_path) / (1024 * 1024):.2f} MB)"
+        )
 
         return {default_file_name.removesuffix(_PTE_SUFFIX): model}
 
