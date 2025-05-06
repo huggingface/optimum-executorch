@@ -77,18 +77,19 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from transformers import AutoTokenizer
 
 # Load and export the model on-the-fly
-model_id = "HuggingFaceTB/SmolLM2-135M"
+model_id = "HuggingFaceTB/SmolLM2-135M-Instruct"
 model = ExecuTorchModelForCausalLM.from_pretrained(
     model_id,
     recipe="xnnpack",
     attn_implementation="custom_sdpa",  # Use custom SDPA implementation for better performance
+    **{"qlinear": True},  # quantize linear layers with 8da4w
 )
 
 # Generate text right away
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 generated_text = model.text_generation(
     tokenizer=tokenizer,
-    prompt="Simply put, the theory of relativity states that",
+    prompt="Once upon a time",
     max_seq_len=32,
 )
 print(generated_text)
@@ -103,12 +104,14 @@ print(generated_text)
 Use the CLI tool to convert your model to ExecuTorch format:
 ```
 optimum-cli export executorch \
-    --model "HuggingFaceTB/SmolLM2-135M" \
+    --model "HuggingFaceTB/SmolLM2-135M-Instruct" \
     --task "text-generation" \
     --recipe "xnnpack" \
     --output_dir="hf_smollm2" \
-    --use_custom_sdpa
+    --use_custom_sdpa \
+    --qlinear
 ```
+Explore the various export options by running the command: `optimum-cli export executorch --help`
 
 #### Step 2: Load and run inference
 Use the exported model for text generation:
@@ -120,18 +123,34 @@ from transformers import AutoTokenizer
 model = ExecuTorchModelForCausalLM.from_pretrained("./hf_smollm2")
 
 # Initialize tokenizer and generate text
-tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
 generated_text = model.text_generation(
     tokenizer=tokenizer,
-    prompt="Simply put, the theory of relativity states that",
-    max_seq_len=32
+    prompt="Once upon a time",
+    max_seq_len=128
 )
 print(generated_text)
 ```
 
+## Supported Optimizations
+
+### Custom Operators
+Supported using [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) with Hugging Face Transformers, boosting performance by 3x compared to default SDPA, based on tests with `HuggingFaceTB/SmolLM2-135M`.
+
+### Backends Delegation
+Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) with [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) for efficient execution on mobile CPUs.
+
+For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
+
+### Quantization
+We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (aka `8da4w`), as well as int8 channelwise embedding quantization.
+
+🚀 Stay tuned as more optimizations and performance enhancements are coming soon!
+
+
 ## Supported Models
 
-**Optimum-ExecuTorch** currently supports the following transformer models:
+The following models have been successfully tested with Executorch. For details on the specific optimizations supported and how to use them for each model, please consult their respective test files in the [`tests/models/`](https://github.com/huggingface/optimum-executorch/tree/main/tests/models) directory.
 
 ### Text Models
 We currently support a wide range of popular transformer models, including encoder-only, decoder-only, and encoder-decoder architectures, as well as models specialized for various tasks like text generation, translation, summarization, and mask prediction, etc. These models reflect the current trends and popularity across the Hugging Face community:
@@ -171,22 +190,6 @@ We currently support a wide range of popular transformer models, including encod
 - [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
-
-
-## Supported Optimizations
-
-### Custom Operators
-Supported using [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) with Hugging Face Transformers, boosting performance by 3x compared to default SDPA, based on tests with `HuggingFaceTB/SmolLM2-135M`.
-
-### Backends Delegation
-Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) with [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) for efficient execution on mobile CPUs.
-
-For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
-
-### Quantization
-We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (aka `8da4w`), as well as int8 channelwise embedding quantization.
-
-🚀 Stay tuned as more optimizations and performance enhancements are coming soon!
 
 
 ## 🛠️ Advanced Usage
