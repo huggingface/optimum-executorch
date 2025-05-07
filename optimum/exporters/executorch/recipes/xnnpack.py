@@ -28,6 +28,7 @@ from executorch.exir import (
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
+from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
 from ..integrations import (
     CausalLMExportableModule,
@@ -76,9 +77,11 @@ def export_to_executorch_with_xnnpack(
                 exported_program,
                 partitioner=[XnnpackPartitioner()],
                 compile_config=EdgeCompileConfig(
+                    _check_ir_validity=False,
                     _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
+                transform_passes=[RemovePaddingIdxEmbeddingPass()],
             ).to_executorch(
                 config=ExecutorchBackendConfig(**backend_config_dict),
             )
