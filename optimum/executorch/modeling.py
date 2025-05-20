@@ -92,8 +92,12 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 f"This attribute is used to identify the corresponding AutoModel class."
             )
 
-        for key, value in models.items():
-            setattr(self, key, value)
+        if len(models) == 1:
+            # For single PTE, always set the attr to "model"
+            setattr(self, "model", next(iter(models.values())))
+        else:
+            for key, value in models.items():
+                setattr(self, key, value)
 
         self.stats = Stats()
 
@@ -570,8 +574,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             Data type of the model parameters.
         bos_token_id (`int`):
             Beginning-of-sequence token ID.
-        eos_token_id (`int`):
-            End-of-sequence token ID.
+        eos_token_ids (`List[int]`):
+            End-of-sequence token IDs.
         vocab_size (`int`):
             Size of the model vocabulary.
     """
@@ -594,8 +598,10 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             self.dtype = self.model.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
             self.bos_token_id = self.model.run_method("get_bos_id")[0]
-        if "get_eos_id" in metadata:
-            self.eos_token_id = self.model.run_method("get_eos_id")[0]
+        for key in ("get_eos_id", "get_eos_ids"):
+            if key in metadata:
+                self.eos_token_ids = self.model.run_method(key)
+                break
         if "get_vocab_size" in metadata:
             self.vocab_size = self.model.run_method("get_vocab_size")[0]
         if "use_sdpa_with_kv_cache" in metadata:
@@ -694,7 +700,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             next_token = torch.argmax(logits, dim=-1).item()
             generated_tokens.append(next_token)
 
-            if next_token == self.eos_token_id:
+            if next_token in self.eos_token_ids:
                 break
 
         self.stats.set_num_generated_tokens(len(generated_tokens) - len(prompt_tokens))
@@ -730,9 +736,9 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             raise ValueError(
                 f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
             )
-        if self.tokenizer.eos_token_id is not None and self.tokenizer.eos_token_id != self.eos_token_id:
+        if self.tokenizer.eos_token_id is not None and self.tokenizer.eos_token_id not in self.eos_token_ids:
             raise ValueError(
-                f"The tokenizer's eos_token_id={self.tokenizer.eos_token_id} must be the same as the model's eos_token_id={self.eos_token_id}."
+                f"The tokenizer's eos_token_id={self.tokenizer.eos_token_id} must match with the model's eos_token_ids={self.eos_token_ids}."
             )
 
         # Reset stats for a new generation

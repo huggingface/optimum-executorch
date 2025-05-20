@@ -77,6 +77,11 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         ),
     )
 
+    for param in eager_model.parameters():
+        # Must disable gradient for quantized checkpoint
+        if isinstance(param, torchao.utils.TorchAOBaseTensor):
+            param.requires_grad = False
+
     # TODO: Move quantization recipe out for better composability.
     # TODO: Should switch to `TorchAoConfig` once the quant issue on final lm_head layer is fixed.
     qlinear_config = kwargs.get("qlinear", None)
