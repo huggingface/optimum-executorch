@@ -28,7 +28,11 @@ if TYPE_CHECKING:
 def parse_args_executorch(parser):
     required_group = parser.add_argument_group("Required arguments")
     required_group.add_argument(
-        "-m", "--model", type=str, required=True, help="Model ID on huggingface.co or path on disk to load model from."
+        "-m",
+        "--model",
+        type=str,
+        required=True,
+        help="Model ID on huggingface.co or path on disk to load model from.",
     )
     required_group.add_argument(
         "-o",
@@ -58,6 +62,12 @@ def parse_args_executorch(parser):
         help="For decoder-only models to use custom sdpa with static kv cache to boost performance. Defaults to False.",
     )
     required_group.add_argument(
+        "--use_custom_kv_cache",
+        required=False,
+        action="store_true",
+        help="For decoder-only models to use custom kv cache for static cache that updates cache using custom op. Defaults to False.",
+    )
+    required_group.add_argument(
         "--qlinear",
         required=False,
         action="store_true",
@@ -84,6 +94,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
         kwargs = {}
         if self.args.use_custom_sdpa:
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
+        if self.args.use_custom_kv_cache:
+            kwargs["use_custom_kv_cache"] = self.args.use_custom_kv_cache
         if self.args.qlinear:
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qembedding:
