@@ -37,10 +37,11 @@ class CausalLMExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, use_custom_kv_cache=False):
         super().__init__()
         self.model = model
         self.config = model.config
+        self.use_custom_kv_cache = use_custom_kv_cache
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
     def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
@@ -55,9 +56,34 @@ class CausalLMExportableModule(torch.nn.Module):
             max_batch_size = 1
             max_cache_len = 4094
             exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
+            if self.use_custom_kv_cache:
+                from optimum.executorch.attentions.custom_kv_cache import (
+                    replace_with_et_custom_kv_cache,
+                )
+
+                replace_with_et_custom_kv_cache(
+                    exportable_module.model,
+                    self.model.config,
+                    self.model.generation_config,
+                    self.model.dtype,
+                )
 
             with torch.no_grad():
                 exported_program = exportable_module.export(example_input_ids, example_cache_position)
+                # Apply RemoveTransposes pass to remove
+                # any back-to-back transpose ops that are not needed
+                # e.g. output of update_cache is transposed and
+                # input to custom_sdpa is transposed.
+                from executorch.extension.llm.export.export_passes import (
+                    RemoveRedundantTransposes,
+                )
+
+                mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
+                exported_program = torch.export.export(
+                    mutated_gm,
+                    args=(example_input_ids, example_cache_position),
+                    kwargs={},
+                )
         else:
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
@@ -285,7 +311,10 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         # Export the encoder
         with torch.no_grad():
             exported_encoder = torch.export.export(
-                wrapped_encoder, (encoder_input_ids,), dynamic_shapes=dynamic_shapes, strict=True
+                wrapped_encoder,
+                (encoder_input_ids,),
+                dynamic_shapes=dynamic_shapes,
+                strict=True,
             )
         return exported_encoder
 
@@ -354,7 +383,9 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
         self.exported_decoder = self._export_decoder(
-            example_decoder_input_ids, example_encoder_hidden_states, example_cache_position
+            example_decoder_input_ids,
+            example_encoder_hidden_states,
+            example_cache_position,
         )
 
         return {
@@ -375,7 +406,9 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             for i in range(max_new_tokens - 1):
                 # Run decoder for next token prediction
                 logits = self.exported_decoder.module()(
-                    decoder_input_ids, encoder_output, torch.tensor([i], dtype=torch.long)
+                    decoder_input_ids,
+                    encoder_output,
+                    torch.tensor([i], dtype=torch.long),
                 )
 
                 # Get next token

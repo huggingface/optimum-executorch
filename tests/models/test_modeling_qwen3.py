@@ -22,6 +22,7 @@ import unittest
 
 import pytest
 import torchao
+import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoTokenizer
@@ -175,6 +176,41 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer,
             prompt=prompt,
             max_seq_len=128,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(transformers.__version__) < parse("4.52.0.dev0"),
+        reason="Only available on transformers >= 4.52.0.dev0",
+    )
+    def test_qwen3_text_generation_with_custom_sdpa_and_kv_cache(self):
+        model_id = "Qwen/Qwen3-0.6B"
+        prompt = "Give me a short introduction to large language model."
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # ExecuTorch model + custom sdpa
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            use_custom_kv_cache=True,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
