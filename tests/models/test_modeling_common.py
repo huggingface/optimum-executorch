@@ -153,3 +153,33 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         eager_generated_text = tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)[0]
         logging.info(f"\nEager generated text:\n\t{eager_generated_text}")
         self.assertTrue(check_causal_lm_output_quality(model_id, eager_generated_ids))
+
+    def test_removing_padding_idx_embedding_pass(self):
+        class ModuleWithEmbedding(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.emb = torch.nn.Embedding(10, 3, padding_idx=0)
+
+            def forward(self, x):
+                return self.emb(x) + torch.ops.aten.embedding.default(self.emb.weight, x, padding_idx=1)
+
+        test_model = ModuleWithEmbedding()
+        example_inputs = (torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),)
+        exported_model = torch.export.export(test_model, example_inputs)
+
+        from executorch.exir import to_edge_transform_and_lower
+        from executorch.exir.dialects._ops import ops as exir_ops
+
+        from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
+
+        et_model = to_edge_transform_and_lower(
+            exported_model,
+            transform_passes=[RemovePaddingIdxEmbeddingPass()],
+        )
+        self.assertTrue(
+            all(
+                len(node.args) < 3
+                for node in et_model.exported_program().graph_module.graph.nodes
+                if node.op == "call_function" and node.target == exir_ops.edge.aten.embedding.default
+            )
+        )
