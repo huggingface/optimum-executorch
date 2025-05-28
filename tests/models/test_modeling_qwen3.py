@@ -41,13 +41,24 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(torchao.__version__) < parse("0.11.0.dev0"),
+        reason="Only available on torchao >= 0.11.0.dev0",
+    )
     def test_qwen3_export_to_executorch(self):
         model_id = "Qwen/Qwen3-0.6B"
         task = "text-generation"
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
+                    --output_dir {tempdir}/executorch \
+                    --use_custom_sdpa \
+                    --qlinear \
+                    --qembedding",
                 shell=True,
                 check=True,
             )

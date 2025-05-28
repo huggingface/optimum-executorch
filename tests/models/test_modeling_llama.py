@@ -22,7 +22,9 @@ import tempfile
 import unittest
 
 import pytest
+import torchao
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -34,6 +36,10 @@ from ..utils import check_causal_lm_output_quality
 is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
+@pytest.mark.skipif(
+    parse(torchao.__version__) < parse("0.11.0.dev0"),
+    reason="Only available on torchao >= 0.11.0.dev0",
+)
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -47,7 +53,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             out_dir = f"{tempdir}/executorch"
             subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {out_dir}",
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
+                    --output_dir {tempdir}/executorch \
+                    --use_custom_sdpa \
+                    --qlinear \
+                    --qembedding",
                 shell=True,
                 check=True,
             )
@@ -88,13 +101,15 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_llama_text_generation_with_custom_sdpa(self):
-        # ExecuTorch model + custom sdpa
+    def test_llama_text_generation_with_custom_sdpa_8da4w_8we(self):
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
         model_id = "NousResearch/Llama-3.2-1B"
+        kwargs = {"qlinear": True, "qembedding": True}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
+            **kwargs,
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
