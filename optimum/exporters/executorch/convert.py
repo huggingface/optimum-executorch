@@ -16,10 +16,12 @@
 
 import logging
 import os
+import executorch
 from pathlib import Path
 from typing import Union
 
 from transformers.modeling_utils import AttentionInterface
+from executorch.backends.xnnpack import get_xnnpack_recipe
 
 from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
 
@@ -64,18 +66,14 @@ def export_to_executorch(
         - The exported model is stored in the specified output directory with the fixed filename `model.pte`.
         - The resulting ExecuTorch program is serialized and saved to the output directory.
     """
-
-    # Dynamically discover and import registered recipes
-    discover_recipes()
-
-    # Export and lower the model to ExecuTorch with the recipe
-    try:
-        recipe_func = recipe_registry.get(recipe)
-    except KeyError as e:
-        raise RuntimeError(f"The recipe '{recipe}' isn't registered. Detailed error: {e}")
-
-    executorch_progs = recipe_func(model, **kwargs)
-
+    
+    executorch_progs = {}
+    models = model.get_exportable_model_and_inputs()
+    for name, model_dict in models.items():
+        eager_model = model_dict["model"]
+        session = executorch.export.export(eager_model, [model_dict["inputs"]], get_xnnpack_recipe("FP32_CPU_ACCELERATED_RECIPE"),dynamic_shapes=model_dict.get("dynamic_shapes"), constant_methods= model.metadata)
+        executorch_progs[name] = session.get_executorch_program_manager()
+   
     for name, prog in executorch_progs.items():
         full_path = os.path.join(f"{output_dir}", f"{name}.pte")
         with open(full_path, "wb") as f:

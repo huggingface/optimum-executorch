@@ -27,7 +27,7 @@ from transformers import (
 from transformers.generation.configuration_utils import GenerationConfig
 
 from optimum.utils.import_utils import is_transformers_version
-
+from transformers.integrations.executorch import TorchExportableModuleWithStaticCache
 from .utils import save_config_to_constant_methods
 
 
@@ -42,6 +42,20 @@ class CausalLMExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+
+    def get_exportable_model_and_inputs(self, input_ids=None, cache_position=None):
+        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+
+        if is_transformers_version(">=", "4.52.0.dev0"):
+            from transformers.integrations.executorch import (
+                TorchExportableModuleForDecoderOnlyLM,
+            )
+            max_batch_size = 1
+            max_cache_len = 4094
+            return {"model":{"model": TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len), "inputs": (example_input_ids,example_cache_position), "dynamic_shapes":None}}
+        else:
+            return {"model":{"model": TorchExportableModuleWithStaticCache(self.model), "inputs": (example_input_ids,example_cache_position), "dynamic_shapes":None}}
 
     def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
@@ -148,13 +162,7 @@ class MaskedLMExportableModule(torch.nn.Module):
         # Export the model with dynamic dimensions
         with torch.no_grad():
             return {
-                "model": torch.export.export(
-                    self.model,
-                    args=(dummy_input_ids,),
-                    kwargs={"attention_mask": dummy_attention_mask},
-                    dynamic_shapes=dynamic_shapes,
-                    strict=True,
-                )
+                "model": (self.model,(dummy_input_ids,{"attention_mask": dummy_attention_mask}),dynamic_shapes,)
             }
 
 
