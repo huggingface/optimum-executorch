@@ -19,7 +19,6 @@ from packaging.version import parse
 from tabulate import tabulate
 from torch.export import ExportedProgram
 
-from executorch import version as executorch_version
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -35,7 +34,8 @@ from ..integrations import (
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
-
+from executorch.backends.xnnpack import get_xnnpack_recipe
+from executorch.export import export
 
 @register_recipe("xnnpack")
 def export_to_executorch_with_xnnpack(
@@ -67,8 +67,7 @@ def export_to_executorch_with_xnnpack(
         backend_config_dict = {
             "extract_delegate_segments": True,
         }
-        if parse(executorch_version.__version__).base_version > "0.6.0":
-            backend_config_dict["do_quant_fusion_and_const_prop"] = True
+        backend_config_dict["do_quant_fusion_and_const_prop"] = True
 
         for pte_name, exported_program in exported_programs.items():
             logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
@@ -93,7 +92,8 @@ def export_to_executorch_with_xnnpack(
         return et_progs
 
     exported_progs = model.export()
-
+    
+    """
     if model.config._attn_implementation == "custom_sdpa":
         # Sanity check to make sure the exported program contains the custom sdpa operator.
         if not any(
@@ -102,5 +102,16 @@ def export_to_executorch_with_xnnpack(
             for node in exported_program.graph_module.graph.nodes
         ):
             raise ValueError("'custom_sdpa' not found in the graph.")
+    """
+    
+    executorch_programs = {}
+    for name, e_model in exported_progs.items():
+        eager_model = e_model[0]
+        example_inputs = [e_model[1]]
+        dynamic_shapes = e_model[2]
 
-    return _lower_to_executorch(exported_progs, model.metadata)
+        session = export(eager_model, example_inputs, get_xnnpack_recipe("8A4W_CPU_ACCELERATED_RECIPE"), dynamic_shapes = dynamic_shapes, constant_methods=model.metadata) 
+        executorch_programs[name] = session.get_executorch_program_manager()
+        session.print_delegation_info()
+
+    return executorch_programs
