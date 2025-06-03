@@ -19,7 +19,7 @@ import os
 import subprocess
 import tempfile
 import unittest
-
+import sys
 import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoTokenizer
@@ -28,6 +28,8 @@ from transformers.testing_utils import slow
 from optimum.executorch import ExecuTorchModelForCausalLM
 
 from ..utils import check_causal_lm_output_quality
+
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -50,6 +52,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_olmo_text_generation_with_xnnpack(self):
         model_id = "allenai/OLMo-1B-hf"
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
