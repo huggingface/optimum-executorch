@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from torch.export import ExportedProgram
@@ -44,7 +44,13 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_kv_cache = use_custom_kv_cache
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
-    def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
+    def export(
+        self,
+        input_ids=None,
+        cache_position=None,
+        dynamic_shapes: Optional[dict] = None,
+        strict: Optional[bool] = None,
+    ) -> Dict[str, ExportedProgram]:
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
@@ -83,13 +89,17 @@ class CausalLMExportableModule(torch.nn.Module):
                     mutated_gm,
                     args=(example_input_ids, example_cache_position),
                     kwargs={},
+                    dynamic_shapes=dynamic_shapes,
+                    strict=strict if strict is not None else True,
                 )
         else:
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
             )
 
-            exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
+            exported_program = convert_and_export_with_cache(
+                self.model, example_input_ids, example_cache_position, dynamic_shapes, strict
+            )
 
         return {"model": exported_program}
 
