@@ -59,7 +59,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             out_dir = f"{tempdir}/executorch"
             subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {out_dir}",
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
+                    --output_dir {tempdir}/executorch \
+                    --use_custom_sdpa \
+                    --qlinear \
+                    --qembedding",
                 shell=True,
                 check=True,
             )
@@ -176,14 +183,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         parse(torchao.__version__) < parse("0.11.0.dev0"),
         reason="Only available on torchao >= 0.11.0.dev0",
     )
-    def test_gemma3_text_generation_with_custom_sdpa_8da4w(self):
+    def test_gemma3_text_generation_with_custom_sdpa_8da4w_8we(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
         model_id = "unsloth/gemma-3-1b-it"
         prompt = "Write a poem about a machine learning."
 
-        # ExecuTorch model + custom sdpa + 8da4w linear quantization
-        kwargs = {"qlinear": True}
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
+        kwargs = {"qlinear": True, "qembedding": True}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",

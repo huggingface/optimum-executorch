@@ -139,7 +139,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        # Using "pytorch/Phi-4-mini-instruct-8da4w" will end up loading a wrong GPT2Tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-4-mini-instruct")
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt="My favourite condiment is ",

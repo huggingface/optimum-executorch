@@ -51,24 +51,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies for ExecuTorch
         run: |
+          pip install '.[tests]'
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
-            export NIGHTLY_VERSION=dev20250507
+            export NIGHTLY_VERSION=dev20250523
             pip install executorch==0.7.0.${NIGHTLY_VERSION} \
               torch==2.8.0.${NIGHTLY_VERSION} \
               torchvision==0.22.0.${NIGHTLY_VERSION} \
               torchaudio==2.6.0.${NIGHTLY_VERSION} \
-              torchao==0.12.0.${NIGHTLY_VERSION} \
+              torchao==0.12.0.dev20250528 \
               --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
+            pip install transformers==4.52.4
           else
             pip install executorch==${{ matrix.executorch-version }}
-          fi
-          pip install '.[tests]'
-          if [ "${{ matrix.test-modeling }}" == "gemma3" ]; then
-            git clone https://github.com/huggingface/transformers.git
-            pushd transformers
-            git checkout a57274466f7f72efaa2662d1738cdaf28ae8071f
-            pip install -e .
-            popd
           fi
           pip list
       - name: Run tests
