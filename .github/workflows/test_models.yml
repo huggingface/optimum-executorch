@@ -61,8 +61,10 @@ jobs:
               torchao==0.12.0.dev20250528 \
               --extra-index-url "https://download.pytorch.org/whl/nightly/cpu"
             pip install transformers==4.52.4
+            pip install git+https://github.com/pytorch-labs/tokenizers
           else
             pip install executorch==${{ matrix.executorch-version }}
+            pip install git+https://github.com/pytorch-labs/tokenizers
           fi
           pip list
       - name: Run tests
