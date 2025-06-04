@@ -624,6 +624,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             torch.Tensor: Logits output from the model.
         """
         self.stats.on_model_execution_start()
+        print(f"DEBUG: {self.model.method_meta('forward')}")
         logits = self.model.forward((input_ids, cache_position))[0]
         self.stats.on_model_execution_end()
         return logits
@@ -668,14 +669,12 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             max_seq_len = self.max_cache_size
         generated_tokens = []
 
-        # prefill
-        for i, prompt_token in enumerate(prompt_tokens):
-            self.stats.on_sampling_begin()
-            logits = self.forward(
-                input_ids=torch.tensor([prompt_token], dtype=torch.long, device=self.device).unsqueeze(0),
-                cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
-            )
-            self.stats.on_sampling_end()
+        self.stats.on_sampling_begin()
+        logits = self.forward(
+            input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
+            cache_position=torch.tensor([0], dtype=torch.long, device=self.device),
+        )
+        self.stats.on_sampling_end()
 
         self.stats.on_prompt_eval_end()
         first_token_generated = False

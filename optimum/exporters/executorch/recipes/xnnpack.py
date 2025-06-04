@@ -15,6 +15,7 @@
 import logging
 from typing import Dict, Union
 
+import torch
 from packaging.version import parse
 from tabulate import tabulate
 from torch.export import ExportedProgram
@@ -95,7 +96,18 @@ def export_to_executorch_with_xnnpack(
             )
         return et_progs
 
-    exported_progs = model.export()
+    # Make the sequence length dim to be dynamic in orfer to leverage parallel prefill in ExecuTorch runtime.
+    seq_length = 7
+    input_ids = torch.zeros((1, seq_length), dtype=torch.long)
+    cache_position = torch.tensor([0], dtype=torch.long)
+    dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": None}
+    strict = parse(torch.__version__) != parse("2.7.0")  # Due to bug https://github.com/pytorch/pytorch/issues/150994
+    exported_progs = model.export(
+        input_ids=input_ids,
+        cache_position=cache_position,
+        dynamic_shapes=dynamic_shapes,
+        strict=strict,
+    )
 
     if (
         model.config._attn_implementation == "custom_sdpa"
