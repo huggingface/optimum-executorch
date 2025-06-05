@@ -143,6 +143,7 @@ def main_export(
         **kwargs,
     )
 
+
 def main():
     parser = argparse.ArgumentParser("Hugging Face Optimum ExecuTorch exporter")
 

@@ -624,7 +624,6 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         """
         self.stats.on_model_execution_start()
         logits = self.model.forward((input_ids, cache_position))[0]
-        print(logits)
         self.stats.on_model_execution_end()
         return logits
 
@@ -831,7 +830,6 @@ class ExecuTorchModelForMaskedLM(ExecuTorchModelBase):
         self.stats.on_sampling_begin()
         self.stats.on_model_execution_start()
         logits = self.model.forward((input_ids, attention_mask))[0]
-        print("logits", logits)
         self.stats.on_model_execution_end()
         self.stats.on_sampling_end()
         self.stats.on_first_token()
