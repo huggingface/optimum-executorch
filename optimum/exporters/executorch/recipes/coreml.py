@@ -66,30 +66,43 @@ def export_to_executorch_with_coreml(
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
         metadata=None,
+        **kwargs,
     ) -> Dict[str, ExecutorchProgram]:
-        et_progs = {}
-        backend_config_dict = {
-           # "extract_delegate_segments": False,
-        }
-        #if parse(executorch_version.__version__).base_version > "0.6.0":
-            #backend_config_dict["do_quant_fusion_and_const_prop"] = True
 
+        minimum_deployment_target = kwargs.get("minimum_ios_deployment_target", "15")
+        minimum_deployment_target = {
+            "15": ct.target.iOS15,
+            "16": ct.target.iOS16,
+            "17": ct.target.iOS17,
+            "18": ct.target.iOS18,
+        }[minimum_deployment_target]
+
+        model_type = kwargs.get("model_type", "model")
+        model_type = {
+            "model": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
+            "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
+        }[model_type]
+        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
+
+
+        et_progs = {}
+        backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
             logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=[CoreMLPartitioner(
                     compile_specs=CoreMLBackend.generate_compile_specs(
-                        minimum_deployment_target=ct.target.iOS18,
+                        minimum_deployment_target=minimum_deployment_target,
+                        model_type=model_type,
                     ),
-                    take_over_mutable_buffer=False, # Fails when set to true
+                    take_over_mutable_buffer=take_over_mutable_buffer, # Fails when set to true
                 )],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
                     _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
-                #transform_passes=[RemovePaddingIdxEmbeddingPass()],
             ).to_executorch(
                 config=ExecutorchBackendConfig(**backend_config_dict),
             )
@@ -104,17 +117,7 @@ def export_to_executorch_with_coreml(
         return et_progs
 
     exported_progs = model.export()
-
-    if model.config._attn_implementation == "custom_sdpa":
-        # Sanity check to make sure the exported program contains the custom sdpa operator.
-        if not any(
-            node.op == "call_function" and "custom_sdpa" in str(node.target)
-            for exported_program in exported_progs.values()
-            for node in exported_program.graph_module.graph.nodes
-        ):
-            raise ValueError("'custom_sdpa' not found in the graph.")
-
-    return _lower_to_executorch(exported_progs, model.metadata)
+    return _lower_to_executorch(exported_progs, model.metadata, **kwargs)
 
 
 
