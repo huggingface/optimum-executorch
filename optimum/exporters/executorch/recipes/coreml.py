@@ -19,6 +19,7 @@ from packaging.version import parse
 from tabulate import tabulate
 from torch.export import ExportedProgram
 import coremltools as ct
+import torch
 
 from executorch import version as executorch_version
 from executorch.backends.apple.coreml.partition import CoreMLPartitioner
@@ -32,13 +33,37 @@ from executorch.exir import (
     to_edge_transform_and_lower,
 )
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
-
+from executorch.backends.apple.coreml.quantizer import CoreMLQuantizer
+from torchao.quantization.pt2e.quantize_pt2e import convert_pt2e, prepare_pt2e
 from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
+
+def get_quantization_config():
+    quantization_config = ct.optimize.torch.quantization.LinearQuantizerConfig.from_dict(
+        {
+            "global_config": {
+                "quantization_scheme": ct.optimize.torch.quantization.QuantizationScheme.symmetric,
+                "activation_dtype": torch.quint8,
+                "weight_dtype": torch.qint8,
+                "weight_per_channel": True,
+            }
+        }
+    )
+    return quantization_config
+
+def quantize_program(ep):
+    quantizer = CoreMLQuantizer(get_quantization_config())
+    gm = ep.module()
+    
+    args, kwargs = ep.example_inputs
+    prepared_model = prepare_pt2e(gm, quantizer) 
+    prepared_model(*args, **kwargs)
+    converted_model = convert_pt2e(prepared_model)
+    return torch.export.export(converted_model, args, kwargs)
 
 
 @register_recipe("coreml")
@@ -83,12 +108,19 @@ def export_to_executorch_with_coreml(
             "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
         }[model_type]
         take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
+        quantize = kwargs.get("quantize", False)
+
+       
+
+
 
 
         et_progs = {}
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
             logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
+            if quantize:
+                exported_program = quantize_program(exported_program)
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=[CoreMLPartitioner(

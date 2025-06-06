@@ -8,7 +8,6 @@ from executorch.backends.apple.coreml.compiler import CoreMLBackend
 from executorch.backends.apple.coreml.partition import CoreMLPartitioner
 from executorch.exir import to_edge_transform_and_lower
 import coremltools as ct
-import subprocess
 from PIL import Image
 from executorch.runtime import Runtime
 import numpy as np
@@ -132,35 +131,22 @@ def _() -> ExportedProgram:
     return exported_model
 
 
-def lower_with_et(exported_program, filename=None, extract_coreml_model_script: Optional[str] = None, minimum_deployment_target=ct.target.iOS15):
+def lower_with_et(exported_program, filename=None):
     assert filename is not None
     parent_dir = os.path.dirname(filename)
     os.makedirs(parent_dir, exist_ok=True)
 
     et_program = to_edge_transform_and_lower(
         exported_program,
-        partitioner=[CoreMLPartitioner(
-            compile_specs=CoreMLBackend.generate_compile_specs(
-                        minimum_deployment_target=minimum_deployment_target,
-                    ),
-        )],
+        partitioner=[CoreMLPartitioner()],
     ).to_executorch()
     with open(filename, "wb") as file:
         et_program.write_to_file(file)
 
-    if extract_coreml_model_script is not None:
-        subprocess.run([
-            "python",
-            extract_coreml_model_script,
-            "-m",
-            filename
-        ])
-
-
-def lower_with_coreml(exported_program, filename=None, minimum_deployment_target=ct.target.iOS15):
+def lower_with_coreml(exported_program, filename=None):
     assert filename is not None
     exported_program = exported_program.run_decompositions({})
-    ml_model = ct.convert(exported_program, minimum_deployment_target=minimum_deployment_target)
+    ml_model = ct.convert(exported_program)
     ml_model.save(filename)
 
 def run_with_et(filename, n_iters=50):
@@ -173,7 +159,11 @@ def run_with_et(filename, n_iters=50):
     for i in range(method.metadata.num_inputs()):
         t_metadata = method.metadata.input_tensor_meta(i)
         if t_metadata.dtype() in dtype_lookup:
-            inputs.append(torch.rand(t_metadata.sizes(), dtype=dtype_lookup[t_metadata.dtype()]))
+            dtype = dtype_lookup[t_metadata.dtype()]
+            if dtype in [torch.int64]:
+                inputs.append(torch.randint(0, 100, t_metadata.sizes(), dtype=dtype))
+            else:
+                inputs.append(torch.rand(t_metadata.sizes(), dtype=dtype))
         else:
             raise Exception(f"Unsupported input type: {t_metadata.dtype()} in {t_metadata}")
 
