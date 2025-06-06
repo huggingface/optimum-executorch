@@ -45,6 +45,7 @@ def custom_sdpa_with_start_pos_forward(
 
     # Ignore the causal flag from kwargs but use the one in module
     kwargs.pop("is_causal", None)
+    assert module.is_causal, "Current variant supports only causal attention"
 
     # Calculate the input pos from attention mask.
     # Branch out for float vs bool mask
