@@ -47,7 +47,13 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         recipe = "xnnpack"
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
-                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
+                    --use_custom_sdpa \
+                    --use_custom_kv_cache \
+                    --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,
             )
@@ -167,6 +173,40 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model.model, ExecuTorchModule)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on torchao >= 0.11.0",
+    )
+    def test_smollm_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
+        model_id = "HuggingFaceTB/SmolLM2-135M"
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            use_custom_kv_cache=True,
+            **{"qlinear": True, "qembeeding": True},
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt=prompt,

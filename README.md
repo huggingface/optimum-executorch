@@ -36,7 +36,7 @@ pip install '.[dev]'
 
 - 🔜 Install from pypi coming soon...
 
-### [Optional] 3. Install dependencies in dev mode
+### 3. Install dependencies in dev mode
 
 To access all supported optimizations or for development with the latest features, run:
 ```python

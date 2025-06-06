@@ -17,6 +17,7 @@ import gc
 import logging
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -34,6 +35,8 @@ from ..utils import check_causal_lm_output_quality
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -67,6 +70,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_qwen3_text_generation(self):
         model_id = "Qwen/Qwen3-0.6B"
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
@@ -91,6 +95,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_qwen3_text_generation_with_custom_sdpa(self):
         model_id = "Qwen/Qwen3-0.6B"
         prompt = "Give me a short introduction to large language model."
@@ -204,6 +209,40 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(transformers.__version__) < parse("4.52.0") or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0",
+    )
+    def test_qwen3_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
+        model_id = "Qwen/Qwen3-0.6B"
+        prompt = "Give me a short introduction to large language model."
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            use_custom_kv_cache=True,
+            **{"qlinear": True, "qembeeding": True},
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)

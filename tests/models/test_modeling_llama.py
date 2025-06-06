@@ -17,7 +17,6 @@ import gc
 import logging
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -31,9 +30,6 @@ from transformers.testing_utils import slow
 from optimum.executorch import ExecuTorchModelForCausalLM
 
 from ..utils import check_causal_lm_output_quality
-
-
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 @pytest.mark.skipif(
@@ -57,10 +53,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --model {model_id} \
                     --task {task} \
                     --recipe {recipe} \
-                    --output_dir {tempdir}/executorch \
                     --use_custom_sdpa \
+                    --use_custom_kv_cache \
                     --qlinear \
-                    --qembedding",
+                    --qembedding \
+                    --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,
             )
@@ -74,15 +71,18 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    def test_llama3_2_1b_text_generation(self):
-        # TODO: Switch to use meta-llama/Llama-3.2-1B once https://github.com/huggingface/optimum/issues/2127 is fixed
-        # model_id = "lama/Llama-3.2-1B"
+    def test_llama_text_generation_with_custom_sdpa_8da4w_8we(self):
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
         model_id = "NousResearch/Llama-3.2-1B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
+        kwargs = {"qlinear": True, "qembedding": True}
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            **kwargs,
+        )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
-
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
@@ -101,19 +101,18 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_llama_text_generation_with_custom_sdpa_8da4w_8we(self):
-        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
+    def test_llama_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
         model_id = "NousResearch/Llama-3.2-1B"
-        kwargs = {"qlinear": True, "qembedding": True}
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
-            **kwargs,
+            use_custom_kv_cache=True,
+            **{"qlinear": True, "qembeeding": True},
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt="Simply put, the theory of relativity states that",
