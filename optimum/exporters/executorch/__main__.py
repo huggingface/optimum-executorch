@@ -130,6 +130,8 @@ def main_export(
     kwargs["force_download"] = force_download
     kwargs["config"] = config
 
+    recipe_kwargs = kwargs.pop("recipe_kwargs", {})
+
     model = task_func(model_name_or_path, **kwargs)
 
     if not os.path.exists(output_dir):
@@ -140,7 +142,7 @@ def main_export(
         task=task,
         recipe=recipe,
         output_dir=output_dir,
-        **kwargs,
+        **recipe_kwargs,
     )
 
 
