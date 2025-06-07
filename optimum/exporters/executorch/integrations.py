@@ -26,6 +26,7 @@ from transformers import (
 )
 from transformers.generation.configuration_utils import GenerationConfig
 
+from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 from optimum.utils.import_utils import is_transformers_version
 
 from .utils import save_config_to_constant_methods
@@ -56,6 +57,12 @@ class CausalLMExportableModule(torch.nn.Module):
             max_batch_size = 1
             max_cache_len = 4094
             exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
+
+            from transformers.modeling_utils import AttentionInterface
+
+            _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
+            AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+            exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
                     replace_with_et_custom_kv_cache,
