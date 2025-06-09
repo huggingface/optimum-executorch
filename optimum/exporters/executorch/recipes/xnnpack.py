@@ -97,10 +97,11 @@ def export_to_executorch_with_xnnpack(
         return et_progs
 
     # Make the sequence length dim to be dynamic in orfer to leverage parallel prefill in ExecuTorch runtime.
-    seq_length = 7
+    seq_length = 3
     input_ids = torch.zeros((1, seq_length), dtype=torch.long)
-    cache_position = torch.tensor([0], dtype=torch.long)
-    dynamic_shapes = {"input_ids": {1: torch.export.Dim.DYNAMIC}, "cache_position": None}
+    cache_position = torch.arange(seq_length, dtype=torch.long)
+    seq_len_dim = torch.export.Dim("seq_length_dim", max=128 - 1)
+    dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
     strict = parse(torch.__version__) != parse("2.7.0")  # Due to bug https://github.com/pytorch/pytorch/issues/150994
     exported_progs = model.export(
         input_ids=input_ids,

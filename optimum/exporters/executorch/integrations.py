@@ -97,7 +97,9 @@ class CausalLMExportableModule(torch.nn.Module):
                 )
 
             with torch.no_grad():
-                exported_program = exportable_module.export(example_input_ids, example_cache_position)
+                exported_program = exportable_module.export(
+                    example_input_ids, example_cache_position, dynamic_shapes, strict
+                )
                 # Apply RemoveTransposes pass to remove
                 # any back-to-back transpose ops that are not needed
                 # e.g. output of update_cache is transposed and
