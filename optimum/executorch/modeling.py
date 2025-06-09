@@ -672,7 +672,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         self.stats.on_sampling_begin()
         logits = self.forward(
             input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
-            cache_position=torch.tensor([0], dtype=torch.long, device=self.device),
+            cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
         )
         self.stats.on_sampling_end()
 
