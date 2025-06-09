@@ -152,3 +152,24 @@ def export_to_executorch_with_coreml(
 
     exported_progs = model.export()
     return _lower_to_executorch(exported_progs, model.metadata, **kwargs)
+
+
+
+@register_recipe("coreml_standalone")
+def export_to_executorch_with_coreml(
+    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule],
+    **kwargs,
+):
+    def _lower_to_coreml(
+        exported_programs: Dict[str, ExportedProgram],
+        **kwargs,
+    ) -> Dict[str, ExecutorchProgram]:
+        mlpacakge_progs = {}
+        for name, exported_program in exported_programs.items():
+            exported_program = exported_program.run_decompositions({})
+            ml_model = ct.convert(exported_program)
+            mlpacakge_progs[name] = ml_model
+        return mlpacakge_progs
+
+    exported_progs = model.export()
+    return _lower_to_coreml(exported_progs, **kwargs)

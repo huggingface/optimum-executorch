@@ -76,6 +76,18 @@ def export_to_executorch(
 
     executorch_progs = recipe_func(model, **kwargs)
 
+    
+    if recipe == "coreml_standalone":
+        # These are mlpackages
+        for name, prog in executorch_progs.items():
+            full_path =  os.path.join(f"{output_dir}", f"{name}.mlpackage")
+            prog.save(full_path)
+            logging.info(
+                f"Saved mlpackage to {full_path}"
+            )
+        return executorch_progs
+
+
     for name, prog in executorch_progs.items():
         full_path = os.path.join(f"{output_dir}", f"{name}.pte")
         with open(full_path, "wb") as f:
