@@ -18,6 +18,13 @@ except ImportError:
     except ImportError:
         raise ImportError("transformers is not installed. Please install it to use StaticCache.")
 
+try:
+    from executorch.examples.models.llama.source_transformation.custom_kv_cache import (
+        CustomKVCache,
+    )
+except ImportError:
+    raise ImportError("ExecutorTorch is not installed. Please install it to use CustomKVCache.")
+
 
 class ETCustomStaticCache(StaticCache):
     """
@@ -45,26 +52,20 @@ class ETCustomStaticCache(StaticCache):
 
         # make sure layer_device_map is none
         assert layer_device_map is None
-
-        # Clear existing caches
-        self.key_cache = []
-        self.value_cache = []
-
-        # Initialize cache buffers with our custom shape
-        cache_shape = (
-            self.max_batch_size,
-            self.max_cache_len,
-            self.num_key_value_heads,
-            self.head_dim,
-        )
         assert device is None or device == "cpu", "Device must be None or 'cpu'"
 
+        # Create a list of CustomKVCache instances, one per layer
+        kv_cache_list = []
         for _ in range(config.num_hidden_layers):
-            self.new_layer_key_cache = torch.zeros(cache_shape, dtype=dtype, device="cpu")
-            self.new_layer_value_cache = torch.zeros(cache_shape, dtype=dtype, device="cpu")
-
-            self.key_cache.append(self.new_layer_key_cache)
-            self.value_cache.append(self.new_layer_value_cache)
+            layer_cache = CustomKVCache(
+                max_batch_size=self.max_batch_size,
+                max_context_length=self.max_cache_len,
+                n_heads=self.num_key_value_heads,
+                head_dim=self.head_dim,
+                dtype=dtype,
+            )
+            kv_cache_list.append(layer_cache)
+        self.kv_cache = torch.nn.ModuleList(kv_cache_list)
 
     def update(
         self,
@@ -75,7 +76,7 @@ class ETCustomStaticCache(StaticCache):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`
-        using custom operations.
+        using ExecutorTorch's CustomKVCache.
 
         Args:
             key_states (`torch.Tensor`):
@@ -95,32 +96,28 @@ class ETCustomStaticCache(StaticCache):
         # Get cache position from cache_kwargs (used by StaticCache)
         cache_position = cache_kwargs.get("cache_position")
         assert cache_position is not None
-
-        # Get the current cache for this layer
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
-
-        # Transpose key and value states to match our cache shape
-        # From [batch_size, n_heads, seq_len, head_dim] to [batch_size, seq_len, n_heads, head_dim]
-        k_val = key_states.transpose(1, 2)
-        v_val = value_states.transpose(1, 2)
-
-        # Use custom operations to update the cache
-        # Update cache with indices for more complex update patterns
         assert isinstance(cache_position, torch.Tensor)
-        start_pos = cache_position[0].item()
-        _ = torch.ops.llama.update_cache(k_val, k_out, start_pos)
-        _ = torch.ops.llama.update_cache(v_val, v_out, start_pos)
 
-        # Return the updated cache in the format expected by the model
-        # Transpose back from [batch_size, seq_len, n_heads, head_dim] to [batch_size, n_heads, seq_len, head_dim]
-        return k_out.transpose(1, 2), v_out.transpose(1, 2)
+        # Get the CustomKVCache instance for this layer
+        layer_cache = self.kv_cache[layer_idx]
+
+        # Use the CustomKVCache's update method
+        # CustomKVCache expects input_pos, k_val, v_val and handles the transpose internally
+        k_out, v_out = layer_cache.update(
+            input_pos=cache_position,
+            k_val=key_states,
+            v_val=value_states,
+        )
+
+        return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # Occupied cache == any slot in the 2nd dim (sequence length) holds a non-zero value
         # This is different from StaticCache which checks the 3rd dim
-        return (self.key_cache[layer_idx][0, :, 0].any(dim=-1)).sum()
+        if layer_idx is None:
+            layer_idx = 0
+        return (self.kv_cache[layer_idx].k_cache[0, :, 0].any(dim=-1)).sum()
 
     @classmethod
     def from_legacy_cache(
@@ -249,8 +246,10 @@ def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dt
             device=generation_config.cache_config.device,
             dtype=cache_dtype,
         )
-        for i in range(len(module.static_cache.key_cache)):
-            setattr(module, f"key_cache_{i}", module.static_cache.key_cache[i])
-            setattr(module, f"value_cache_{i}", module.static_cache.value_cache[i])
+        # Dont know why we need to this even though
+        # CustomKVCache registers the attributes
+        for i in range(len(module.static_cache.kv_cache)):
+            setattr(module, f"key_cache_{i}", module.static_cache.kv_cache[i].k_cache)
+            setattr(module, f"value_cache_{i}", module.static_cache.kv_cache[i].v_cache)
 
     return module
