@@ -44,7 +44,7 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_kv_cache = use_custom_kv_cache
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
-    def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
+    def export(self, input_ids=None, cache_position=None, dynamic_shapes=None) -> Dict[str, ExportedProgram]:
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
@@ -69,7 +69,11 @@ class CausalLMExportableModule(torch.nn.Module):
                 )
 
             with torch.no_grad():
-                exported_program = exportable_module.export(example_input_ids, example_cache_position)
+                exported_program = exportable_module.export(
+                        example_input_ids,
+                        example_cache_position,
+                        dynamic_shapes,
+                        strict=True)
                 # Apply RemoveTransposes pass to remove
                 # any back-to-back transpose ops that are not needed
                 # e.g. output of update_cache is transposed and
@@ -83,13 +87,20 @@ class CausalLMExportableModule(torch.nn.Module):
                     mutated_gm,
                     args=(example_input_ids, example_cache_position),
                     kwargs={},
+                    dynamic_shapes=dynamic_shapes,
+                    strict=True,
                 )
         else:
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
             )
 
-            exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
+            exported_program = convert_and_export_with_cache(
+                    self.model,
+                    example_input_ids,
+                    example_cache_position,
+                    dynamic_shapes=dynamic_shapes,
+                    strict=True)
 
         return {"model": exported_program}
 

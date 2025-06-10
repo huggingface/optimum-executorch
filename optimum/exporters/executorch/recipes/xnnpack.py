@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import torch
 from typing import Dict, Union
 
 from packaging.version import parse
@@ -95,7 +96,16 @@ def export_to_executorch_with_xnnpack(
             )
         return et_progs
 
-    exported_progs = model.export()
+    seq_length = 5
+    input_ids = torch.zeros((1, seq_length), dtype=torch.long)
+    # this should become a separate arg perpahsp for max seq length
+    dim = torch.export.Dim("sequence_dim", max=128 - 1)
+    cache_position = torch.arange(seq_length, dtype=torch.long)
+    dynamic_shapes = {"input_ids": {1: dim}, "cache_position": {0: dim}}
+    exported_progs = model.export(
+            input_ids=input_ids,
+            cache_position=cache_position,
+            dynamic_shapes=dynamic_shapes)
 
     if model.config._attn_implementation == "custom_sdpa":
         # Sanity check to make sure the exported program contains the custom sdpa operator.
