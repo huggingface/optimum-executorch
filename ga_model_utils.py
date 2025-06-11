@@ -81,7 +81,7 @@ def _() -> ExportedProgram:
 
 @register_model_exporter("whisper2")
 def _() -> ExportedProgram:
-    model_id = "openai/whisper-tiny"
+    model_id = "openai/whisper-small"
     model = WhisperForConditionalGeneration.from_pretrained(model_id)
     processor = WhisperProcessor.from_pretrained(model_id)
     model.eval()
@@ -107,6 +107,11 @@ def _() -> ExportedProgram:
             outputs = self.model(input_features=input_features, decoder_input_ids=decoder_input_ids)
             # return logits only for simplicity
             return outputs.logits
+    
+    wrapped_model = WhisperExportWrapper(model)
+    exported_model = torch.export.export(wrapped_model, args=example_inputs)
+    return exported_model
+
 
 
 @register_model_exporter("wave2vec2")

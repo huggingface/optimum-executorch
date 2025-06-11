@@ -10,6 +10,7 @@ et_optimum_ga_models = {
     "resnet": {"model_name_or_path": "microsoft/resnet-50", "task": "image-classification"},
     "resnet_ios18": {"model_name_or_path": "microsoft/resnet-50", "task": "image-classification", "recipe_kwargs": {"minimum_ios_deployment_target": "18"}},
     "whisper": {"model_name_or_path": "openai/whisper-tiny", "task": "automatic-speech-recognition"},
+    "whisper2": {"is_optimum": False},
     "yolos": {"model_name_or_path": "hustvl/yolos-tiny", "task": "object-detection"},
     "yolos-quantize": {"model_name_or_path": "hustvl/yolos-tiny", "task": "object-detection", "recipe_kwargs": {"quantize": True}},
     "yolos-quantize-ios17": {"model_name_or_path": "hustvl/yolos-tiny", "task": "object-detection", "recipe_kwargs": {"quantize": True, "minimum_ios_deployment_target": "17"}},

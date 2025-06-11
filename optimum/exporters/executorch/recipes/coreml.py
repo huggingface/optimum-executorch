@@ -116,6 +116,13 @@ def export_to_executorch_with_coreml(
         take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
         quantize = kwargs.get("quantize", False)
 
+        print("Export args\n")
+        print(f"minimum_deployment_target: {minimum_deployment_target}")
+        print(f"compute_precision: {compute_precision}")
+        print(f"model_type: {model_type}")
+        print(f"take_over_mutable_buffer: {take_over_mutable_buffer}")
+        print(f"quantize: {quantize}")
+
         et_progs = {}
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
