@@ -9,14 +9,11 @@ from typing import Any, Dict, Optional, Tuple, Union
 import torch
 
 
+# If transformers is not installed, raise an ImportError
 try:
-    from transformers.cache_utils import StaticCache
+    from transformers.cache_utils import HybridCache, StaticCache
 except ImportError:
-    # If transformers is not installed, raise an ImportError
-    try:
-        from transformers.cache_utils import StaticCache
-    except ImportError:
-        raise ImportError("transformers is not installed. Please install it to use StaticCache.")
+    raise ImportError("transformers is not installed. Please install it to use Static/HybridCache.")
 
 try:
     from executorch.examples.models.llama.source_transformation.custom_kv_cache import (
@@ -24,16 +21,7 @@ try:
         CustomRingKVCache,
     )
 except ImportError:
-    raise ImportError("ExecutorTorch is not installed. Please install it to use CustomKVCache.")
-
-try:
-    from transformers.cache_utils import HybridCache
-except ImportError:
-    # If transformers is not installed, raise an ImportError
-    try:
-        from transformers.cache_utils import HybridCache
-    except ImportError:
-        raise ImportError("transformers is not installed. Please install it to use HybridCache.")
+    raise ImportError("ExecutorTorch is not installed. Please install it to use Custom Cache.")
 
 
 class ETCustomStaticCache(StaticCache):

@@ -17,16 +17,6 @@ from typing import Callable, Optional, Tuple, Union
 import torch
 from executorch.extension.llm.custom_ops.custom_ops import custom_sdpa  # noqa
 
-from optimum.executorch.attentions.custom_kv_cache import ETCustomHybridCache
-
-
-try:
-    from executorch.examples.models.llama.source_transformation.custom_kv_cache import (
-        CustomRingKVCache,
-    )
-except ImportError:
-    raise ImportError("ExecutorTorch is not installed. Please install it to use CustomRingKVCache.")
-
 
 def custom_sdpa_with_start_pos_forward(
     module: torch.nn.Module,
@@ -90,6 +80,16 @@ def custom_sdpa_with_start_pos_forward(
 def get_custom_sdpa_for_ring_kv_cache(
     exportable_module: torch.nn.Module,
 ) -> Callable:
+    # lazy importing to avoid version dependent class definition
+    from executorch import version
+
+    try:
+        from executorch.examples.models.llama.source_transformation.custom_kv_cache import (
+            CustomRingKVCache,
+        )
+    except ImportError:
+        raise ImportError(f"CustomRingKVCache not available in version {version.__version__} of ExecuTorch.")
+
     def _custom_sdpa_for_ring_kv_cache(
         module: torch.nn.Module,
         query: torch.Tensor,
@@ -103,6 +103,10 @@ def get_custom_sdpa_for_ring_kv_cache(
     ) -> Tuple[torch.Tensor, None]:
         is_sliding = getattr(module, "is_sliding", False)
         if is_sliding:
+            # lazy import to avoid being in the optimum import path
+            # for et <= 0.6.0 version
+            from optimum.executorch.attentions.custom_kv_cache import ETCustomHybridCache
+
             layer_idx = module.layer_idx
             assert layer_idx is not None, "layer_idx is not set for sliding window attention."
             hybrid_cache = exportable_module.model.cache

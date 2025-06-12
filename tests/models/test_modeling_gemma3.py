@@ -29,7 +29,6 @@ from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
-from executorch import version
 from optimum.executorch import ExecuTorchModelForCausalLM
 from optimum.utils.import_utils import is_transformers_version
 
@@ -219,8 +218,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
 
     @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.52.0") or parse(torchao.__version__) < parse("0.11.0") or parsee(version.__version__) <= parse("0.6.0"),
-        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0 executorch > 0.6.0",
+        parse(transformers.__version__) < parse("4.52.0") or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0",
     )
     def test_gemma3_text_generation_with_custom_sdpa_kv_cache_8da4w_8we(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
