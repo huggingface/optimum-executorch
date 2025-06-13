@@ -15,6 +15,7 @@
 from typing import Dict, Optional
 
 import torch
+from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
@@ -72,9 +73,6 @@ class CausalLMExportableModule(torch.nn.Module):
         dynamic_shapes: Optional[dict] = None,
         strict: Optional[bool] = None,
     ) -> Dict[str, ExportedProgram]:
-        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
-
         if is_transformers_version(">=", "4.52.0.dev0"):
             from transformers.integrations.executorch import (
                 TorchExportableModuleForDecoderOnlyLM,
@@ -82,6 +80,17 @@ class CausalLMExportableModule(torch.nn.Module):
 
             max_batch_size = 1
             max_cache_len = 4094
+            seq_length = 3  # Make the sequence length dim to be dynamic in orfer to leverage parallel prefill in ExecuTorch runtime.
+            example_input_ids = input_ids if input_ids is not None else torch.zeros((1, seq_length), dtype=torch.long)
+            example_cache_position = (
+                cache_position if cache_position is not None else torch.arange(seq_length, dtype=torch.long)
+            )
+            seq_len_dim = torch.export.Dim("seq_length_dim", max=128 - 1)
+            dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
+            strict = parse(torch.__version__) != parse(
+                "2.7.0"
+            )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
+
             exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
             self._register_attention_mask_for_4_53(exportable_module)
             if self.use_custom_kv_cache:
@@ -119,6 +128,11 @@ class CausalLMExportableModule(torch.nn.Module):
         else:
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
+            )
+
+            example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+            example_cache_position = (
+                cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
             )
 
             exported_program = convert_and_export_with_cache(

@@ -624,7 +624,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             torch.Tensor: Logits output from the model.
         """
         self.stats.on_model_execution_start()
-        print(f"DEBUG: {self.model.method_meta('forward')}")
+        logging.debug(f"{self.model.method_meta('forward')}")
         logits = self.model.forward((input_ids, cache_position))[0]
         self.stats.on_model_execution_end()
         return logits
@@ -679,7 +679,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         self.stats.on_prompt_eval_end()
         first_token_generated = False
 
-        next_token = torch.argmax(logits, dim=-1).item()
+        next_token = torch.argmax(logits, dim=-1)[0, -1].item()
         generated_tokens = prompt_tokens + [next_token]
 
         while len(generated_tokens) < max_seq_len:
