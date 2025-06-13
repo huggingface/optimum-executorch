@@ -668,18 +668,15 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         generated_tokens = []
 
         # prefill
-        for i, prompt_token in enumerate(prompt_tokens):
-            self.stats.on_sampling_begin()
-            logits = self.forward(
-                input_ids=torch.tensor([prompt_token], dtype=torch.long, device=self.device).unsqueeze(0),
-                cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
-            )
-            self.stats.on_sampling_end()
+        cache_positions=torch.arange(len(prompt_tokens), dtype=torch.long)
+        logits = self.forward(
+                input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
+                cache_position=cache_positions)
 
         self.stats.on_prompt_eval_end()
         first_token_generated = False
 
-        next_token = torch.argmax(logits, dim=-1).item()
+        next_token = torch.argmax(logits, dim=-1)[0, -1].item()
         generated_tokens = prompt_tokens + [next_token]
 
         while len(generated_tokens) < max_seq_len:
