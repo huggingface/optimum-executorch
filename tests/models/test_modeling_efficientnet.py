@@ -29,7 +29,6 @@ from optimum.executorch import ExecuTorchModelForImageClassification
 
 from ..utils import check_close_recursively
 
-
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -77,8 +76,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # Compare with eager outputs
         self.assertTrue(check_close_recursively(eager_output.logits, et_output))
     
-    @slow
-    @pytest.mark.run_slow
+    # @slow
+    # @pytest.mark.run_slow
     def test_efficientnet_image_classification_coreml(self):
         model_id = "google/efficientnet-b0"  # ~5.3M params
 
@@ -90,7 +89,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         # Test fetching and lowering the model to ExecuTorch
-        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="coreml", kwargs={"recipe_kwargs": {"compute_precision": ct.PRECISION.FLOAT32}})
+        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="coreml", recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY})
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
 
