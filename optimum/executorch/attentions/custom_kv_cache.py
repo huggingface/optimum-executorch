@@ -213,7 +213,7 @@ class ETCustomHybridCache(HybridCache):
         for layer_idx in range(config.num_hidden_layers):
             # newer version of transfomer has is_sliding defined
             # for HybridCache
-            if self.is_sliding_list[layer_idx]:
+            if self.is_sliding[layer_idx]:
                 # This is a sliding window layer
                 layer_cache = CustomRingKVCache(
                     max_batch_size=self.max_batch_size,
@@ -388,7 +388,7 @@ def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dt
             for i in range(len(module.cache.kv_cache)):
                 setattr(module, f"key_cache_{i}", module.cache.kv_cache[i].k_cache)
                 setattr(module, f"value_cache_{i}", module.cache.kv_cache[i].v_cache)
-                if module.cache.is_sliding_list[i]:
+                if module.cache.is_sliding[i]:
                     # Register cache_positions as buffer for sliding window layers
                     # This prevents it from being traced as a constant
                     module.register_buffer(
