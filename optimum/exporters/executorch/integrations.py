@@ -49,10 +49,12 @@ class CausalLMExportableModule(torch.nn.Module):
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
-        if is_transformers_version(">=", "4.52.0.dev0"):
+        if is_transformers_version(">=", "4.53.0.dev0"):
             from transformers.integrations.executorch import (
                 TorchExportableModuleForDecoderOnlyLM,
+                sdpa_mask_without_vmap,
             )
+            from transformers.masking_utils import AttentionMaskInterface
 
             max_batch_size = 1
             max_cache_len = 4094
@@ -62,6 +64,7 @@ class CausalLMExportableModule(torch.nn.Module):
 
             _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
             AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+            AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
             exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
