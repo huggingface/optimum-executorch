@@ -58,6 +58,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     use_custom_kv_cache = kwargs.get("use_custom_kv_cache", False)
     attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
+    use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config", None)
 
@@ -126,4 +127,4 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
 
         unwrap_tensor_subclass(eager_model)
 
-    return CausalLMExportableModule(eager_model, use_custom_kv_cache)
+    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
