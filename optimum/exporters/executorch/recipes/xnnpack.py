@@ -97,7 +97,10 @@ def export_to_executorch_with_xnnpack(
 
     exported_progs = model.export()
 
-    if model.config._attn_implementation == "custom_sdpa":
+    if (
+        model.config._attn_implementation == "custom_sdpa"
+        or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
+    ):
         # Sanity check to make sure the exported program contains the custom sdpa operator.
         if not any(
             node.op == "call_function" and "custom_sdpa" in str(node.target)
