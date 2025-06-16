@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import sys
 
@@ -46,11 +47,20 @@ def install_dep_from_source():
 
 def main():
     """Install optimum-executorch in dev mode with nightly dependencies"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--skip_override_torch",
+        action="store_true",
+        help="Skip installation of nightly executorch and torch dependencies",
+    )
+    args = parser.parse_args()
+
     # Install package with dev extras
     subprocess.check_call([sys.executable, "-m", "pip", "install", ".[dev]"])
 
     # Install nightly dependencies
-    install_torch_nightly_deps()
+    if not args.skip_override_torch:
+        install_torch_nightly_deps()
 
     # Install source dependencies
     install_dep_from_source()
