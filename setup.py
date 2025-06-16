@@ -15,6 +15,7 @@ INSTALL_REQUIRE = [
     "optimum~=1.24",
     "executorch>=0.6.0",
     "transformers==4.51.3",
+    "coremltools==8.3.0",
 ]
 
 TESTS_REQUIRE = [
