@@ -27,7 +27,6 @@ from transformers.testing_utils import slow
 from optimum.executorch import ExecuTorchModelForImageClassification
 
 from ..utils import check_close_recursively
-import coremltools as ct
 import sys
 
 is_not_macos = sys.platform != "darwin"
@@ -89,6 +88,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         # Test fetching and lowering the model to ExecuTorch
+        import coremltools as ct
         et_model = ExecuTorchModelForImageClassification.from_pretrained(
             model_id=model_id,
             recipe="coreml", 
