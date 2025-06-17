@@ -41,6 +41,7 @@ from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
+from ..exporters.executorch.utils import verify_eos_tokens_in_tokenizer
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import find_files_matching_pattern
 from .stats import Stats
@@ -736,9 +737,9 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             raise ValueError(
                 f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
             )
-        if self.tokenizer.eos_token_id is not None and self.tokenizer.eos_token_id not in self.eos_token_ids:
+        if not verify_eos_tokens_in_tokenizer(self.eos_token_ids, self.tokenizer):
             raise ValueError(
-                f"The tokenizer's eos_token_id={self.tokenizer.eos_token_id} must match with the model's eos_token_ids={self.eos_token_ids}."
+                f"The tokenizer's eos_token_id does not match with the model's eos_token_ids={self.eos_token_ids}."
             )
 
         # Reset stats for a new generation

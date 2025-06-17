@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import List, Optional, Set
 
 import torch
 from transformers import GenerationConfig, PretrainedConfig
@@ -65,3 +65,49 @@ def save_config_to_constant_methods(
 
     # Combine with any additional kwargs and filter out None values
     return {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
+
+
+def verify_eos_tokens_in_tokenizer(model_eos_ids: List[int], tokenizer) -> bool:
+    """
+    Verifies that the model's EOS token IDs are present in the tokenizer's
+    set of potential end-of-sequence tokens.
+
+    Args:
+        model_eos_ids: A list of EOS token IDs recorded int the PTE file (the source of truth).
+        tokenizer: The Hugging Face tokenizer instance to check.
+
+    Returns:
+        True if at least one model EOS ID is found among the tokenizer's potential
+        EOS tokens, False otherwise.
+    """
+    if not model_eos_ids:
+        print("Warning: model_eos_ids list is empty. No verification can be performed.")
+        return True
+
+    candidate_eos_ids: Set[int] = set()
+
+    # 1. Check primary eos_token and pad_token attributes
+    if tokenizer.eos_token_id is not None:
+        candidate_eos_ids.add(tokenizer.eos_token_id)
+    if tokenizer.pad_token_id is not None:
+        candidate_eos_ids.add(tokenizer.pad_token_id)
+
+    # 2. Check all tokens listed in the special_tokens_map
+    for token_string in tokenizer.special_tokens_map.values():
+        if token_string:
+            # Use convert_tokens_to_ids for robustness
+            token_id = tokenizer.convert_tokens_to_ids(token_string)
+            if isinstance(token_id, int):
+                candidate_eos_ids.add(token_id)
+
+    # 3. Check added tokens for "end-of-X" patterns
+    for token_id, added_token in tokenizer.added_tokens_decoder.items():
+        token_str = added_token.content.lower()
+        # Heuristic to find tokens that signify an end
+        if "end" in token_str or token_str.startswith("</"):
+            candidate_eos_ids.add(token_id)
+
+    # The check: is any "true" ID present in the candidate set?
+    is_valid = any(model_id in candidate_eos_ids for model_id in model_eos_ids)
+
+    return is_valid
