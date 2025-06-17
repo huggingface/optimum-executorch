@@ -17,10 +17,6 @@ from typing import Dict, Union
 
 from tabulate import tabulate
 from torch.export import ExportedProgram
-import coremltools as ct
-
-from executorch.backends.apple.coreml.partition import CoreMLPartitioner
-from executorch.backends.apple.coreml.compiler import CoreMLBackend
 
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -35,6 +31,7 @@ from ..integrations import (
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
+
 
 @register_recipe("coreml")
 def export_to_executorch_with_coreml(
@@ -57,6 +54,10 @@ def export_to_executorch_with_coreml(
             A map of exported and optimized program for ExecuTorch.
             For encoder-decoder models or multimodal models, it may generate multiple programs.
     """
+    # Import here because coremltools might not be available in all environments
+    import coremltools as ct
+    from executorch.backends.apple.coreml.partition import CoreMLPartitioner
+    from executorch.backends.apple.coreml.compiler import CoreMLBackend
 
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
@@ -81,15 +82,17 @@ def export_to_executorch_with_coreml(
             logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
-                partitioner=[CoreMLPartitioner(
-                    compile_specs=CoreMLBackend.generate_compile_specs(
-                        compute_unit=compute_unit,
-                        minimum_deployment_target=minimum_deployment_target,
-                        compute_precision=compute_precision,
-                        model_type=model_type,
-                    ),
-                    take_over_mutable_buffer=take_over_mutable_buffer,
-                )],
+                partitioner=[
+                    CoreMLPartitioner(
+                        compile_specs=CoreMLBackend.generate_compile_specs(
+                            compute_unit=compute_unit,
+                            minimum_deployment_target=minimum_deployment_target,
+                            compute_precision=compute_precision,
+                            model_type=model_type,
+                        ),
+                        take_over_mutable_buffer=take_over_mutable_buffer,
+                    )
+                ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
                     _skip_dim_order=False,

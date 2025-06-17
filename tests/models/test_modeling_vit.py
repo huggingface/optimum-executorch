@@ -31,6 +31,7 @@ import sys
 
 is_not_macos = sys.platform != "darwin"
 
+
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -89,10 +90,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Test fetching and lowering the model to ExecuTorch
         import coremltools as ct
+
         et_model = ExecuTorchModelForImageClassification.from_pretrained(
             model_id=model_id,
-            recipe="coreml", 
-            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY}
+            recipe="coreml",
+            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY},
         )
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
