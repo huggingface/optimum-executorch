@@ -100,12 +100,17 @@ class VisionEncoderExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, model_name_or_path=None):
         super().__init__()
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+
+        self.model_name_or_path = model_name_or_path
+        self.image_size_fallbacks = {
+            "microsoft/resnet-50": (224, 224),
+        }
 
     def forward(self, pixel_values):
         print(f"DEBUG: pixel_values: {pixel_values.shape}")
@@ -116,8 +121,19 @@ class VisionEncoderExportableModule(torch.nn.Module):
         if pixel_values is None:
             batch_size = 1
             num_channels = self.config.num_channels
-            height = self.config.image_size
-            width = self.config.image_size
+            try:
+                if isinstance(self.config.image_size, int):
+                    height = self.config.image_size
+                    width = self.config.image_size
+                elif isinstance(self.config.image_size, list) or isinstance(self.config.image_size, tuple):
+                    height, width = self.config.image_size
+                else:
+                    raise ValueError(f"Unsupported image size type: {type(self.config.image_size)}")
+            except AttributeError as e:
+                if self.model_name_or_path in self.image_size_fallbacks:
+                    height, width = self.image_size_fallbacks[self.model_name_or_path]
+                else:
+                    raise e
             pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         with torch.no_grad():
