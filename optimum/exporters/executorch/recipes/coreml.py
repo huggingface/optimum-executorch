@@ -77,6 +77,7 @@ def export_to_executorch_with_coreml(
         et_progs = {}
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
+            exported_program = exported_program.run_decompositions({})
             logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
@@ -91,7 +92,7 @@ def export_to_executorch_with_coreml(
                 )],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    _skip_dim_order=True,
+                    _skip_dim_order=False,
                 ),
                 constant_methods=metadata,
             ).to_executorch(

@@ -24,7 +24,6 @@ from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoConfig, AutoModelForImageClassification
 from transformers.testing_utils import slow
-import coremltools as ct
 from optimum.executorch import ExecuTorchModelForImageClassification
 
 from ..utils import check_close_recursively
@@ -65,31 +64,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Test fetching and lowering the model to ExecuTorch
         et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="xnnpack")
-        self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
-        self.assertIsInstance(et_model.model, ExecuTorchModule)
-
-        eager_model = AutoModelForImageClassification.from_pretrained(model_id).eval().to("cpu")
-        with torch.no_grad():
-            eager_output = eager_model(pixel_values)
-            et_output = et_model.forward(pixel_values)
-
-        # Compare with eager outputs
-        self.assertTrue(check_close_recursively(eager_output.logits, et_output))
-    
-    # @slow
-    # @pytest.mark.run_slow
-    def test_efficientnet_image_classification_coreml(self):
-        model_id = "google/efficientnet-b0"  # ~5.3M params
-
-        config = AutoConfig.from_pretrained(model_id)
-        batch_size = 1
-        num_channels = config.num_channels
-        height = config.image_size
-        width = config.image_size
-        pixel_values = torch.rand(batch_size, num_channels, height, width)
-
-        # Test fetching and lowering the model to ExecuTorch
-        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="coreml", recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY})
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
 

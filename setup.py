@@ -15,11 +15,11 @@ INSTALL_REQUIRE = [
     "optimum~=1.24",
     "executorch>=0.6.0",
     "transformers==4.51.3",
-    "coremltools==8.3.0",
 ]
 
 TESTS_REQUIRE = [
     "accelerate>=0.26.0",
+    "coremltools==8.3.0",
     "datasets",
     "parameterized",
     "pytest",

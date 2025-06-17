@@ -27,7 +27,10 @@ from transformers.testing_utils import slow
 from optimum.executorch import ExecuTorchModelForImageClassification
 
 from ..utils import check_close_recursively
+import coremltools as ct
+import sys
 
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -61,6 +64,36 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Test fetching and lowering the model to ExecuTorch
         et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="xnnpack")
+        self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
+        self.assertIsInstance(et_model.model, ExecuTorchModule)
+
+        eager_model = AutoModelForImageClassification.from_pretrained(model_id).eval().to("cpu")
+        with torch.no_grad():
+            eager_output = eager_model(pixel_values)
+            et_output = et_model.forward(pixel_values)
+
+        # Compare with eager outputs
+        self.assertTrue(check_close_recursively(eager_output.logits, et_output))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    def test_vit_image_classification_coreml_fp32_cpu(self):
+        model_id = "google/vit-base-patch16-224"
+
+        config = AutoConfig.from_pretrained(model_id)
+        batch_size = 1
+        num_channels = config.num_channels
+        height = config.image_size
+        width = config.image_size
+        pixel_values = torch.rand(batch_size, num_channels, height, width)
+
+        # Test fetching and lowering the model to ExecuTorch
+        et_model = ExecuTorchModelForImageClassification.from_pretrained(
+            model_id=model_id,
+            recipe="coreml", 
+            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY}
+        )
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
 
