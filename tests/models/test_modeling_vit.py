@@ -30,7 +30,7 @@ from ..utils import check_close_recursively
 import coremltools as ct
 import sys
 
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+is_not_macos = sys.platform != "darwin"
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -77,7 +77,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
     def test_vit_image_classification_coreml_fp32_cpu(self):
         model_id = "google/vit-base-patch16-224"
 
