@@ -150,7 +150,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants *(requires `transformers >= 4.52.0`)*
 - [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B): `Llama-3.2-1B` and its variants
 - [Qwen2](https://huggingface.co/Qwen/Qwen2.5-0.5B): `Qwen2.5-0.5B` and its variants
-- [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B): `Qwen3-0.6B` and its variants
+- [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B): `Qwen3-0.6B`, `Qwen3-Embedding-0.6B` and other variants
 - [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
 - [Phi4](https://huggingface.co/microsoft/Phi-4-mini-instruct): `Phi-4-mini-instruct` and its variants
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
