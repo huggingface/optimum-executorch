@@ -53,7 +53,7 @@ def custom_sdpa_with_start_pos_forward(
     attention_mask = attention_mask.reshape(-1, max_seq_len)
     first_row_mask = attention_mask[0, :]
     # [0, 0, 0, 0, -inf, -inf, -inf, -inf], start_pos = 3
-    start_pos = torch.argmin(first_row_mask).item() - 1
+    start_pos = torch.argmin(first_row_mask.to(torch.long)).item() - 1
     output = torch.ops.llama.custom_sdpa(
         query,
         key,
