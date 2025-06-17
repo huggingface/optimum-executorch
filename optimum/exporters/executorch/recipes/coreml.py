@@ -64,7 +64,6 @@ def export_to_executorch_with_coreml(
         metadata=None,
         **kwargs,
     ) -> Dict[str, ExecutorchProgram]:
-
         compute_unit = kwargs.get("compute_unit", ct.ComputeUnit.ALL)
         minimum_deployment_target = kwargs.get("minimum_deployment_target", ct.target.iOS15)
         compute_precision = kwargs.get("compute_precision", ct.precision.FLOAT16)
