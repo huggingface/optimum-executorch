@@ -126,6 +126,7 @@ class CausalLMExportableModule(torch.nn.Module):
                     strict=strict if strict is not None else True,
                 )
         else:
+            # Path to use legacy API, static export only due to pinned transformers version
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
             )
@@ -135,9 +136,7 @@ class CausalLMExportableModule(torch.nn.Module):
                 cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
             )
 
-            exported_program = convert_and_export_with_cache(
-                self.model, example_input_ids, example_cache_position, dynamic_shapes, strict
-            )
+            exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
 
         return {"model": exported_program}
 
