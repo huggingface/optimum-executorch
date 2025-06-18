@@ -38,13 +38,14 @@ pip install '.[dev]'
 
 ### 3. Install dependencies in dev mode
 
-To access all supported optimizations or for development with the latest features, run:
-```python
+To access every available optimization and experiment with the newest features, run:
+```
 python install_dev.py
 ```
 
 This script will install `executorch`, `torch`, `torchao`, `transformers`, etc. from nightly builds or from source to access the latest models and optimizations.
 
+To leave an existing ExecuTorch installation untouched, run `install_dev.py` with `--skip_override_torch` to prevent it from being overwritten.
 
 ## 🎯 Quick Start
 
