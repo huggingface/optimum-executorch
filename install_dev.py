@@ -34,7 +34,7 @@ def install_dep_from_source():
             "-m",
             "pip",
             "install",
-            "git+https://github.com/huggingface/transformers@7f00b325f8140c4964e3e81e6af0e53f5b9a2592#egg=transformers",
+            "git+https://github.com/huggingface/transformers@51f94ea06d19a6308c61bbb4dc97c40aabd12bad#egg=transformers",  # v4.52.4
         ]
     )
     subprocess.check_call(
