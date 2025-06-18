@@ -130,7 +130,7 @@ def main_export(
     kwargs["force_download"] = force_download
     kwargs["config"] = config
 
-    #recipe_kwargs = kwargs.pop("recipe_kwargs", {})
+    recipe_kwargs = kwargs.pop("recipe_kwargs", {})
 
     model = task_func(model_name_or_path, **kwargs)
 
@@ -142,8 +142,7 @@ def main_export(
         task=task,
         recipe=recipe,
         output_dir=output_dir,
-        #**recipe_kwargs,
-        **kwargs,
+        **recipe_kwargs,
     )
 
 
