@@ -25,6 +25,7 @@ from executorch.exir import (
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
+
 from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
@@ -56,8 +57,9 @@ def export_to_executorch_with_coreml(
     """
     # Import here because coremltools might not be available in all environments
     import coremltools as ct
-    from executorch.backends.apple.coreml.partition import CoreMLPartitioner
+
     from executorch.backends.apple.coreml.compiler import CoreMLBackend
+    from executorch.backends.apple.coreml.partition import CoreMLPartitioner
 
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],

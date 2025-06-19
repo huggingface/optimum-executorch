@@ -15,6 +15,7 @@
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -27,7 +28,7 @@ from transformers.testing_utils import slow
 from optimum.executorch import ExecuTorchModelForImageClassification
 
 from ..utils import check_close_recursively
-import sys
+
 
 is_not_macos = sys.platform != "darwin"
 
