@@ -5,18 +5,21 @@ import sys
 
 def install_torch_nightly_deps():
     """Install torch related dependencies from pinned nightly"""
-    NIGHTLY_VERSION = "dev20250620"
+    EXECUTORCH_NIGHTLY_VERSION = "dev20250620"
+    TORCHAO_NIGHTLY_VERSION = "dev20250620"
+    # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/install_requirements.py#L74
+    TORCH_NIGHTLY_VERSION = "dev20250601"
     subprocess.check_call(
         [
             sys.executable,
             "-m",
             "pip",
             "install",
-            f"executorch==0.7.0.{NIGHTLY_VERSION}",
-            f"torch==2.8.0.{NIGHTLY_VERSION}",
-            f"torchvision==0.23.0.{NIGHTLY_VERSION}",
-            f"torchaudio==2.8.0.{NIGHTLY_VERSION}",
-            "torchao==0.12.0.dev20250528",
+            f"executorch==0.7.0.{EXECUTORCH_NIGHTLY_VERSION}",
+            f"torch==2.8.0.{TORCH_NIGHTLY_VERSION}",
+            f"torchvision==0.23.0.{TORCH_NIGHTLY_VERSION}",
+            f"torchaudio==2.8.0.{TORCH_NIGHTLY_VERSION}",
+            f"torchao==0.12.0.{TORCHAO_NIGHTLY_VERSION}",
             "--extra-index-url",
             "https://download.pytorch.org/whl/nightly/cpu",
         ]
