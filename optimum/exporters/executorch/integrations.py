@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
+from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
@@ -44,10 +45,13 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_kv_cache = use_custom_kv_cache
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
-    def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
-        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
-
+    def export(
+        self,
+        input_ids=None,
+        cache_position=None,
+        dynamic_shapes: Optional[dict] = None,
+        strict: Optional[bool] = None,
+    ) -> Dict[str, ExportedProgram]:
         if is_transformers_version(">=", "4.52.0.dev0"):
             from transformers.integrations.executorch import (
                 TorchExportableModuleForDecoderOnlyLM,
@@ -55,6 +59,17 @@ class CausalLMExportableModule(torch.nn.Module):
 
             max_batch_size = 1
             max_cache_len = 4094
+            seq_length = 3  # Make the sequence length dim to be dynamic in orfer to leverage parallel prefill in ExecuTorch runtime.
+            example_input_ids = input_ids if input_ids is not None else torch.zeros((1, seq_length), dtype=torch.long)
+            example_cache_position = (
+                cache_position if cache_position is not None else torch.arange(seq_length, dtype=torch.long)
+            )
+            seq_len_dim = torch.export.Dim("seq_length_dim", max=128 - 1)
+            dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
+            strict = parse(torch.__version__) != parse(
+                "2.7.0"
+            )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
+
             exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
@@ -69,7 +84,9 @@ class CausalLMExportableModule(torch.nn.Module):
                 )
 
             with torch.no_grad():
-                exported_program = exportable_module.export(example_input_ids, example_cache_position)
+                exported_program = exportable_module.export(
+                    example_input_ids, example_cache_position, dynamic_shapes, strict
+                )
                 # Apply RemoveTransposes pass to remove
                 # any back-to-back transpose ops that are not needed
                 # e.g. output of update_cache is transposed and
@@ -83,10 +100,18 @@ class CausalLMExportableModule(torch.nn.Module):
                     mutated_gm,
                     args=(example_input_ids, example_cache_position),
                     kwargs={},
+                    dynamic_shapes=dynamic_shapes,
+                    strict=strict if strict is not None else True,
                 )
         else:
+            # Path to use legacy API, static export only due to pinned transformers version
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
+            )
+
+            example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
+            example_cache_position = (
+                cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
             )
 
             exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
