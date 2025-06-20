@@ -5,7 +5,7 @@ import sys
 
 def install_torch_nightly_deps():
     """Install torch related dependencies from pinned nightly"""
-    NIGHTLY_VERSION = "dev20250523"
+    NIGHTLY_VERSION = "dev20250620"
     subprocess.check_call(
         [
             sys.executable,
@@ -14,8 +14,8 @@ def install_torch_nightly_deps():
             "install",
             f"executorch==0.7.0.{NIGHTLY_VERSION}",
             f"torch==2.8.0.{NIGHTLY_VERSION}",
-            f"torchvision==0.22.0.{NIGHTLY_VERSION}",
-            f"torchaudio==2.6.0.{NIGHTLY_VERSION}",
+            f"torchvision==0.23.0.{NIGHTLY_VERSION}",
+            f"torchaudio==2.8.0.{NIGHTLY_VERSION}",
             "torchao==0.12.0.dev20250528",
             "--extra-index-url",
             "https://download.pytorch.org/whl/nightly/cpu",
