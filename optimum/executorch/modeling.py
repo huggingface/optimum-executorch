@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Union
 import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from packaging.version import parse
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageClassification,
@@ -36,6 +37,7 @@ from transformers import (
 )
 from transformers.utils import is_offline_mode
 
+from executorch import version as executorch_version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
 from executorch.kernels import quantized  # noqa
 
@@ -675,12 +677,23 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             max_seq_len = self.max_cache_size
         generated_tokens = []
 
-        self.stats.on_sampling_begin()
-        logits = self.forward(
-            input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
-            cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
-        )
-        self.stats.on_sampling_end()
+        if parse(executorch_version.__version__) <= parse("0.6.0"):
+            # TODO: Sequential prefill is preserved for backwards compatibility in order to run PTE generated w/o dynamic shapes.
+            #       We can remove this block once the executorch runtime supports `cache_position`.
+            for i, prompt_token in enumerate(prompt_tokens):
+                self.stats.on_sampling_begin()
+                logits = self.forward(
+                    input_ids=torch.tensor([prompt_token], dtype=torch.long, device=self.device).unsqueeze(0),
+                    cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
+                )
+                self.stats.on_sampling_end()
+        else:
+            self.stats.on_sampling_begin()
+            logits = self.forward(
+                input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
+                cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
+            )
+            self.stats.on_sampling_end()
 
         self.stats.on_prompt_eval_end()
         first_token_generated = False

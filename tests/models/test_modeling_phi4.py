@@ -20,7 +20,6 @@ import unittest
 
 import pytest
 import torchao
-from executorch import version as executorch_version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoConfig, AutoTokenizer
@@ -77,8 +76,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(
-        parse(executorch_version.__version__) > parse("0.6.0"),
-        reason="Require cache_position support in executorch runtime. Re-enable when available.",
+        parse(torchao.__version__) < parse("0.11.0.dev0"),
+        reason="Only available on torchao >= 0.11.0.dev0",
     )
     def test_phi4_text_generation_with_quantized_pte_from_hub(self):
         model_id = "pytorch/Phi-4-mini-instruct-8da4w"
