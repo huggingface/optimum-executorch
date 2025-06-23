@@ -624,8 +624,14 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             torch.Tensor: Logits output from the model.
         """
         self.stats.on_model_execution_start()
-        logging.debug(f"{self.model.method_meta('forward')}")
-        logits = self.model.forward((input_ids, cache_position))[0]
+
+        try:
+            logits = self.model.forward((input_ids, cache_position))[0]
+        except Exception as e:
+            shapes = {name: val.shape for name, val in locals().items() if hasattr(val, "shape")}
+            print(f"Exception: {e}.\n{self.model.method_meta('forward')}\narg shapes: {shapes}")
+            raise
+
         self.stats.on_model_execution_end()
         return logits
 
