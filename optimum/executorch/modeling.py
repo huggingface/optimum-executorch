@@ -677,7 +677,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             max_seq_len = self.max_cache_size
         generated_tokens = []
 
-        if parse(executorch_version.__version__) <= parse("0.6.0"):
+        if parse(executorch_version.__version__).base_version <= "0.6.0":
             # TODO: Sequential prefill is preserved for backwards compatibility in order to run PTE generated w/o dynamic shapes.
             #       We can remove this block once the executorch runtime supports `cache_position`.
             for i, prompt_token in enumerate(prompt_tokens):
