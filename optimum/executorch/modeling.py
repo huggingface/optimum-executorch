@@ -687,6 +687,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
                     cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
                 )
                 self.stats.on_sampling_end()
+            next_token = torch.argmax(logits, dim=-1).item()
         else:
             self.stats.on_sampling_begin()
             logits = self.forward(
@@ -694,11 +695,10 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
                 cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
             )
             self.stats.on_sampling_end()
-
+            next_token = torch.argmax(logits, dim=-1)[0, -1].item()
         self.stats.on_prompt_eval_end()
         first_token_generated = False
 
-        next_token = torch.argmax(logits, dim=-1)[0, -1].item()
         generated_tokens = prompt_tokens + [next_token]
 
         while len(generated_tokens) < max_seq_len:

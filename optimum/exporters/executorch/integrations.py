@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Dict, Optional
 
 import torch
@@ -46,6 +47,7 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
     def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
         if is_transformers_version(">=", "4.53.0.dev0"):
@@ -79,22 +81,35 @@ class CausalLMExportableModule(torch.nn.Module):
             )
 
             max_batch_size = 1
-            max_cache_len = 4094
             seq_length = 3  # Make the sequence length dim to be dynamic in orfer to leverage parallel prefill in ExecuTorch runtime.
             example_input_ids = input_ids if input_ids is not None else torch.zeros((1, seq_length), dtype=torch.long)
             example_cache_position = (
                 cache_position if cache_position is not None else torch.arange(seq_length, dtype=torch.long)
             )
             seq_len_dim = torch.export.Dim(
-                "seq_length_dim", max=min(self.metadata["get_max_seq_len"], max_cache_len) - 1
+                "seq_length_dim",
+                max=min(
+                    self.metadata.get("get_max_seq_len"),
+                    self.metadata.get("sliding_window", float("inf")),
+                )
+                - 1,
             )
             dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
             strict = parse(torch.__version__) != parse(
                 "2.7.0"
             )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
 
+<<<<<<< HEAD
             exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
             self._register_attention_mask_for_4_53(exportable_module)
+=======
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(
+                self.model,
+                max_batch_size=max_batch_size,
+                max_cache_len=self.metadata.get("get_max_seq_len"),
+            )
+
+>>>>>>> e5f8de5 (fix seq_len dim for models using hybrid cache)
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
                     replace_with_et_custom_kv_cache,
