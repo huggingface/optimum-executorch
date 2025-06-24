@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from packaging.version import parse
@@ -173,13 +173,15 @@ class VisionEncoderExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, model_id: Optional[str] = None):
         super().__init__()
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
-
+        
+        self.model_id = model_id
+        
     def forward(self, pixel_values):
         print(f"DEBUG: pixel_values: {pixel_values.shape}")
         print(f"DEBUG: forward: {self.model.method_meta('forward')}")
@@ -187,11 +189,19 @@ class VisionEncoderExportableModule(torch.nn.Module):
 
     def export(self, pixel_values=None) -> Dict[str, ExportedProgram]:
         if pixel_values is None:
-            batch_size = 1
-            num_channels = self.config.num_channels
-            height = self.config.image_size
-            width = self.config.image_size
-            pixel_values = torch.rand(batch_size, num_channels, height, width)
+            model_to_pixel_values_size = {
+                "microsoft/resnet-50": [1, 3, 224, 224],
+            }
+            if self.model_id in model_to_pixel_values_size:
+                # If an explicit shape is provided for this model, use it
+                pixel_values = torch.rand(*model_to_pixel_values_size[self.model_id])
+            else:
+                # If no explicit shape is provided for this model, infer a shape from config
+                batch_size = 1
+                num_channels = self.config.num_channels
+                height = self.config.image_size
+                width = self.config.image_size
+                pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         with torch.no_grad():
             return {

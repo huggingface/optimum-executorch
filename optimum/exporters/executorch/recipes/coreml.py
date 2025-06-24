@@ -96,7 +96,7 @@ def export_to_executorch_with_coreml(
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    _skip_dim_order=False,
+                    _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
             ).to_executorch(
