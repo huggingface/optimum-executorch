@@ -85,7 +85,9 @@ class CausalLMExportableModule(torch.nn.Module):
             example_cache_position = (
                 cache_position if cache_position is not None else torch.arange(seq_length, dtype=torch.long)
             )
-            seq_len_dim = torch.export.Dim("seq_length_dim", max=128 - 1)
+            seq_len_dim = torch.export.Dim(
+                "seq_length_dim", max=min(self.metadata["get_max_seq_len"], max_cache_len) - 1
+            )
             dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
             strict = parse(torch.__version__) != parse(
                 "2.7.0"
