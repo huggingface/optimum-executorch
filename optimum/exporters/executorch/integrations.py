@@ -49,31 +49,42 @@ class CausalLMExportableModule(torch.nn.Module):
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
-    def _get_export_inputs(self):
-        # Prepare example inputs and configs for export. Enable dynamic shapes by default.
-        seq_length = 3  # Make the sequence length dim > 1 to avoid 0/1 specialization.
-        example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
-        example_cache_position = torch.arange(seq_length, dtype=torch.long)
-        seq_len_dim = torch.export.Dim(
-            "seq_length_dim",
-            max=min(
-                self.metadata.get("get_max_seq_len"),
-                self.metadata.get("sliding_window", float("inf")),
-            )
-            - 1,
-        )
-        dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
-        strict = parse(torch.__version__) != parse(
-            "2.7.0"
-        )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
+    def _prepare_export_inputs(self):
+        """
+        Prepare example inputs and configurations for export.
 
-        if hasattr(self.config, "layer_types") and getattr(self.config, "sliding_window", None) is not None:
-            # The model will be using `HybridCache`` with sliding window.
-            # Enable dynamic shapes only if the model is configred with custom SDPA + custom KV cache.
-            if not self.use_custom_kv_cache or not self.use_custom_sdpa:
-                example_input_ids = torch.tensor([[1]], dtype=torch.long)
-                example_cache_position = torch.tensor([0], dtype=torch.long)
-                dynamic_shapes = None
+        Returns:
+            example_input_ids (torch.Tensor): Example input IDs tensor.
+            example_cache_position (torch.Tensor): Example cache position tensor.
+            dynamic_shapes (dict or None): Dynamic shape specifications for export.
+            strict (bool): Whether to use strict export mode.
+        """
+        # Default values for legacy or fallback cases
+        example_input_ids = torch.tensor([[1]], dtype=torch.long)
+        example_cache_position = torch.tensor([0], dtype=torch.long)
+        dynamic_shapes = None
+        strict = True
+
+        is_using_hybrid_cache_wo_custom_sdpa_kv_cache = (
+            hasattr(self.config, "layer_types")
+            and getattr(self.config, "sliding_window", None) is not None
+            and not (self.use_custom_kv_cache and self.use_custom_sdpa)
+        )
+
+        if is_transformers_version(">", "4.52.0") and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
+            # Prepare inputs with dynamic shapes
+            seq_length = 3  # Sequence length > 1 to avoid specialization issues
+            example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
+            example_cache_position = torch.arange(seq_length, dtype=torch.long)
+            max_seq_len = self.metadata.get("get_max_seq_len")
+            sliding_window = self.metadata.get("sliding_window", float("inf"))
+            max_dim = min(max_seq_len, sliding_window) - 1
+            seq_len_dim = torch.export.Dim("seq_length_dim", max=max_dim)
+            dynamic_shapes = {
+                "input_ids": {1: seq_len_dim},
+                "cache_position": {0: seq_len_dim},
+            }
+            strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
 
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
@@ -99,11 +110,11 @@ class CausalLMExportableModule(torch.nn.Module):
     def export(
         self,
     ) -> Dict[str, ExportedProgram]:
-        input_ids, cache_position, dynamic_shapes, strict = self._get_export_inputs()
+        input_ids, cache_position, dynamic_shapes, strict = self._prepare_export_inputs()
         logging.info(
             f"Exporting using input_ids({input_ids.shape})={input_ids}, cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
         )
-        if is_transformers_version(">=", "4.52.0.dev0"):
+        if is_transformers_version(">", "4.52.0"):
             from transformers.integrations.executorch import (
                 TorchExportableModuleForDecoderOnlyLM,
             )
