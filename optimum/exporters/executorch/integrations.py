@@ -26,6 +26,7 @@ from transformers import (
 )
 from transformers.generation.configuration_utils import GenerationConfig
 
+from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 from optimum.utils.import_utils import is_transformers_version
 
 from .utils import save_config_to_constant_methods
@@ -37,12 +38,32 @@ class CausalLMExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model, use_custom_kv_cache=False):
+    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False):
         super().__init__()
         self.model = model
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
+        self.use_custom_sdpa = use_custom_sdpa
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+
+    def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
+        if is_transformers_version(">=", "4.53.0.dev0"):
+            from transformers.integrations.executorch import sdpa_mask_without_vmap
+            from transformers.masking_utils import AttentionMaskInterface
+            from transformers.modeling_utils import AttentionInterface
+
+            _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
+            if self.use_custom_sdpa:
+                if self.use_custom_kv_cache:
+                    AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+                    AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                    # This handles both regular sdpa and one for sliding window/local attention
+                    exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
+                else:
+                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                    # This handles both regular sdpa and one for sliding window/local attention
+                    exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
     def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
@@ -56,6 +77,7 @@ class CausalLMExportableModule(torch.nn.Module):
             max_batch_size = 1
             max_cache_len = 4094
             exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
+            self._register_attention_mask_for_4_53(exportable_module)
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
                     replace_with_et_custom_kv_cache,
