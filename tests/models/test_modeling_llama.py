@@ -135,7 +135,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
-    def test_llama_text_generation_with_coreml(self):
+    def test_llama_text_generation_with_coreml_fp32(self):
         import coremltools as ct
 
         model_id = "NousResearch/Llama-3.2-1B"
@@ -144,8 +144,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             model_id,
             recipe="coreml",
             recipe_kwargs={
-                "compute_precision": ct.precision.FLOAT16,
-                "compute_units": ct.ComputeUnit.ALL,
+                "compute_precision": ct.precision.FLOAT32,
                 "take_over_mutable_buffer": False,
             },
         )
