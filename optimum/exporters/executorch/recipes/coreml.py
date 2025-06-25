@@ -76,6 +76,15 @@ def export_to_executorch_with_coreml(
         }[model_type]
         take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
 
+        op_linear_quantizer_config = None
+        quant_recipe = kwargs.get("quant_recipe", None)
+        if quant_recipe == "weight_only:8bit:per_channel":
+            op_linear_quantizer_config = {
+                "mode": "linear_symmetric",
+                "dtype": "int8",
+                "granularity": "per_channel",
+            }
+
         et_progs = {}
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
@@ -85,11 +94,16 @@ def export_to_executorch_with_coreml(
                 exported_program,
                 partitioner=[
                     CoreMLPartitioner(
+                        # Do not delegate embedding because it leads to a compression conflict
+                        skip_ops_for_coreml_delegation=[
+                            "aten.embedding.default",
+                        ],
                         compile_specs=CoreMLBackend.generate_compile_specs(
                             compute_unit=compute_unit,
                             minimum_deployment_target=minimum_deployment_target,
                             compute_precision=compute_precision,
                             model_type=model_type,
+                            op_linear_quantizer_config=op_linear_quantizer_config,
                         ),
                         take_over_mutable_buffer=take_over_mutable_buffer,
                     )

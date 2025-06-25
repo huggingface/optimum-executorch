@@ -146,6 +146,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe_kwargs={
                 "compute_precision": ct.precision.FLOAT32,
                 "take_over_mutable_buffer": False,
+                "minimum_deployment_target": ct.target.iOS18,
             },
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
@@ -156,6 +157,41 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             max_seq_len=32,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
+    def test_llama_text_generation_with_coreml_8bit(self):
+        import coremltools as ct
+
+        model_id = "NousResearch/Llama-3.2-1B"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="coreml",
+            recipe_kwargs={
+                "compute_precision": ct.precision.FLOAT32,
+                "take_over_mutable_buffer": False,
+                "quant_recipe": "weight_only:8bit:per_channel",
+            },
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt="Simply put, the theory of relativity states that",
+            max_seq_len=32,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        print(generated_text)
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
 
         # Free memory before loading eager for quality check
