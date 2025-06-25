@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, Optional
+from typing import Dict
 
 import torch
 from packaging.version import parse
@@ -49,6 +49,34 @@ class CausalLMExportableModule(torch.nn.Module):
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
+    def _get_export_inputs(self):
+        # Prepare example inputs and configs for export. Enable dynamic shapes by default.
+        seq_length = 3  # Make the sequence length dim > 1 to avoid 0/1 specialization.
+        example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
+        example_cache_position = torch.arange(seq_length, dtype=torch.long)
+        seq_len_dim = torch.export.Dim(
+            "seq_length_dim",
+            max=min(
+                self.metadata.get("get_max_seq_len"),
+                self.metadata.get("sliding_window", float("inf")),
+            )
+            - 1,
+        )
+        dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
+        strict = parse(torch.__version__) != parse(
+            "2.7.0"
+        )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
+
+        if hasattr(self.config, "layer_types") and getattr(self.config, "sliding_window", None) is not None:
+            # The model will be using `HybridCache`` with sliding window.
+            # Enable dynamic shapes only if the model is configred with custom SDPA + custom KV cache.
+            if not self.use_custom_kv_cache or not self.use_custom_sdpa:
+                example_input_ids = torch.tensor([[1]], dtype=torch.long)
+                example_cache_position = torch.tensor([0], dtype=torch.long)
+                dynamic_shapes = None
+
+        return example_input_ids, example_cache_position, dynamic_shapes, strict
+
     def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
         if is_transformers_version(">=", "4.53.0.dev0"):
             from transformers.integrations.executorch import sdpa_mask_without_vmap
@@ -70,38 +98,19 @@ class CausalLMExportableModule(torch.nn.Module):
 
     def export(
         self,
-        input_ids=None,
-        cache_position=None,
-        dynamic_shapes: Optional[dict] = None,
-        strict: Optional[bool] = None,
     ) -> Dict[str, ExportedProgram]:
+        input_ids, cache_position, dynamic_shapes, strict = self._get_export_inputs()
+        logging.info(
+            f"Exporting using input_ids({input_ids.shape})={input_ids}, cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
+        )
         if is_transformers_version(">=", "4.52.0.dev0"):
             from transformers.integrations.executorch import (
                 TorchExportableModuleForDecoderOnlyLM,
             )
 
-            max_batch_size = 1
-            seq_length = 3  # Make the sequence length dim to be dynamic in orfer to leverage parallel prefill in ExecuTorch runtime.
-            example_input_ids = input_ids if input_ids is not None else torch.zeros((1, seq_length), dtype=torch.long)
-            example_cache_position = (
-                cache_position if cache_position is not None else torch.arange(seq_length, dtype=torch.long)
-            )
-            seq_len_dim = torch.export.Dim(
-                "seq_length_dim",
-                max=min(
-                    self.metadata.get("get_max_seq_len"),
-                    self.metadata.get("sliding_window", float("inf")),
-                )
-                - 1,
-            )
-            dynamic_shapes = {"input_ids": {1: seq_len_dim}, "cache_position": {0: seq_len_dim}}
-            strict = parse(torch.__version__) != parse(
-                "2.7.0"
-            )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
-
             exportable_module = TorchExportableModuleForDecoderOnlyLM(
                 self.model,
-                max_batch_size=max_batch_size,
+                max_batch_size=1,
                 max_cache_len=self.metadata.get("get_max_seq_len"),
             )
             self._register_attention_mask_for_4_53(exportable_module)
@@ -119,9 +128,7 @@ class CausalLMExportableModule(torch.nn.Module):
                 )
 
             with torch.no_grad():
-                exported_program = exportable_module.export(
-                    example_input_ids, example_cache_position, dynamic_shapes, strict
-                )
+                exported_program = exportable_module.export(input_ids, cache_position, dynamic_shapes, strict)
                 # Apply RemoveTransposes pass to remove
                 # any back-to-back transpose ops that are not needed
                 # e.g. output of update_cache is transposed and
@@ -133,10 +140,10 @@ class CausalLMExportableModule(torch.nn.Module):
                 mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
                 exported_program = torch.export.export(
                     mutated_gm,
-                    args=(example_input_ids, example_cache_position),
+                    args=(input_ids, cache_position),
                     kwargs={},
                     dynamic_shapes=dynamic_shapes,
-                    strict=strict if strict is not None else True,
+                    strict=strict,
                 )
         else:
             # Path to use legacy API, static export only due to pinned transformers version
@@ -144,12 +151,7 @@ class CausalLMExportableModule(torch.nn.Module):
                 convert_and_export_with_cache,
             )
 
-            example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
-            example_cache_position = (
-                cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
-            )
-
-            exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
+            exported_program = convert_and_export_with_cache(self.model, input_ids, cache_position)
 
         return {"model": exported_program}
 
