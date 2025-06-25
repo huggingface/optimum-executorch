@@ -99,17 +99,13 @@ class CausalLMExportableModule(torch.nn.Module):
                 "2.7.0"
             )  # Due to bug https://github.com/pytorch/pytorch/issues/150994
 
-<<<<<<< HEAD
-            exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
-            self._register_attention_mask_for_4_53(exportable_module)
-=======
             exportable_module = TorchExportableModuleForDecoderOnlyLM(
                 self.model,
                 max_batch_size=max_batch_size,
                 max_cache_len=self.metadata.get("get_max_seq_len"),
             )
+            self._register_attention_mask_for_4_53(exportable_module)
 
->>>>>>> e5f8de5 (fix seq_len dim for models using hybrid cache)
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
                     replace_with_et_custom_kv_cache,

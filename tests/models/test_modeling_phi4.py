@@ -16,6 +16,7 @@
 import gc
 import logging
 import os
+import sys
 import unittest
 
 import pytest
@@ -32,8 +33,8 @@ from ..utils import check_causal_lm_output_quality
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -43,8 +44,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.52.0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0",
+        is_linux_ci
+        or parse(transformers.__version__) < parse("4.52.0")
+        or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0. OOM on linux runner.",
     )
     def test_phi4_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
         model_id = "microsoft/Phi-4-mini-instruct"
