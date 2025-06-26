@@ -66,6 +66,18 @@ def export_to_executorch_with_coreml(
         metadata=None,
         **kwargs,
     ) -> Dict[str, ExecutorchProgram]:
+        valid_kwargs = [
+            "compute_unit",
+            "minimum_deployment_target",
+            "compute_precision",
+            "model_type",
+            "take_over_mutable_buffer",
+            "quant_recipe",
+        ]
+        for k in kwargs:
+            if k not in valid_kwargs:
+                raise ValueError(f"Invalid keyword argument {k} for CoreML recipe")
+
         compute_unit = kwargs.get("compute_unit", ct.ComputeUnit.ALL)
         minimum_deployment_target = kwargs.get("minimum_deployment_target", ct.target.iOS15)
         compute_precision = kwargs.get("compute_precision", ct.precision.FLOAT16)
@@ -74,7 +86,9 @@ def export_to_executorch_with_coreml(
             "model": CoreMLBackend.MODEL_TYPE.MODEL,
             "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
         }[model_type]
-        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", (minimum_deployment_target >= ct.target.iOS18))
+        take_over_mutable_buffer = kwargs.get(
+            "take_over_mutable_buffer", (minimum_deployment_target >= ct.target.iOS18)
+        )
 
         op_linear_quantizer_config = None
         quant_recipe = kwargs.get("quant_recipe", None)
