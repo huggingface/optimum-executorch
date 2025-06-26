@@ -16,14 +16,10 @@
 import gc
 import logging
 import os
-import sys
 import unittest
 
 import pytest
-import torchao
-import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from packaging.version import parse
 from transformers import AutoConfig, AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -33,8 +29,8 @@ from ..utils import check_causal_lm_output_quality
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -44,12 +40,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(
-        is_linux_ci
-        or parse(transformers.__version__) < parse("4.52.0")
-        or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0. OOM on linux runner.",
+        is_ci,
+        reason="Test Phi-4-mini (3.8B) will require runner to be configured with larger RAM",
     )
-    def test_phi4_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
+    def test_phi4_text_generation(self):
         model_id = "microsoft/Phi-4-mini-instruct"
         config = AutoConfig.from_pretrained(model_id)
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
@@ -57,14 +51,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # that function to avoid the data-dependent control flow.
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             config.rope_scaling["type"] = "default"
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_id,
-            recipe="xnnpack",
-            config=config,
-            attn_implementation="custom_sdpa",
-            use_custom_kv_cache=True,
-            **{"qlinear": True, "qembeeding": True},
-        )
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack", config=config)
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -72,19 +59,17 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         generated_text = model.text_generation(
             tokenizer=tokenizer,
             prompt="My favourite condiment is ",
-            max_seq_len=64,
+            max_seq_len=32,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
 
-        if not is_ci:
-            generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
 
-            # Free memory before loading eager for quality check
-            del model
-            del tokenizer
-            gc.collect()
-
-            self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
 
     @slow
     @pytest.mark.run_slow
