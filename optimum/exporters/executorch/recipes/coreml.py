@@ -74,7 +74,7 @@ def export_to_executorch_with_coreml(
             "model": CoreMLBackend.MODEL_TYPE.MODEL,
             "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
         }[model_type]
-        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
+        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", (minimum_deployment_target >= ct.target.iOS18))
 
         op_linear_quantizer_config = None
         quant_recipe = kwargs.get("quant_recipe", None)
