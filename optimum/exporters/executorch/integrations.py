@@ -179,9 +179,9 @@ class VisionEncoderExportableModule(torch.nn.Module):
         self.config = model.config
         # Metadata to be recorded in the pte model file
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
-        
+
         self.model_id = model_id
-        
+
     def forward(self, pixel_values):
         print(f"DEBUG: pixel_values: {pixel_values.shape}")
         print(f"DEBUG: forward: {self.model.method_meta('forward')}")
