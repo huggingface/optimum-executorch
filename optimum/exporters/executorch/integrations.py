@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Dict
 
 import torch
+from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
@@ -45,6 +47,46 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
+
+    def _prepare_export_inputs(self):
+        """
+        Prepare example inputs and configurations for export.
+
+        Returns:
+            example_input_ids (torch.Tensor): Example input IDs tensor.
+            example_cache_position (torch.Tensor): Example cache position tensor.
+            dynamic_shapes (dict or None): Dynamic shape specifications for export.
+            strict (bool): Whether to use strict export mode.
+        """
+        # Default values for legacy or fallback cases
+        example_input_ids = torch.tensor([[1]], dtype=torch.long)
+        example_cache_position = torch.tensor([0], dtype=torch.long)
+        dynamic_shapes = None
+        strict = True
+
+        is_using_hybrid_cache_wo_custom_sdpa_kv_cache = (
+            hasattr(self.config, "layer_types")
+            and getattr(self.config, "sliding_window", None) is not None
+            and not (self.use_custom_kv_cache and self.use_custom_sdpa)
+        )
+
+        if is_transformers_version(">", "4.52.0") and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
+            # Prepare inputs with dynamic shapes
+            seq_length = 3  # Sequence length > 1 to avoid specialization issues
+            example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
+            example_cache_position = torch.arange(seq_length, dtype=torch.long)
+            max_seq_len = self.metadata.get("get_max_seq_len")
+            sliding_window = self.metadata.get("sliding_window", float("inf"))
+            max_dim = min(max_seq_len, sliding_window) - 1
+            seq_len_dim = torch.export.Dim("seq_length_dim", max=max_dim)
+            dynamic_shapes = {
+                "input_ids": {1: seq_len_dim},
+                "cache_position": {0: seq_len_dim},
+            }
+            strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
+
+        return example_input_ids, example_cache_position, dynamic_shapes, strict
 
     def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
         if is_transformers_version(">=", "4.53.0.dev0"):
@@ -65,19 +107,25 @@ class CausalLMExportableModule(torch.nn.Module):
                     # This handles both regular sdpa and one for sliding window/local attention
                     exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
-    def export(self, input_ids=None, cache_position=None) -> Dict[str, ExportedProgram]:
-        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
-
-        if is_transformers_version(">=", "4.52.0.dev0"):
+    def export(
+        self,
+    ) -> Dict[str, ExportedProgram]:
+        input_ids, cache_position, dynamic_shapes, strict = self._prepare_export_inputs()
+        logging.info(
+            f"Exporting using input_ids({input_ids.shape})={input_ids}, cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
+        )
+        if is_transformers_version(">", "4.52.0"):
             from transformers.integrations.executorch import (
                 TorchExportableModuleForDecoderOnlyLM,
             )
 
-            max_batch_size = 1
-            max_cache_len = 4094
-            exportable_module = TorchExportableModuleForDecoderOnlyLM(self.model, max_batch_size, max_cache_len)
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(
+                self.model,
+                max_batch_size=1,
+                max_cache_len=self.metadata.get("get_max_seq_len"),
+            )
             self._register_attention_mask_for_4_53(exportable_module)
+
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
                     replace_with_et_custom_kv_cache,
@@ -91,7 +139,7 @@ class CausalLMExportableModule(torch.nn.Module):
                 )
 
             with torch.no_grad():
-                exported_program = exportable_module.export(example_input_ids, example_cache_position)
+                exported_program = exportable_module.export(input_ids, cache_position, dynamic_shapes, strict)
                 # Apply RemoveTransposes pass to remove
                 # any back-to-back transpose ops that are not needed
                 # e.g. output of update_cache is transposed and
@@ -103,15 +151,18 @@ class CausalLMExportableModule(torch.nn.Module):
                 mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
                 exported_program = torch.export.export(
                     mutated_gm,
-                    args=(example_input_ids, example_cache_position),
+                    args=(input_ids, cache_position),
                     kwargs={},
+                    dynamic_shapes=dynamic_shapes,
+                    strict=strict,
                 )
         else:
+            # Path to use legacy API, static export only due to pinned transformers version
             from transformers.integrations.executorch import (
                 convert_and_export_with_cache,
             )
 
-            exported_program = convert_and_export_with_cache(self.model, example_input_ids, example_cache_position)
+            exported_program = convert_and_export_with_cache(self.model, input_ids, cache_position)
 
         return {"model": exported_program}
 

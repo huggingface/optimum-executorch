@@ -624,7 +624,14 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             torch.Tensor: Logits output from the model.
         """
         self.stats.on_model_execution_start()
-        logits = self.model.forward((input_ids, cache_position))[0]
+
+        try:
+            logits = self.model.forward((input_ids, cache_position))[0]
+        except Exception as e:
+            shapes = {name: val.shape for name, val in locals().items() if hasattr(val, "shape")}
+            print(f"Exception: {e}.\n{self.model.method_meta('forward')}\narg shapes: {shapes}")
+            raise
+
         self.stats.on_model_execution_end()
         return logits
 
@@ -667,20 +674,31 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             )
             max_seq_len = self.max_cache_size
         generated_tokens = []
+        seq_len = self.model.method_meta("forward").input_tensor_meta(1).sizes()[0]
 
-        # prefill
-        for i, prompt_token in enumerate(prompt_tokens):
+        if seq_len > 1:
+            # The model is exported with dynamic shapes. Can support parallel prefill.
             self.stats.on_sampling_begin()
             logits = self.forward(
-                input_ids=torch.tensor([prompt_token], dtype=torch.long, device=self.device).unsqueeze(0),
-                cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
+                input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
+                cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
             )
             self.stats.on_sampling_end()
-
+            next_token = torch.argmax(logits, dim=-1)[0, -1].item()
+        else:
+            # Sequential prefill is preserved for backwards compatibility in order to run PTE generated w/o dynamic shapes.
+            # TODO: We can remove this block once the executorch runtime supports `cache_position`.
+            for i, prompt_token in enumerate(prompt_tokens):
+                self.stats.on_sampling_begin()
+                logits = self.forward(
+                    input_ids=torch.tensor([prompt_token], dtype=torch.long, device=self.device).unsqueeze(0),
+                    cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
+                )
+                self.stats.on_sampling_end()
+            next_token = torch.argmax(logits, dim=-1).item()
         self.stats.on_prompt_eval_end()
         first_token_generated = False
 
-        next_token = torch.argmax(logits, dim=-1).item()
         generated_tokens = prompt_tokens + [next_token]
 
         while len(generated_tokens) < max_seq_len:
