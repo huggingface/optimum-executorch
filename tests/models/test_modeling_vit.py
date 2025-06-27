@@ -95,7 +95,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         et_model = ExecuTorchModelForImageClassification.from_pretrained(
             model_id=model_id,
             recipe="coreml",
-            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY},
+            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_unit": ct.ComputeUnit.CPU_ONLY},
         )
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
