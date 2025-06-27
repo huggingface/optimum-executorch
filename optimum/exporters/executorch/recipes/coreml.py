@@ -105,7 +105,7 @@ def export_to_executorch_with_coreml(
                 "block_size": 32,
             }
         }
-        if quant_recipe not in valid_quant_recipes:
+        if quant_recipe is not None and quant_recipe not in valid_quant_recipes:
             raise ValueError(f"Invalid quant recipe {quant_recipe}, must be one of {valid_quant_recipes.keys()}")
         op_linear_quantizer_config = valid_quant_recipes.get(quant_recipe, None)
 
@@ -134,7 +134,8 @@ def export_to_executorch_with_coreml(
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    _skip_dim_order=False,
+                    # In ET 0.7, we can set _skip_dim_order=False
+                    _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
             ).to_executorch(
