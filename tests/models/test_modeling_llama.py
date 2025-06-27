@@ -135,7 +135,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
-    def test_llama_text_generation_with_coreml_8bit(self):
+    def test_llama_text_generation_with_coreml_4bit(self):
         import coremltools as ct
 
         model_id = "NousResearch/Llama-3.2-1B"
