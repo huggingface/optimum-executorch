@@ -103,7 +103,7 @@ def export_to_executorch_with_coreml(
                 "dtype": "int4",
                 "granularity": "per_block",
                 "block_size": 32,
-            }
+            },
         }
         if quant_recipe is not None and quant_recipe not in valid_quant_recipes:
             raise ValueError(f"Invalid quant recipe {quant_recipe}, must be one of {valid_quant_recipes.keys()}")
