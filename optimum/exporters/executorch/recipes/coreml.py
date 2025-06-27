@@ -76,7 +76,7 @@ def export_to_executorch_with_coreml(
         ]
         for k in kwargs:
             if k not in valid_kwargs:
-                raise ValueError(f"Invalid keyword argument {k} for CoreML recipe")
+                raise ValueError(f"Invalid keyword argument {k} for CoreML recipe. Valid arguments are {valid_kwargs}")
 
         compute_unit = kwargs.get("compute_unit", ct.ComputeUnit.ALL)
         minimum_deployment_target = kwargs.get("minimum_deployment_target", ct.target.iOS15)
@@ -92,12 +92,22 @@ def export_to_executorch_with_coreml(
 
         op_linear_quantizer_config = None
         quant_recipe = kwargs.get("quant_recipe", None)
-        if quant_recipe == "weight_only:8bit:per_channel":
-            op_linear_quantizer_config = {
+        valid_quant_recipes = {
+            "8bit": {
                 "mode": "linear_symmetric",
                 "dtype": "int8",
                 "granularity": "per_channel",
+            },
+            "4bit": {
+                "mode": "linear_symmetric",
+                "dtype": "int4",
+                "granularity": "per_block",
+                "block_size": 32,
             }
+        }
+        if quant_recipe not in valid_quant_recipes:
+            raise ValueError(f"Invalid quant recipe {quant_recipe}, must be one of {valid_quant_recipes.keys()}")
+        op_linear_quantizer_config = valid_quant_recipes.get(quant_recipe, None)
 
         et_progs = {}
         backend_config_dict = {}

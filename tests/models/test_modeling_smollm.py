@@ -240,8 +240,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe="coreml",
             recipe_kwargs={
                 "compute_precision": ct.precision.FLOAT32,
+                # In ET 0.7 we can set take_over_mutable_buffer to True
                 "take_over_mutable_buffer": False,
-                "quant_recipe": "weight_only:8bit:per_channel",
+                "minimum_deployment_target": ct.target.iOS18,
+                "quant_recipe": "8bit",
             },
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
