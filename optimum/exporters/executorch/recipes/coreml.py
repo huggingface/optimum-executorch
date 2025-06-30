@@ -66,6 +66,18 @@ def export_to_executorch_with_coreml(
         metadata=None,
         **kwargs,
     ) -> Dict[str, ExecutorchProgram]:
+        valid_kwargs = [
+            "compute_unit",
+            "minimum_deployment_target",
+            "compute_precision",
+            "model_type",
+            "take_over_mutable_buffer",
+            "quant_recipe",
+        ]
+        for k in kwargs:
+            if k not in valid_kwargs:
+                raise ValueError(f"Invalid keyword argument {k} for CoreML recipe. Valid arguments are {valid_kwargs}")
+
         compute_unit = kwargs.get("compute_unit", ct.ComputeUnit.ALL)
         minimum_deployment_target = kwargs.get("minimum_deployment_target", ct.target.iOS15)
         compute_precision = kwargs.get("compute_precision", ct.precision.FLOAT16)
@@ -74,7 +86,28 @@ def export_to_executorch_with_coreml(
             "model": CoreMLBackend.MODEL_TYPE.MODEL,
             "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
         }[model_type]
-        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
+        take_over_mutable_buffer = kwargs.get(
+            "take_over_mutable_buffer", (minimum_deployment_target >= ct.target.iOS18)
+        )
+
+        op_linear_quantizer_config = None
+        quant_recipe = kwargs.get("quant_recipe", None)
+        valid_quant_recipes = {
+            "8bit": {
+                "mode": "linear_symmetric",
+                "dtype": "int8",
+                "granularity": "per_channel",
+            },
+            "4bit": {
+                "mode": "linear_symmetric",
+                "dtype": "int4",
+                "granularity": "per_block",
+                "block_size": 32,
+            },
+        }
+        if quant_recipe is not None and quant_recipe not in valid_quant_recipes:
+            raise ValueError(f"Invalid quant recipe {quant_recipe}, must be one of {valid_quant_recipes.keys()}")
+        op_linear_quantizer_config = valid_quant_recipes.get(quant_recipe, None)
 
         et_progs = {}
         backend_config_dict = {}
@@ -85,18 +118,24 @@ def export_to_executorch_with_coreml(
                 exported_program,
                 partitioner=[
                     CoreMLPartitioner(
+                        # Do not delegate embedding because it leads to a compression conflict
+                        skip_ops_for_coreml_delegation=[
+                            "aten.embedding.default",
+                        ],
                         compile_specs=CoreMLBackend.generate_compile_specs(
                             compute_unit=compute_unit,
                             minimum_deployment_target=minimum_deployment_target,
                             compute_precision=compute_precision,
                             model_type=model_type,
+                            op_linear_quantizer_config=op_linear_quantizer_config,
                         ),
                         take_over_mutable_buffer=take_over_mutable_buffer,
                     )
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    _skip_dim_order=False,
+                    # In ET 0.7, we can set _skip_dim_order=False
+                    _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
             ).to_executorch(
