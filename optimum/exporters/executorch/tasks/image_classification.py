@@ -39,4 +39,4 @@ def load_image_classification_model(model_name_or_path: str, **kwargs) -> Vision
     """
 
     eager_model = AutoModelForImageClassification.from_pretrained(model_name_or_path, **kwargs).to("cpu").eval()
-    return VisionEncoderExportableModule(eager_model)
+    return VisionEncoderExportableModule(eager_model, model_name_or_path)
