@@ -160,6 +160,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
 - [Phi4](https://huggingface.co/microsoft/Phi-4-mini-instruct): `Phi-4-mini-instruct` and its variants
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
+- [Smollm3](https://huggingface.co/HuggingFaceTB/SmolLM3-3B): 🤗 `SmolLM3-3B` and its variants
 #### Encoder-decoder models
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
