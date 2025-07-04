@@ -96,7 +96,7 @@ optimum-cli export executorch \
 ```
 Explore the various export options by running the command: `optimum-cli export executorch --help`
 
-#### Step 2: Load and run inference
+#### Step 2: Validate the Exported Model on Host Using the Python API
 Use the exported model for text generation:
 ```python
 from optimum.executorch import ExecuTorchModelForCausalLM
@@ -114,6 +114,9 @@ generated_text = model.text_generation(
 )
 print(generated_text)
 ```
+
+#### Step 3: Run inference on-device
+To perform on-device inference, you can use ExecuTorch’s sample runner or the example iOS/Android applications. For detailed instructions, refer to the [ExecuTorch Sample Runner guide](https://github.com/pytorch/executorch/blob/main/examples/models/qwen3/README.md#example-run).
 
 ## ⚙️ Supported Optimizations
 
