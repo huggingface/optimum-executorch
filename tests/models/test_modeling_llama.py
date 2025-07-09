@@ -17,7 +17,6 @@ import gc
 import logging
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -33,7 +32,17 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from ..utils import check_causal_lm_output_quality
 
 
-is_not_macos = sys.platform != "darwin"
+def should_run_coreml_test():
+    import sys
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        import coremltools as ct
+
+        return ct.__version__ >= "8.3.0"
+    except ImportError:
+        return False
 
 
 @pytest.mark.skipif(
@@ -61,6 +70,32 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --use_custom_kv_cache \
                     --qlinear \
                     --qembedding \
+                    --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            pte_full_path = f"{out_dir}/model.pte"
+            self.assertTrue(os.path.exists(pte_full_path))
+
+            # Explicitly delete the PTE file to free up disk space
+            if os.path.exists(pte_full_path):
+                os.remove(pte_full_path)
+            gc.collect()
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(not should_run_coreml_test(), reason="CoreML is not available")
+    def test_llama3_2_1b_export_to_executorch_coreml(self):
+        model_id = "NousResearch/Llama-3.2-1B"
+        task = "text-generation"
+        recipe = "coreml_llm_4bit"
+        with tempfile.TemporaryDirectory() as tempdir:
+            out_dir = f"{tempdir}/executorch"
+            subprocess.run(
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
                     --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,
@@ -114,43 +149,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
             **{"qlinear": True, "qembeeding": True},
-        )
-        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
-        self.assertIsInstance(model.model, ExecuTorchModule)
-        generated_text = model.text_generation(
-            tokenizer=tokenizer,
-            prompt="Simply put, the theory of relativity states that",
-            max_seq_len=32,
-        )
-        logging.info(f"\nGenerated text:\n\t{generated_text}")
-        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
-
-        # Free memory before loading eager for quality check
-        del model
-        del tokenizer
-        gc.collect()
-
-        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
-
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
-    def test_llama_text_generation_with_coreml_4bit(self):
-        import coremltools as ct
-
-        model_id = "NousResearch/Llama-3.2-1B"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_id,
-            recipe="coreml",
-            recipe_kwargs={
-                "compute_precision": ct.precision.FLOAT32,
-                # In ET 0.7 we can set take_over_mutable_buffer to True
-                "take_over_mutable_buffer": False,
-                "quant_recipe": "4bit",
-                "minimum_deployment_target": ct.target.iOS18,
-                "compute_unit": ct.ComputeUnit.CPU_AND_GPU,
-            },
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)

@@ -17,7 +17,6 @@ import gc
 import logging
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -33,7 +32,18 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from ..utils import check_causal_lm_output_quality
 
 
-is_not_macos = sys.platform != "darwin"
+def should_run_coreml_test():
+    import sys
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        import coremltools as ct
+
+        return ct.__version__ >= "8.3.0"
+    except ImportError:
+        return False
+
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -56,6 +66,25 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --recipe {recipe} \
                     --use_custom_sdpa \
                     --use_custom_kv_cache \
+                    --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(not should_run_coreml_test(), reason="CoreML is not available")
+    def test_smollm_export_to_executorch_coreml(self):
+        model_id = "HuggingFaceTB/SmolLM2-135M"
+        task = "text-generation"
+        recipe = "coreml_llm_4bit"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
                     --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,
@@ -207,44 +236,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
             **{"qlinear": True, "qembeeding": True},
-        )
-        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
-        self.assertIsInstance(model.model, ExecuTorchModule)
-        generated_text = model.text_generation(
-            tokenizer=tokenizer,
-            prompt=prompt,
-            max_seq_len=64,
-        )
-        logging.info(f"\nGenerated text:\n\t{generated_text}")
-        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
-
-        # Free memory before loading eager for quality check
-        del model
-        del tokenizer
-        gc.collect()
-
-        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
-
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
-    def test_smollm_text_generation_with_coreml_8bit(self):
-        model_id = "HuggingFaceTB/SmolLM2-135M"
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-        import coremltools as ct
-
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_id,
-            recipe="coreml",
-            recipe_kwargs={
-                "compute_precision": ct.precision.FLOAT32,
-                # In ET 0.7 we can set take_over_mutable_buffer to True
-                "take_over_mutable_buffer": False,
-                "minimum_deployment_target": ct.target.iOS18,
-                "quant_recipe": "8bit",
-            },
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)

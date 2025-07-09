@@ -15,7 +15,6 @@
 
 import os
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -30,7 +29,17 @@ from optimum.executorch import ExecuTorchModelForImageClassification
 from ..utils import check_close_recursively
 
 
-is_not_macos = sys.platform != "darwin"
+def should_run_coreml_test():
+    import sys
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        import coremltools as ct
+
+        return ct.__version__ >= "8.3.0"
+    except ImportError:
+        return False
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -43,6 +52,21 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model_id = "google/vit-base-patch16-224"
         task = "image-classification"
         recipe = "xnnpack"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(not should_run_coreml_test(), reason="CoreML is not available")
+    def test_vit_export_to_executorch_coreml(self):
+        model_id = "google/vit-base-patch16-224"
+        task = "image-classification"
+        recipe = "coreml_fp16"
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
                 f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
@@ -78,8 +102,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
-    def test_vit_image_classification_coreml_fp32_cpu(self):
+    @pytest.mark.skipif(not should_run_coreml_test(), reason="CoreML is not available")
+    def test_vit_image_classification_coreml_fp32(self):
         model_id = "google/vit-base-patch16-224"
 
         config = AutoConfig.from_pretrained(model_id)
@@ -90,12 +114,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         # Test fetching and lowering the model to ExecuTorch
-        import coremltools as ct
-
         et_model = ExecuTorchModelForImageClassification.from_pretrained(
             model_id=model_id,
-            recipe="coreml",
-            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_unit": ct.ComputeUnit.CPU_ONLY},
+            recipe="coreml_fp32",
         )
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
@@ -107,3 +128,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Compare with eager outputs
         self.assertTrue(check_close_recursively(eager_output.logits, et_output))
+
+
+if __name__ == "__main__":
+    unittest.main()

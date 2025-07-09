@@ -34,8 +34,7 @@ from ..integrations import (
 from ..recipe_registry import register_recipe
 
 
-@register_recipe("coreml")
-def export_to_executorch_with_coreml(
+def _export_to_executorch(
     model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule],
     **kwargs,
 ):
@@ -73,6 +72,7 @@ def export_to_executorch_with_coreml(
             "model_type",
             "take_over_mutable_buffer",
             "quant_recipe",
+            "op_linear_quantizer_config",
         ]
         for k in kwargs:
             if k not in valid_kwargs:
@@ -90,24 +90,7 @@ def export_to_executorch_with_coreml(
             "take_over_mutable_buffer", (minimum_deployment_target >= ct.target.iOS18)
         )
 
-        op_linear_quantizer_config = None
-        quant_recipe = kwargs.get("quant_recipe", None)
-        valid_quant_recipes = {
-            "8bit": {
-                "mode": "linear_symmetric",
-                "dtype": "int8",
-                "granularity": "per_channel",
-            },
-            "4bit": {
-                "mode": "linear_symmetric",
-                "dtype": "int4",
-                "granularity": "per_block",
-                "block_size": 32,
-            },
-        }
-        if quant_recipe is not None and quant_recipe not in valid_quant_recipes:
-            raise ValueError(f"Invalid quant recipe {quant_recipe}, must be one of {valid_quant_recipes.keys()}")
-        op_linear_quantizer_config = valid_quant_recipes.get(quant_recipe, None)
+        op_linear_quantizer_config = kwargs.get("op_linear_quantizer_config", None)
 
         et_progs = {}
         backend_config_dict = {}
@@ -153,3 +136,81 @@ def export_to_executorch_with_coreml(
 
     exported_progs = model.export()
     return _lower_to_executorch(exported_progs, model.metadata, **kwargs)
+
+
+# Register recipes
+COREML_LLM_4_BIT = "coreml_llm_4bit"
+COREML_FP16_8BIT = "coreml_fp16_8bit"
+COREML_FP32 = "coreml_fp32"
+COREML_FP16 = "coreml_fp16"
+
+
+def _recipe_kwargs(recipe_name: str):
+    import coremltools as ct
+
+    recipe_to_kwargs = {
+        COREML_LLM_4_BIT: {
+            "compute_precision": ct.precision.FLOAT32,
+            "compute_unit": ct.ComputeUnit.CPU_AND_GPU,
+            "minimum_deployment_target": ct.target.iOS18,
+            "op_linear_quantizer_config": {
+                "mode": "linear_symmetric",
+                "dtype": "int4",
+                "granularity": "per_block",
+                "block_size": 32,
+            },
+        },
+        COREML_FP16_8BIT: {
+            "compute_precision": ct.precision.FLOAT16,
+            "minimum_deployment_target": ct.target.iOS18,
+            "op_linear_quantizer_config": {
+                "mode": "linear_symmetric",
+                "dtype": "int8",
+                "granularity": "per_channel",
+            },
+        },
+        COREML_FP32: {
+            "compute_precision": ct.precision.FLOAT32,
+            # "minimum_deployment_target": ct.target.iOS18,
+            "compute_unit": ct.ComputeUnit.CPU_ONLY,
+        },
+        COREML_FP16: {
+            "compute_precision": ct.precision.FLOAT16,
+            "minimum_deployment_target": ct.target.iOS18,
+        },
+    }
+    if recipe_name not in recipe_to_kwargs:
+        raise ValueError(f"Invalid recipe name {recipe_name}")
+    return recipe_to_kwargs[recipe_name]
+
+
+@register_recipe(COREML_LLM_4_BIT)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_LLM_4_BIT),
+    )
+
+
+@register_recipe(COREML_FP16_8BIT)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_FP16_8BIT),
+    )
+
+
+@register_recipe(COREML_FP32)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_FP32),
+    )
+
+
+@register_recipe(COREML_FP16)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_FP16),
+    )
