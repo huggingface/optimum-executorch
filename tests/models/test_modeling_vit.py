@@ -128,7 +128,3 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Compare with eager outputs
         self.assertTrue(check_close_recursively(eager_output.logits, et_output))
-
-
-if __name__ == "__main__":
-    unittest.main()
