@@ -68,6 +68,9 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         # that function to avoid the data-dependent control flow.
         config.rope_scaling["type"] = "default"
 
+    if hasattr(config, "use_cache") and config.use_cache is False:
+        config.use_cache = True
+
     eager_model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
         device_map=device,
