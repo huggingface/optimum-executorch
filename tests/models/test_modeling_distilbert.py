@@ -45,14 +45,12 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
-    @slow
-    @pytest.mark.run_slow
-    def test_distilbert_fill_mask(self):
+    def _helper_distilbert_fill_mask(self, recipe: str):
         model_id = "distilbert/distilbert-base-uncased"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Test fetching and lowering the model to ExecuTorch
-        model = ExecuTorchModelForMaskedLM.from_pretrained(model_id=model_id, recipe="xnnpack")
+        model = ExecuTorchModelForMaskedLM.from_pretrained(model_id=model_id, recipe=recipe)
         self.assertIsInstance(model, ExecuTorchModelForMaskedLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -72,3 +70,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             any(word in predicted_masks for word in ["capital", "center", "heart", "birthplace"]),
             f"Exported model predictions {predicted_masks} don't contain any of the most common expected words",
         )
+
+    @slow
+    @pytest.mark.run_slow
+    def test_distilbert_fill_mask(self):
+        self._helper_distilbert_fill_mask(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_distilbert_fill_mask_portable(self):
+        self._helper_distilbert_fill_mask(recipe="portable")

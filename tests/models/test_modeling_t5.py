@@ -46,12 +46,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/encoder.pte"))
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/decoder.pte"))
 
-    @slow
-    @pytest.mark.run_slow
-    def test_t5_translation(self):
+    def _helper_t5_translation(self, recipe: str):
         model_id = "google/flan-t5-small"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe="xnnpack")
+        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
 
         self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
         self.assertTrue(hasattr(model, "encoder"))
@@ -70,10 +68,19 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_t5_summarization(self):
+    def test_t5_translation(self):
+        self._helper_t5_translation(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_t5_translation_portable(self):
+        self._helper_t5_translation(recipe="portable")
+
+    def _helper_t5_summarization(self, recipe: str):
         model_id = "google-t5/t5-small"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe="xnnpack")
+        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
 
         self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
         self.assertTrue(hasattr(model, "encoder"))
@@ -114,3 +121,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         expected_text = 'a year later, she got married again in westchester county, new york. she was married to a different man, but only 18 days after that marriage. she is facing two criminal counts of "offering a false instrument"'
         logging.info(f"\nInput text:\n\t{article}\nGenerated text:\n\t{generated_text}")
         self.assertEqual(generated_text, expected_text)
+
+    @slow
+    @pytest.mark.run_slow
+    def test_t5_summarization(self):
+        self._helper_t5_summarization(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_t5_summarization_portable(self):
+        self._helper_t5_summarization(recipe="portable")

@@ -127,3 +127,27 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_llama_text_generation_portable(self):
+        model_id = "NousResearch/Llama-3.2-1B"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt="Simply put, the theory of relativity states that",
+            max_seq_len=32,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))

@@ -90,3 +90,22 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             max_seq_len=21,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_gemma_text_generation_portable(self):
+        # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
+        # model_id = "google/gemma-2b"
+        model_id = "weqweasdas/RM-Gemma-2B"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt="Hello I am doing",
+            max_seq_len=21,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")

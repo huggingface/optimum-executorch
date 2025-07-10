@@ -79,17 +79,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 os.remove(pte_full_path)
             gc.collect()
 
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    def test_gemma3_text_generation(self):
+    def _helper_gemma3_text_generation(self, recipe: str):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
         model_id = "unsloth/gemma-3-1b-it"
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_id,
-            recipe="xnnpack",
-        )
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe=recipe)
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -108,6 +102,19 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    def test_gemma3_text_generation(self):
+        self._helper_gemma3_text_generation(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    def test_gemma3_text_generation_portable(self):
+        self._helper_gemma3_text_generation(recipe="portable")
 
     @slow
     @pytest.mark.run_slow
