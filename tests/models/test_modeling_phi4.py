@@ -167,3 +167,30 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     generated_tokens,
                 )
             )
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_phi4_text_generation_portable(self):
+        model_id = "microsoft/Phi-4-mini-instruct"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt="My favourite condiment is ",
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+
+        if not is_ci:
+            generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+            # Free memory before loading eager for quality check
+            del model
+            del tokenizer
+            gc.collect()
+
+            self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
