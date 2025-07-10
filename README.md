@@ -10,7 +10,7 @@
 
 </div>
 
-## 🚀 Overview
+## 📋 Overview
 
 Optimum ExecuTorch enables efficient deployment of transformer models using Meta's ExecuTorch framework. It provides:
 - 🔄 Easy conversion of Hugging Face models to ExecuTorch format
@@ -96,7 +96,7 @@ optimum-cli export executorch \
 ```
 Explore the various export options by running the command: `optimum-cli export executorch --help`
 
-#### Step 2: Load and run inference
+#### Step 2: Validate the Exported Model on Host Using the Python API
 Use the exported model for text generation:
 ```python
 from optimum.executorch import ExecuTorchModelForCausalLM
@@ -115,7 +115,10 @@ generated_text = model.text_generation(
 print(generated_text)
 ```
 
-## Supported Optimizations
+#### Step 3: Run inference on-device
+To perform on-device inference, you can use ExecuTorch’s sample runner or the example iOS/Android applications. For detailed instructions, refer to the [ExecuTorch Sample Runner guide](https://github.com/pytorch/executorch/blob/main/examples/models/qwen3/README.md#example-run).
+
+## ⚙️ Supported Optimizations
 
 ### Custom Operators
 Supported using [**custom SDPA**](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) with Hugging Face Transformers, boosting performance by **3x** compared to default SDPA, based on tests with `HuggingFaceTB/SmolLM2-135M`.
@@ -130,10 +133,12 @@ For a comprehensive overview of all backends supported by ExecuTorch, please ref
 ### Quantization
 We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (aka `8da4w`), as well as int8 channelwise embedding quantization.
 
-🚀 Stay tuned as more optimizations and performance enhancements are coming soon!
+### Batch Prefill
+
+Batch prefill is supported now, improving the time to first generated token 20x faster by allowing prompt tokens to be processed simultaneously.
 
 
-## Supported Models
+## 🤗 Supported Models
 
 The following models have been successfully tested with Executorch. For details on the specific optimizations supported and how to use them for each model, please consult their respective test files in the [`tests/models/`](https://github.com/huggingface/optimum-executorch/tree/main/tests/models) directory.
 
@@ -155,6 +160,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
 - [Phi4](https://huggingface.co/microsoft/Phi-4-mini-instruct): `Phi-4-mini-instruct` and its variants
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
+- [Smollm3](https://huggingface.co/HuggingFaceTB/SmolLM3-3B): 🤗 `SmolLM3-3B` and its variants
 #### Encoder-decoder models
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
@@ -175,6 +181,22 @@ We currently support a wide range of popular transformer models, including encod
 - [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
+
+## 🚀 Benchmarks on Mobile Devices
+
+The following benchmarks show **decode performance** (tokens/sec) across Android and iOS devices for popular LLMs with compact size.
+
+| Model | Samsung Galaxy S22 5G<br/>(Android 13) | Samsung Galaxy S22 Ultra 5G<br/>(Android 14) | iPhone 15<br/>(iOS 18.0) | iPhone 15 Plus<br/>(iOS 17.4.1) | iPhone 15 Pro<br/>(iOS 18.4.1) |
+|-------|:---:|:---:|:---:|:---:|:---:|
+| [**SmolLM2-135M**](https://tinyurl.com/25ud3th8) | 202.28 | 202.61 | 7.47 | 6.43 | 29.64 |
+| [**Qwen3-0.6B**](https://tinyurl.com/35946h8b) | 59.16 | 56.49 | 7.05 | 5.48 | 17.99 |
+| [**google/gemma-3-1b-it**](https://tinyurl.com/4d8pezpv) | 25.07 | 23.89 | 21.51 | 21.33 | 17.8 |
+| [**Llama-3.2-1B**](https://tinyurl.com/bddjewau) | 44.91 | 37.39 | 11.04 | 8.93 | 25.78 |
+| [**OLMo-1B**](https://tinyurl.com/4runxesd) | 44.98 | 38.22 | 14.49 | 8.72 | 20.24 |
+
+> 📊 **View Live Benchmarks**: Explore comprehensive performance data, compare models across devices, and track performance trends over time on the [ExecuTorch Benchmark Dashboard](https://hud.pytorch.org/benchmark/llms?repoName=pytorch%2Fexecutorch).
+
+> Performance measured with custom SDPA, KV-cache optimization, and 8da4w quantization. Results may vary based on device conditions and prompt characteristics.
 
 
 ## 🛠️ Advanced Usage

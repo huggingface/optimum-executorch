@@ -42,16 +42,14 @@ def save_config_to_constant_methods(
         "get_vocab_size": getattr(config, "vocab_size", None),
         "get_max_batch_size": 1,
         "get_max_seq_len": getattr(config, "max_position_embeddings", None),
+        "use_kv_cache": getattr(generation_config, "use_cache", None),
+        "sliding_window": getattr(config, "sliding_window", None),
         "decoder_start_token_id": getattr(config, "decoder_start_token_id", None),
         "use_sdpa_with_kv_cache": "custom_sdpa" in config._attn_implementation,
     }
 
     # Safely access fields from generation_config if it exists
     if generation_config is not None:
-        # Get use_cache with default value
-        use_cache = getattr(generation_config, "use_cache", None)
-        metadata["use_kv_cache"] = use_cache
-
         # Check for cache_config and its attributes
         cache_config = getattr(generation_config, "cache_config", None)
         if cache_config is not None:

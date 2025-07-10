@@ -17,7 +17,7 @@ import logging
 import torch
 import torchao
 from packaging.version import parse
-from transformers import AutoModelForCausalLM, GenerationConfig
+from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
 
 from ..integrations import CausalLMExportableModule
 from ..task_registry import register_task
@@ -58,8 +58,18 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     use_custom_kv_cache = kwargs.get("use_custom_kv_cache", False)
     attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
+    use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
     max_length = kwargs.get("max_length", 2048)
-    config = kwargs.get("config", None)
+    config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
+
+    if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
+        # the data-dependent control flow in _longrope_frequency_update. Alternatively, users should rewrite
+        # that function to avoid the data-dependent control flow.
+        config.rope_scaling["type"] = "default"
+
+    if hasattr(config, "use_cache") and config.use_cache is False:
+        config.use_cache = True
 
     eager_model = AutoModelForCausalLM.from_pretrained(
         model_name_or_path,
@@ -126,4 +136,4 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
 
         unwrap_tensor_subclass(eager_model)
 
-    return CausalLMExportableModule(eager_model, use_custom_kv_cache)
+    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
