@@ -96,7 +96,7 @@ def _export_to_executorch(
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
             exported_program = exported_program.run_decompositions({})
-            logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
+            print(f"\nExported program for {pte_name}.pte: {exported_program}")
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
                 partitioner=[
@@ -124,12 +124,12 @@ def _export_to_executorch(
             ).to_executorch(
                 config=ExecutorchBackendConfig(**backend_config_dict),
             )
-            logging.debug(
+            print(
                 f"\nExecuTorch program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}"
             )
             delegation_info = get_delegation_info(et_progs[pte_name].exported_program().graph_module)
-            logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
-            logging.debug(
+            print(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
+            print(
                 f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
             )
         return et_progs
