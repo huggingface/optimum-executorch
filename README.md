@@ -181,6 +181,7 @@ We currently support a wide range of popular transformer models, including encod
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
 
+
 ## 🚀 Benchmarks on Mobile Devices
 
 The following benchmarks show **decode performance** (tokens/sec) across Android and iOS devices for popular LLMs with compact size.
