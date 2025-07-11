@@ -61,6 +61,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
+    disable_dynamic_shapes = kwargs.get("disable_dynamic_shapes", False)
 
     if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
@@ -136,4 +137,4 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
 
         unwrap_tensor_subclass(eager_model)
 
-    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
+    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa, disable_dynamic_shapes)

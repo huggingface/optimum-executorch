@@ -34,8 +34,7 @@ from ..integrations import (
 from ..recipe_registry import register_recipe
 
 
-@register_recipe("coreml")
-def export_to_executorch_with_coreml(
+def _export_to_executorch(
     model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule],
     **kwargs,
 ):
@@ -66,6 +65,19 @@ def export_to_executorch_with_coreml(
         metadata=None,
         **kwargs,
     ) -> Dict[str, ExecutorchProgram]:
+        valid_kwargs = [
+            "compute_unit",
+            "minimum_deployment_target",
+            "compute_precision",
+            "model_type",
+            "take_over_mutable_buffer",
+            "quant_recipe",
+            "op_linear_quantizer_config",
+        ]
+        for k in kwargs:
+            if k not in valid_kwargs:
+                raise ValueError(f"Invalid keyword argument {k} for CoreML recipe. Valid arguments are {valid_kwargs}")
+
         compute_unit = kwargs.get("compute_unit", ct.ComputeUnit.ALL)
         minimum_deployment_target = kwargs.get("minimum_deployment_target", ct.target.iOS15)
         compute_precision = kwargs.get("compute_precision", ct.precision.FLOAT16)
@@ -74,7 +86,11 @@ def export_to_executorch_with_coreml(
             "model": CoreMLBackend.MODEL_TYPE.MODEL,
             "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
         }[model_type]
-        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
+        take_over_mutable_buffer = kwargs.get(
+            "take_over_mutable_buffer", (minimum_deployment_target >= ct.target.iOS18)
+        )
+
+        op_linear_quantizer_config = kwargs.get("op_linear_quantizer_config", None)
 
         et_progs = {}
         backend_config_dict = {}
@@ -85,18 +101,24 @@ def export_to_executorch_with_coreml(
                 exported_program,
                 partitioner=[
                     CoreMLPartitioner(
+                        # Do not delegate embedding because it leads to a compression conflict
+                        skip_ops_for_coreml_delegation=[
+                            "aten.embedding.default",
+                        ],
                         compile_specs=CoreMLBackend.generate_compile_specs(
                             compute_unit=compute_unit,
                             minimum_deployment_target=minimum_deployment_target,
                             compute_precision=compute_precision,
                             model_type=model_type,
+                            op_linear_quantizer_config=op_linear_quantizer_config,
                         ),
                         take_over_mutable_buffer=take_over_mutable_buffer,
                     )
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    _skip_dim_order=False,
+                    # In ET 0.7, we can set _skip_dim_order=False
+                    _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
             ).to_executorch(
@@ -114,3 +136,81 @@ def export_to_executorch_with_coreml(
 
     exported_progs = model.export()
     return _lower_to_executorch(exported_progs, model.metadata, **kwargs)
+
+
+# Register recipes
+COREML_LLM_4_BIT = "coreml_llm_4bit"
+COREML_FP16_8BIT = "coreml_fp16_8bit"
+COREML_FP32 = "coreml_fp32"
+COREML_FP16 = "coreml_fp16"
+
+
+def _recipe_kwargs(recipe_name: str):
+    import coremltools as ct
+
+    recipe_to_kwargs = {
+        COREML_LLM_4_BIT: {
+            "compute_precision": ct.precision.FLOAT32,
+            "compute_unit": ct.ComputeUnit.CPU_AND_GPU,
+            "minimum_deployment_target": ct.target.iOS18,
+            "op_linear_quantizer_config": {
+                "mode": "linear_symmetric",
+                "dtype": "int4",
+                "granularity": "per_block",
+                "block_size": 32,
+            },
+        },
+        COREML_FP16_8BIT: {
+            "compute_precision": ct.precision.FLOAT16,
+            "minimum_deployment_target": ct.target.iOS18,
+            "op_linear_quantizer_config": {
+                "mode": "linear_symmetric",
+                "dtype": "int8",
+                "granularity": "per_channel",
+            },
+        },
+        COREML_FP32: {
+            "compute_precision": ct.precision.FLOAT32,
+            # "minimum_deployment_target": ct.target.iOS18,
+            "compute_unit": ct.ComputeUnit.CPU_ONLY,
+        },
+        COREML_FP16: {
+            "compute_precision": ct.precision.FLOAT16,
+            "minimum_deployment_target": ct.target.iOS18,
+        },
+    }
+    if recipe_name not in recipe_to_kwargs:
+        raise ValueError(f"Invalid recipe name {recipe_name}")
+    return recipe_to_kwargs[recipe_name]
+
+
+@register_recipe(COREML_LLM_4_BIT)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_LLM_4_BIT),
+    )
+
+
+@register_recipe(COREML_FP16_8BIT)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_FP16_8BIT),
+    )
+
+
+@register_recipe(COREML_FP32)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_FP32),
+    )
+
+
+@register_recipe(COREML_FP16)
+def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    return _export_to_executorch(
+        exported_programs,
+        **_recipe_kwargs(COREML_FP16),
+    )
