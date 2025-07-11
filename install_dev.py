@@ -8,7 +8,7 @@ def install_torch_nightly_deps():
     EXECUTORCH_NIGHTLY_VERSION = "dev20250629"
     TORCHAO_NIGHTLY_VERSION = "dev20250620"
     # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/install_requirements.py#L74
-    TORCH_NIGHTLY_VERSION = "dev20250601"
+    TORCH_NIGHTLY_VERSION = "dev20250625"
     subprocess.check_call(
         [
             sys.executable,
