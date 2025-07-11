@@ -32,6 +32,19 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 from ..utils import check_causal_lm_output_quality
 
 
+def should_run_coreml_test():
+    import sys
+
+    if sys.platform != "darwin":
+        return False
+    try:
+        import coremltools as ct
+
+        return ct.__version__ >= "8.3.0"
+    except ImportError:
+        return False
+
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -53,6 +66,26 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --recipe {recipe} \
                     --use_custom_sdpa \
                     --use_custom_kv_cache \
+                    --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(not should_run_coreml_test(), reason="CoreML is not available")
+    def test_smollm_export_to_executorch_coreml(self):
+        model_id = "HuggingFaceTB/SmolLM2-135M"
+        task = "text-generation"
+        recipe = "coreml_llm_4bit"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
+                    --disable_dynamic_shapes \
                     --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,

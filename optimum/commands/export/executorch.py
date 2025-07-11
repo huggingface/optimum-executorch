@@ -79,6 +79,12 @@ def parse_args_executorch(parser):
         action="store_true",
         help="Quantization config for embedding. If set, defaults to int8 channelwise.",
     )
+    required_group.add_argument(
+        "--disable_dynamic_shapes",
+        required=False,
+        action="store_true",
+        help="Disable dynamic shapes in export",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -100,6 +106,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
+        if self.args.disable_dynamic_shapes:
+            kwargs["disable_dynamic_shapes"] = self.args.disable_dynamic_shapes
 
         main_export(
             model_name_or_path=self.args.model,
