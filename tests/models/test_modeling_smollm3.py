@@ -31,8 +31,8 @@ from ..utils import check_causal_lm_output_quality
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
 @pytest.mark.skipif(
@@ -76,6 +76,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
     def test_smollm3_text_generation_portable(self):
         model_id = "HuggingFaceTB/SmolLM3-3B"
         prompt = "Give me a brief explanation of gravity in simple terms."

@@ -18,6 +18,7 @@ import logging
 import os
 import unittest
 
+import executorch
 import pytest
 import torchao
 import transformers
@@ -75,6 +76,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(
+        parse(executorch.version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
     def test_qwen3_embedding_text_generation_portable(self):
         model_id = "Qwen/Qwen3-Embedding-0.6B"
         prompt = "Explain gravity"

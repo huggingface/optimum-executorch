@@ -19,9 +19,11 @@ import subprocess
 import tempfile
 import unittest
 
+import executorch
 import pytest
 from datasets import load_dataset
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -91,5 +93,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(
+        parse(executorch.version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
     def test_whisper_transcription_portable(self):
         self._helper_whisper_transcription(recipe="portable")

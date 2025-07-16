@@ -21,6 +21,7 @@ import sys
 import tempfile
 import unittest
 
+import executorch
 import pytest
 import torchao
 import transformers
@@ -100,6 +101,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.run_slow
     @pytest.mark.portable
     @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    @pytest.mark.skipif(
+        parse(executorch.version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
     def test_qwen3_text_generation_portable(self):
         self._helper_qwen3_text_generation(recipe="portable")
 

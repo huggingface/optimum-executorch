@@ -32,8 +32,8 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 
 from ..utils import check_causal_lm_output_quality
 
-
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
 @pytest.mark.skipif(
@@ -109,6 +109,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
     def test_gemma2_text_generation_portable(self):
         # TODO: Switch to use google/gemma-2-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "google/gemma-2-2b"

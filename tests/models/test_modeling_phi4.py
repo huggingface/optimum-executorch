@@ -34,7 +34,7 @@ from ..utils import check_causal_lm_output_quality
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -171,6 +171,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
     def test_phi4_text_generation_portable(self):
         model_id = "microsoft/Phi-4-mini-instruct"
         model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")

@@ -29,6 +29,8 @@ from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 
+is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+
 
 @pytest.mark.skipif(
     parse(torchao.__version__) < parse("0.11.0.dev0"),
@@ -94,6 +96,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
     def test_gemma_text_generation_portable(self):
         # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "google/gemma-2b"
