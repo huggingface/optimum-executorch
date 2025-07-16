@@ -136,5 +136,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
+    @pytest.mark.skipif(
+        parse(version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
     def test_t5_summarization_portable(self):
         self._helper_t5_summarization(recipe="portable")
