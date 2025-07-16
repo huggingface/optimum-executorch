@@ -29,6 +29,7 @@ from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 
+
 is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
 
 

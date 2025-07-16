@@ -32,6 +32,7 @@ from optimum.executorch import ExecuTorchModelForCausalLM
 
 from ..utils import check_causal_lm_output_quality
 
+
 is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
 is_linux_ci = sys.platform.startswith("linux") and is_ci
 

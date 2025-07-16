@@ -18,10 +18,10 @@ import logging
 import os
 import unittest
 
-import executorch
 import pytest
 import torchao
 import transformers
+from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoTokenizer
@@ -77,7 +77,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.run_slow
     @pytest.mark.portable
     @pytest.mark.skipif(
-        parse(executorch.version.__version__) < parse("0.7.0"),
+        parse(version.__version__) < parse("0.7.0"),
         reason="Fixed on executorch >= 0.7.0",
     )
     def test_qwen3_embedding_text_generation_portable(self):
