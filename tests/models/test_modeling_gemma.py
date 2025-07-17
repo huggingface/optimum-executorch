@@ -30,6 +30,9 @@ from transformers.testing_utils import slow
 from optimum.executorch import ExecuTorchModelForCausalLM
 
 
+is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+
+
 @pytest.mark.skipif(
     parse(torchao.__version__) < parse("0.11.0.dev0"),
     reason="Only available on torchao >= 0.11.0.dev0",
@@ -80,6 +83,26 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             attn_implementation="custom_sdpa",
             **kwargs,
         )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt="Hello I am doing",
+            max_seq_len=21,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
+    def test_gemma_text_generation_portable(self):
+        # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
+        # model_id = "google/gemma-2b"
+        model_id = "weqweasdas/RM-Gemma-2B"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 

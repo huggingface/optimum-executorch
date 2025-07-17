@@ -48,13 +48,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        version.__version__ < "0.6.0",
-        reason="The fix in XNNPACK is cherry-picked in 0.6.0 release",
-    )
-    def test_efficientnet_image_classification(self):
+    def _helper_efficientnet_image_classification(self, recipe: str):
         model_id = "google/efficientnet-b0"  # ~5.3M params
 
         config = AutoConfig.from_pretrained(model_id)
@@ -65,7 +59,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         # Test fetching and lowering the model to ExecuTorch
-        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="xnnpack")
+        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe=recipe)
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
 
@@ -76,3 +70,18 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Compare with eager outputs
         self.assertTrue(check_close_recursively(eager_output.logits, et_output))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        version.__version__ < "0.6.0",
+        reason="The fix in XNNPACK is cherry-picked in 0.6.0 release",
+    )
+    def test_efficientnet_image_classification(self):
+        self._helper_efficientnet_image_classification(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_efficientnet_image_classification_portable(self):
+        self._helper_efficientnet_image_classification(recipe="portable")

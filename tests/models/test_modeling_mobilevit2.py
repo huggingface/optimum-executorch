@@ -47,9 +47,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
-    @slow
-    @pytest.mark.run_slow
-    def test_mobilevit2_image_classification(self):
+    def _helper_mobilevit2_image_classification(self, recipe: str):
         model_id = "apple/mobilevitv2-1.0-imagenet1k-256"
 
         config = AutoConfig.from_pretrained(model_id)
@@ -60,7 +58,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         # Test fetching and lowering the model to ExecuTorch
-        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe="xnnpack")
+        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe=recipe)
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
 
@@ -71,3 +69,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Compare with eager outputs
         self.assertTrue(check_close_recursively(eager_output.logits, et_output, atol=1e-3, rtol=1e-3))
+
+    @slow
+    @pytest.mark.run_slow
+    def test_mobilevit2_image_classification(self):
+        self._helper_mobilevit2_image_classification(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    def test_mobilevit2_image_classification_portable(self):
+        self._helper_mobilevit2_image_classification(recipe="portable")

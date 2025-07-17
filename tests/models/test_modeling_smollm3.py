@@ -31,8 +31,8 @@ from ..utils import check_causal_lm_output_quality
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
 @pytest.mark.skipif(
@@ -56,6 +56,32 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_kv_cache=True,
             **{"qlinear": True, "qembeeding": True},
         )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
+    def test_smollm3_text_generation_portable(self):
+        model_id = "HuggingFaceTB/SmolLM3-3B"
+        prompt = "Give me a brief explanation of gravity in simple terms."
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
         generated_text = model.text_generation(

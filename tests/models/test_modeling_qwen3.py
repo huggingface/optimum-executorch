@@ -24,6 +24,7 @@ import unittest
 import pytest
 import torchao
 import transformers
+from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoTokenizer
@@ -68,12 +69,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    def test_qwen3_text_generation(self):
+    def _helper_qwen3_text_generation(self, recipe: str):
         model_id = "Qwen/Qwen3-0.6B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe=recipe)
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -92,6 +90,23 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    def test_qwen3_text_generation(self):
+        self._helper_qwen3_text_generation(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    @pytest.mark.skipif(
+        parse(version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
+    def test_qwen3_text_generation_portable(self):
+        self._helper_qwen3_text_generation(recipe="portable")
 
     @slow
     @pytest.mark.run_slow

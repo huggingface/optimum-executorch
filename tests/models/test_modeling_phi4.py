@@ -34,7 +34,7 @@ from ..utils import check_causal_lm_output_quality
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
-is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
+is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
@@ -167,3 +167,31 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     generated_tokens,
                 )
             )
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(is_ci, reason="Too big for CI runners")
+    def test_phi4_text_generation_portable(self):
+        model_id = "microsoft/Phi-4-mini-instruct"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt="My favourite condiment is ",
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+
+        if not is_ci:
+            generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+            # Free memory before loading eager for quality check
+            del model
+            del tokenizer
+            gc.collect()
+
+            self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))

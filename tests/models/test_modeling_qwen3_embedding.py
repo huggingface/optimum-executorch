@@ -21,6 +21,7 @@ import unittest
 import pytest
 import torchao
 import transformers
+from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoTokenizer
@@ -55,6 +56,35 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_kv_cache=True,
             **{"qlinear": True, "qembeeding": True},
         )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(
+        parse(version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
+    def test_qwen3_embedding_text_generation_portable(self):
+        model_id = "Qwen/Qwen3-Embedding-0.6B"
+        prompt = "Explain gravity"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
         generated_text = model.text_generation(

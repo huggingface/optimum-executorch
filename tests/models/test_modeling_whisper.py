@@ -21,7 +21,9 @@ import unittest
 
 import pytest
 from datasets import load_dataset
+from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -55,12 +57,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/encoder.pte"))
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/decoder.pte"))
 
-    @slow
-    @pytest.mark.run_slow
-    def test_whisper_transcription(self):
+    def _helper_whisper_transcription(self, recipe: str):
         model_id = "openai/whisper-tiny"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(model_id, recipe="xnnpack")
+        model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(model_id, recipe=recipe)
         processor = AutoProcessor.from_pretrained(model_id)
 
         self.assertIsInstance(model, ExecuTorchModelForSpeechSeq2Seq)
@@ -84,3 +84,18 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             f"\nExpected transcription:\n\t{expected_text}\nGenerated transcription:\n\t{generated_transcription}"
         )
         self.assertEqual(generated_transcription, expected_text)
+
+    @slow
+    @pytest.mark.run_slow
+    def test_whisper_transcription(self):
+        self._helper_whisper_transcription(recipe="xnnpack")
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.portable
+    @pytest.mark.skipif(
+        parse(version.__version__) < parse("0.7.0"),
+        reason="Fixed on executorch >= 0.7.0",
+    )
+    def test_whisper_transcription_portable(self):
+        self._helper_whisper_transcription(recipe="portable")
