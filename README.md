@@ -151,16 +151,26 @@ We currently support a wide range of popular transformer models, including encod
 - [Eurobert](https://huggingface.co/EuroBERT/EuroBERT-210m): `EuroBERT-210m` and its variants
 - [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
 #### Decoder-only models
+- [Codegen](https://huggingface.co/Salesforce/codegen-350M-mono): Salesforce's `codegen-350M-mono` and its variants
 - [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
 - [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
-- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants *(requires `transformers >= 4.52.0`)*
+- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants
+- [Glm](https://huggingface.co/THUDM/glm-edge-1.5b-chat): `glm-edge-1.5b` and its variants
+- [Gpt2](https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m): `gpt-sw3-126m` and its variants
+- [GptJ](https://huggingface.co/Milos/slovak-gpt-j-405M): `gpt-j-405M` and its variants
+- [GptNeoX](https://huggingface.co/EleutherAI/pythia-14m): EleutherAI's `pythia-14m` and its variants
+- [GptNeoXJapanese](https://huggingface.co/abeja/gpt-neox-japanese-2.7b): `gpt-neox-japanese-2.7b` and its variants
+- [Granite](https://huggingface.co/ibm-granite/granite-3.3-2b-instruct): `granite-3.3-2b-instruct` and its variants
 - [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B): `Llama-3.2-1B` and its variants
+- [Mistral](https://huggingface.co/ministral/Ministral-3b-instruct): `Ministral-3b-instruct` and its variants
 - [Qwen2](https://huggingface.co/Qwen/Qwen2.5-0.5B): `Qwen2.5-0.5B` and its variants
 - [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B): `Qwen3-0.6B`, `Qwen3-Embedding-0.6B` and other variants
 - [Olmo](https://huggingface.co/allenai/OLMo-1B-hf): `OLMo-1B-hf` and its variants
+- [Phi](https://huggingface.co/johnsnowlabs/JSL-MedPhi2-2.7B): `JSL-MedPhi2-2.7B` and its variants
 - [Phi4](https://huggingface.co/microsoft/Phi-4-mini-instruct): `Phi-4-mini-instruct` and its variants
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
 - [Smollm3](https://huggingface.co/HuggingFaceTB/SmolLM3-3B): 🤗 `SmolLM3-3B` and its variants
+- [Starcoder2](https://huggingface.co/bigcode/starcoder2-3b): `starcoder2-3b` and its variants
 #### Encoder-decoder models
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
 
