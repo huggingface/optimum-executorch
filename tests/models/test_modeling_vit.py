@@ -72,6 +72,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             et_output = et_model.forward(pixel_values)
 
         # Compare with eager outputs
+        print("EAGER", eager_output.logits)
+        print("ET OUTPUT", et_output)
         self.assertTrue(check_close_recursively(eager_output.logits, et_output))
 
     @slow
@@ -84,10 +86,13 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.portable
     def test_vit_image_classification_portable(self):
         self._helper_vit_image_classification(recipe="portable")
-
-    @slow
-    @pytest.mark.run_slow
-    @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
+    
+    # # @slow
+    # # @pytest.mark.run_slow
+    # # @pytest.mark.skipif(is_not_macos, reason="Only runs on MacOS")
+    # def test_vit_image_classification_coreml_fp32_cpu(self):
+    #     self._helper_vit_image_classification(recipe="coreml_fp32_cpu")
+    
     def test_vit_image_classification_coreml_fp32_cpu(self):
         model_id = "google/vit-base-patch16-224"
 
@@ -103,8 +108,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         et_model = ExecuTorchModelForImageClassification.from_pretrained(
             model_id=model_id,
-            recipe="coreml",
-            recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY},
+            recipe="coreml_fp32_cpu",
+            # recipe_kwargs={"compute_precision": ct.precision.FLOAT32, "compute_units": ct.ComputeUnit.CPU_ONLY},
         )
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)

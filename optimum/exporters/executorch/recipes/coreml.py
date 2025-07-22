@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, Union
+from typing import Dict, Union, Any
 
 from tabulate import tabulate
 from torch.export import ExportedProgram
@@ -34,8 +34,7 @@ from ..integrations import (
 from ..recipe_registry import register_recipe
 
 
-@register_recipe("coreml")
-def export_to_executorch_with_coreml(
+def _export_to_executorch(
     model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule],
     **kwargs,
 ):
@@ -63,19 +62,11 @@ def export_to_executorch_with_coreml(
 
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
-        metadata=None,
-        **kwargs,
+        metadata,
+        compute_unit,
+        minimum_deployment_target,
+        compute_precision,
     ) -> Dict[str, ExecutorchProgram]:
-        compute_unit = kwargs.get("compute_unit", ct.ComputeUnit.ALL)
-        minimum_deployment_target = kwargs.get("minimum_deployment_target", ct.target.iOS15)
-        compute_precision = kwargs.get("compute_precision", ct.precision.FLOAT16)
-        model_type = kwargs.get("model_type", "model")
-        model_type = {
-            "model": CoreMLBackend.MODEL_TYPE.MODEL,
-            "modelc": CoreMLBackend.MODEL_TYPE.COMPILED_MODEL,
-        }[model_type]
-        take_over_mutable_buffer = kwargs.get("take_over_mutable_buffer", True)
-
         et_progs = {}
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
@@ -89,13 +80,14 @@ def export_to_executorch_with_coreml(
                             compute_unit=compute_unit,
                             minimum_deployment_target=minimum_deployment_target,
                             compute_precision=compute_precision,
-                            model_type=model_type,
+                            model_type=CoreMLBackend.MODEL_TYPE.MODEL,
                         ),
-                        take_over_mutable_buffer=take_over_mutable_buffer,
+                        take_over_mutable_buffer=(minimum_deployment_target >= ct.target.iOS18),
                     )
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
+                    # In ET 0.7, we can set _skip_dim_order=False
                     _skip_dim_order=False,
                 ),
                 constant_methods=metadata,
@@ -114,3 +106,39 @@ def export_to_executorch_with_coreml(
 
     exported_progs = model.export()
     return _lower_to_executorch(exported_progs, model.metadata, **kwargs)
+
+
+def get_recipe_kwargs(dtype: str, compute_unit: str) -> Dict[str, Any]:
+    import coremltools as ct
+    compute_precision = {
+        "fp16": ct.precision.FLOAT16,
+        "fp32": ct.precision.FLOAT32,
+    }[dtype]
+
+    compute_unit = {
+        "cpu": ct.ComputeUnit.CPU_ONLY,
+        "gpu": ct.ComputeUnit.CPU_AND_GPU,
+        "ne": ct.ComputeUnit.CPU_AND_NE,
+        "all": ct.ComputeUnit.ALL,
+    }[compute_unit]
+
+    recipe_kwargs = {
+        "compute_precision": compute_precision,
+        "compute_unit": compute_unit,
+        "minimum_deployment_target": ct.target.iOS18,
+    }
+    return recipe_kwargs
+
+
+for dtype, compute_unit in zip(["fp32", "fp16"], ["cpu", "cpu", "ne", "all"]):
+    recipe_name = f"coreml_{dtype}"
+    if compute_unit != "all":
+        recipe_name += f"_{compute_unit}"
+
+    recipe_kwargs = get_recipe_kwargs(dtype=dtype, compute_unit=compute_unit)
+    @register_recipe(recipe_name)
+    def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+        return _export_to_executorch(
+            exported_programs,
+            **recipe_kwargs,
+        )
