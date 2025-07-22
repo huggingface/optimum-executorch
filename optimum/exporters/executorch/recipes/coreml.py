@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, Union, Any
+from itertools import product
+from typing import Any, Dict, Union
 
 from tabulate import tabulate
 from torch.export import ExportedProgram
@@ -70,7 +71,6 @@ def _export_to_executorch(
         et_progs = {}
         backend_config_dict = {}
         for pte_name, exported_program in exported_programs.items():
-            exported_program = exported_program.run_decompositions({})
             logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
             et_progs[pte_name] = to_edge_transform_and_lower(
                 exported_program,
@@ -87,7 +87,7 @@ def _export_to_executorch(
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    # In ET 0.7, we can set _skip_dim_order=False
+                    # In ET 0.7, we can set _skip_dim_order=True
                     _skip_dim_order=False,
                 ),
                 constant_methods=metadata,
@@ -108,8 +108,9 @@ def _export_to_executorch(
     return _lower_to_executorch(exported_progs, model.metadata, **kwargs)
 
 
-def get_recipe_kwargs(dtype: str, compute_unit: str) -> Dict[str, Any]:
+def _get_recipe_kwargs(dtype: str, compute_unit: str) -> Dict[str, Any]:
     import coremltools as ct
+
     compute_precision = {
         "fp16": ct.precision.FLOAT16,
         "fp32": ct.precision.FLOAT32,
@@ -130,15 +131,21 @@ def get_recipe_kwargs(dtype: str, compute_unit: str) -> Dict[str, Any]:
     return recipe_kwargs
 
 
-for dtype, compute_unit in zip(["fp32", "fp16"], ["cpu", "cpu", "ne", "all"]):
-    recipe_name = f"coreml_{dtype}"
-    if compute_unit != "all":
-        recipe_name += f"_{compute_unit}"
-
-    recipe_kwargs = get_recipe_kwargs(dtype=dtype, compute_unit=compute_unit)
+def _make_recipe(recipe_name, recipe_kwargs):
     @register_recipe(recipe_name)
-    def _(exported_programs: Dict[str, ExportedProgram], **kwargs):
+    def recipe_fn(exported_programs: Dict[str, ExportedProgram], **kwargs):
         return _export_to_executorch(
             exported_programs,
             **recipe_kwargs,
         )
+
+    return recipe_fn
+
+
+# Register recipes for CoreML backend
+for dtype, compute_unit in product(["fp32", "fp16"], ["cpu", "cpu", "ne", "all"]):
+    recipe_name = f"coreml_{dtype}"
+    if compute_unit != "all":
+        recipe_name += f"_{compute_unit}"
+    recipe_kwargs = _get_recipe_kwargs(dtype=dtype, compute_unit=compute_unit)
+    _make_recipe(recipe_name, recipe_kwargs)
