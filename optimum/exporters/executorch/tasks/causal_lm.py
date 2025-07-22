@@ -112,11 +112,18 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
 
         if qembedding_config:
             logging.info("Quantizing embedding layers.")
+            embedding_config = {
+                "4w": IntxWeightOnlyConfig(
+                    weight_dtype=torch.int4,
+                    granularity=PerGroup(32),
+                ),
+                "8w": IntxWeightOnlyConfig(
+                    weight_dtype=torch.int8,
+                    granularity=PerAxis(0),
+                ),
+            }[qembedding_config]
+
             # TODO: Should switch to `AOPerModuleConfig` once fix for tied weights is available.
-            embedding_config = IntxWeightOnlyConfig(
-                weight_dtype=torch.int8,
-                granularity=PerAxis(0),
-            )
             quantize_(
                 eager_model,
                 embedding_config,
@@ -125,10 +132,20 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
 
         if qlinear_config:
             logging.info("Quantizing linear layers.")
-            linear_config = Int8DynamicActivationIntxWeightConfig(
-                weight_dtype=torch.int4,
-                weight_granularity=PerGroup(32),
-            )
+            linear_config = {
+                "8da4w": Int8DynamicActivationIntxWeightConfig(
+                    weight_dtype=torch.int4,
+                    weight_granularity=PerGroup(32),
+                ),
+                "4w": IntxWeightOnlyConfig(
+                    weight_dtype=torch.int4,
+                    granularity=PerGroup(32),
+                ),
+                "8w": IntxWeightOnlyConfig(
+                    weight_dtype=torch.int8,
+                    granularity=PerAxis(0),
+                ),
+            }[qlinear_config]
             quantize_(
                 eager_model,
                 linear_config,

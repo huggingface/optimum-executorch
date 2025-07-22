@@ -55,8 +55,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --recipe {recipe} \
                     --use_custom_sdpa \
                     --use_custom_kv_cache \
-                    --qlinear \
-                    --qembedding \
+                    --qlinear 8da4w \
+                    --qembedding 8w \
                     --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,
@@ -74,7 +74,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_llama_text_generation_with_custom_sdpa_8da4w_8we(self):
         # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
         model_id = "NousResearch/Llama-3.2-1B"
-        kwargs = {"qlinear": True, "qembedding": True}
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
