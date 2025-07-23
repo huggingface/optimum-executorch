@@ -28,19 +28,22 @@ from executorch.exir import (
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
+from executorch.exir.passes import MemoryPlanningPass
+
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
 from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
     Seq2SeqLMExportableModule,
+    ImageTextToTextExportableModule
 )
 from ..recipe_registry import register_recipe
 
 
 @register_recipe("xnnpack")
 def export_to_executorch_with_xnnpack(
-    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule],
+    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, ImageTextToTextExportableModule],
     **kwargs,
 ):
     """
@@ -49,7 +52,7 @@ def export_to_executorch_with_xnnpack(
     This function also write metadata required by the ExecuTorch runtime to the model.
 
     Args:
-        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule]):
+        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, ImageTextToTextExportableModule]):
             The PyTorch model to be exported to ExecuTorch.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.
@@ -64,36 +67,35 @@ def export_to_executorch_with_xnnpack(
         exported_programs: Dict[str, ExportedProgram],
         metadata=None,
     ) -> Dict[str, ExecutorchProgram]:
-        et_progs = {}
         backend_config_dict = {
             "extract_delegate_segments": True,
+            "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
         }
         if parse(executorch_version.__version__).base_version > "0.6.0":
             backend_config_dict["do_quant_fusion_and_const_prop"] = True
-
-        for pte_name, exported_program in exported_programs.items():
-            logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
-            et_progs[pte_name] = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=[XnnpackPartitioner()],
-                compile_config=EdgeCompileConfig(
-                    _check_ir_validity=False,
-                    _skip_dim_order=True,
-                ),
-                constant_methods=metadata,
-                transform_passes=[RemovePaddingIdxEmbeddingPass()],
-            ).to_executorch(
-                config=ExecutorchBackendConfig(**backend_config_dict),
-            )
-            logging.debug(
-                f"\nExecuTorch program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}"
-            )
-            delegation_info = get_delegation_info(et_progs[pte_name].exported_program().graph_module)
-            logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
-            logging.debug(
-                f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
-            )
-        return et_progs
+        pte_name = model.model.config.model_type
+        logging.debug(f"\nExported program for {pte_name}.pte: {exported_programs}")
+        et_prog = to_edge_transform_and_lower(
+            exported_programs,
+            partitioner=XnnpackPartitioner(),
+            compile_config=EdgeCompileConfig(
+                _check_ir_validity=False,
+                _skip_dim_order=True,
+            ),
+            constant_methods=metadata,
+            transform_passes=[RemovePaddingIdxEmbeddingPass()],
+        ).to_executorch(
+            config=ExecutorchBackendConfig(**backend_config_dict),
+        )
+        logging.debug(
+            f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program().graph_module}"
+        )
+        delegation_info = get_delegation_info(et_prog.exported_program().graph_module)
+        logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
+        logging.debug(
+            f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
+        )
+        return {pte_name: et_prog}
 
     exported_progs = model.export()
 

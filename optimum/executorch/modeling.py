@@ -31,6 +31,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
+    PreTrainedProcessor,
     PreTrainedTokenizer,
     add_start_docstrings,
 )
@@ -1098,3 +1099,109 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         self.stats.on_inference_end()
         self.stats.print_report()
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+
+class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
+    """
+    ExecuTorch model with an image-text-to-text causal language modeling head for inference using the ExecuTorch Runtime.
+
+    Although the auto_model_class is `AutoModelForCausalLM` same as `ExecuTorchModelForCausalLM`, this model is specifically designed for
+    image-text-to-text tasks. This class provides an interface for loading, running, and generating outputs from a vision-language model
+    optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models
+    compatible with ExecuTorch runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForCausalLM`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+    """
+
+    auto_model_class = AutoModelForCausalLM
+
+    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+        super().__init__(models, config)
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+        
+        # Make sure config contains vision_config and text_config, otherwise raise an error
+        if not hasattr(config, "vision_config") or not hasattr(config, "text_config"):
+            raise ValueError(
+                "The configuration must contain 'vision_config' and 'text_config' attributes for image-text-to-text task."
+            )
+        metadata = self.model.method_names()
+        logging.debug(f"Load all static methods: {metadata}")
+        if "use_kv_cache" in metadata:
+            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
+        if "get_max_seq_len" in metadata:
+            self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
+        if "get_max_batch_size" in metadata:
+            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
+        if "get_dtype" in metadata:
+            self.dtype = self.model.run_method("get_dtype")[0]
+        if "get_bos_id" in metadata:
+            self.bos_token_id = self.model.run_method("get_bos_id")[0]
+        for key in ("get_eos_id", "get_eos_ids"):
+            if key in metadata:
+                self.eos_token_ids = self.model.run_method(key)
+                break
+        if "get_vocab_size" in metadata:
+            self.vocab_size = self.model.run_method("get_vocab_size")[0]
+        if "use_sdpa_with_kv_cache" in metadata:
+            self.use_sdpa_with_kv_cache = self.model.run_method("use_sdpa_with_kv_cache")[0]
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor],
+        pixel_values: Optional[torch.FloatTensor],
+        inputs_embeds: Optional[torch.FloatTensor],
+        cache_position: torch.LongTensor,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the model, which is compatible with the ExecuTorch runtime for LLM. Here we are assuming pixel_values only represent 1 image.
+
+        Args:
+            input_ids (`torch.Tensor`): Tensor representing current input token id to the model.
+            pixel_values (`torch.Tensor`): Tensor representing image input to the model.
+            inputs_embeds (`torch.Tensor`): Tensor representing input embeddings to the model.
+            cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
+
+        Returns:
+            torch.Tensor: Logits output from the model.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        self.stats.on_model_execution_start()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.model.run_method("text_embeddings")(input_ids)
+
+        if pixel_values is not None:
+            image_features = self.model.run_method("vision_embeddings")(pixel_values) if pixel_values is not None else None
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.model.run_method("text_embeddings")(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            else:
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        logits = self.model.run_method("decoder")(
+            (inputs_embeds, cache_position)
+        )[0]
+        self.stats.on_model_execution_end()
+        return logits
+    
+    def generate(
+        self,
+        tokenizer: "PretrainedTokenizer",
+        input_ids: torch.LongTensor,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        max_new_tokens: int = 100,
+    ):
+        
+        # Prefill
+        
