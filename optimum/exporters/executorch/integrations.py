@@ -182,7 +182,7 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
 
     def export(
         self,
-        input_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.Tensor] = None,
         dynamic_shapes: Optional[dict] = None,
         strict: Optional[bool] = None,
@@ -211,28 +211,48 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
                 "TorchExportableModuleForImageTextLM.export Can't infer device from the model. Set to CPU by default."
             )
         seq_length = 3
-        example_input_embeds = (
-            input_embeds if input_embeds is not None else torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=torch.float, device=model_device)
-        )
-        example_cache_position = (
-            cache_position if cache_position is not None else torch.arange(seq_length, dtype=torch.long, device=model_device)
-        )
+
         if dynamic_shapes is None:
             seq_len_dim = torch.export.Dim("seq_length_dim", max=seq_length)
             dynamic_shapes = {
-                "input_embeds": {1: seq_len_dim},
+                "inputs_embeds": {1: seq_len_dim},
                 "cache_position": {0: seq_len_dim},
             }
 
         exported_program = torch.export.export(
             self.model,
             args=(),
-            kwargs={"cache_position": example_cache_position, "inputs_embeds": example_input_embeds},
+            kwargs={"cache_position": cache_position, "inputs_embeds": inputs_embeds},
             dynamic_shapes=dynamic_shapes,
             strict=strict if strict is not None else True,
         )
         return exported_program
     
+
+class ImageEncoderExportableModule(torch.nn.Module):
+    """
+    A wrapper module designed to make a vision encoder-only model exportable with `torch.export`.
+    This module ensures that the exported model is compatible with ExecuTorch.
+    """
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, pixel_values):
+        """
+        Projects the last hidden state from the vision model into language model space.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
+        vision_outputs = self.model.vision_tower(pixel_values=pixel_values).last_hidden_state
+        image_features = self.model.multi_modal_projector(vision_outputs)
+        return image_features
+
 
 class ImageTextToTextExportableModule(torch.nn.Module):
     """
@@ -336,10 +356,6 @@ class ImageTextToTextExportableModule(torch.nn.Module):
     def export(
         self,
     ) -> Dict[str, ExportedProgram]:
-        inputs_embeds, cache_position, dynamic_shapes, strict = self._prepare_decoder_only_export_inputs()
-        logging.info(
-            f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
-        )
 
         exportable_module = TorchExportableModuleForImageTextLM(
             self.model,
@@ -361,6 +377,10 @@ class ImageTextToTextExportableModule(torch.nn.Module):
             )
 
         with torch.no_grad():
+            inputs_embeds, cache_position, dynamic_shapes, strict = self._prepare_decoder_only_export_inputs()
+            logging.info(
+                f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
+            )
             exported_program = exportable_module.export(inputs_embeds, cache_position, dynamic_shapes, strict)
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
@@ -379,29 +399,31 @@ class ImageTextToTextExportableModule(torch.nn.Module):
                 strict=strict,
             )
 
-        # Export token embeddings
-        input_ids, dynamic_shapes, strict = self._prepare_text_embedding_export_inputs()
-        logging.info(f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
+            # Export token embeddings
+            input_ids, dynamic_shapes, strict = self._prepare_text_embedding_export_inputs()
+            logging.info(f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
 
-        token_embeddings_exported_program = torch.export.export(
-            exportable_module.model.model.language_model.get_input_embeddings(),
-            args=(input_ids,),
-            kwargs={},
-            dynamic_shapes=dynamic_shapes,
-            strict=strict,
-        )
+            token_embeddings_exported_program = torch.export.export(
+                exportable_module.model.model.language_model.get_input_embeddings(),
+                args=(input_ids,),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
+            )
 
-        # Export vision embeddings
-        pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
-        logging.info(f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
-        vision_encoder = VisionEncoderExportableModule(exportable_module.model.model)
-        vision_embeddings_exported_program = torch.export.export(
-            vision_encoder,
-            args=(pixel_values,),
-            kwargs={},
-            dynamic_shapes=dynamic_shapes,
-            strict=strict,
-        )
+            # Export vision embeddings
+            pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
+            logging.info(f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
+            # Setting the _attn_implementation to "sdpa_without_vmap" for vision encoder
+            exportable_module.model.model.vision_tower.config._attn_implementation = "sdpa_without_vmap"
+            vision_encoder = ImageEncoderExportableModule(exportable_module.model.model)
+            vision_embeddings_exported_program = torch.export.export(
+                vision_encoder,
+                args=(pixel_values,),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
+            )
         return {
             "decoder": exported_program,
             "token_embeddings": token_embeddings_exported_program,
