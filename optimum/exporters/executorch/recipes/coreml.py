@@ -143,7 +143,7 @@ def _make_recipe(recipe_name, recipe_kwargs):
 
 
 # Register recipes for CoreML backend
-for dtype, compute_unit in product(["fp32", "fp16"], ["cpu", "cpu", "ne", "all"]):
+for dtype, compute_unit in product(["fp32", "fp16"], ["cpu", "gpu", "ne", "all"]):
     recipe_name = f"coreml_{dtype}"
     if compute_unit != "all":
         recipe_name += f"_{compute_unit}"
