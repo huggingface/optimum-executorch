@@ -87,8 +87,8 @@ def _export_to_executorch(
                 ],
                 compile_config=EdgeCompileConfig(
                     _check_ir_validity=False,
-                    # In ET 0.7, we can set _skip_dim_order=True
-                    _skip_dim_order=False,
+                    # In ET 0.7, we can set _skip_dim_order=False
+                    _skip_dim_order=True,
                 ),
                 constant_methods=metadata,
             ).to_executorch(
