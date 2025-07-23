@@ -22,15 +22,17 @@ import tempfile
 import unittest
 
 import pytest
+import torch
 import torchao
 import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoProcessor
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
 from optimum.utils.import_utils import is_transformers_version
+from optimum.exporters.executorch.tasks.image_text_to_text import load_image_text_to_text_model
 
 from ..utils import check_causal_lm_output_quality
 
@@ -267,3 +269,112 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
+    )
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    def test_gemma3_image_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we(self):
+
+        model_id = "google/gemma-3-4b-it"
+
+        module = load_image_text_to_text_model(
+            model_id,
+            use_custom_sdpa=True,
+            use_custom_kv_cache=True,
+            qlinear=True,
+            qembedding_config=True,
+        )
+
+        res = module.export()
+
+        # Generate
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        image_url = "https://llava-vl.github.io/static/images/view.jpg"
+        conversation = [
+                    {
+                        "role": "system",
+                        "content": [{"type": "text", "text": "You are a helpful assistant."}]
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image", "url": image_url},
+                            {
+                                "type": "text",
+                                "text": "What are the things I should be cautious about when I visit here?",
+                            },
+                        ],
+                    },
+                ]
+        processor = AutoProcessor.from_pretrained(model_id)
+        inputs = processor.apply_chat_template(
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True, 
+            return_tensors="pt",
+        )
+        image_indices = torch.where(inputs["input_ids"] == module.model.model.config.image_token_id)
+        prompt_before_image = inputs["input_ids"][:, :image_indices[1][0]]
+        prompt_after_image = inputs["input_ids"][:, image_indices[1][-1]+1:]
+
+        image_features = res["vision_embeddings"].module().forward(pixel_values=inputs["pixel_values"])
+
+        print(prompt_before_image.shape)
+
+        torch.arange(prompt_before_image.shape[1], device=inputs["input_ids"].device)
+
+        token_embeddings_before_image = res["token_embeddings"].module().forward(
+            input_ids=prompt_before_image)
+
+        token_embeddings_after_image = res["token_embeddings"].module().forward(
+            input_ids=prompt_after_image)
+
+        embeddings = torch.cat(
+            [
+                token_embeddings_before_image,
+                image_features,
+                token_embeddings_after_image,
+            ],
+            dim=1,
+        )
+
+        print(embeddings.shape)
+
+        # Prefill prompt embeddings
+        logits = res["decoder"].module().forward(
+            inputs_embeds=embeddings,
+            cache_position=torch.arange(embeddings.shape[1], dtype=torch.long),
+        )
+
+        token = torch.argmax(logits[:, -1, :])
+
+        tokens = [token.item()]
+
+        pos = embeddings.shape[1]
+
+        while pos < 350:
+            token_embedding = res["token_embeddings"].module().forward(
+                input_ids=token.unsqueeze(0).unsqueeze(0)
+            )
+            logits = res["decoder"].module().forward(
+                inputs_embeds=token_embedding,
+                cache_position=torch.tensor([pos], dtype=torch.long),
+            )
+            token = torch.argmax(logits[:, -1, :])
+            tokens.append(token.item())
+            pos += 1
+
+        output = tokenizer.decode(tokens, skip_special_tokens=True)
+        self.assertEqual(
+            output,
+            """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
+
+Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you should be cautious about, categorized for clarity:
+
+**1""",
+        )
