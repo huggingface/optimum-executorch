@@ -42,8 +42,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @slow
-    @pytest.mark.run_slow
+    # @slow
+    # @pytest.mark.run_slow
     def test_whisper_export_to_executorch(self):
         model_id = "openai/whisper-tiny"
         task = "automatic-speech-recognition"
@@ -56,11 +56,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/encoder.pte"))
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/decoder.pte"))
+            model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(f"{tempdir}/executorch")
+            self._test_whisper_transcription(model_id, model)
 
-    def _helper_whisper_transcription(self, recipe: str):
-        model_id = "openai/whisper-tiny"
+    def _test_whisper_transcription(self, model_id: str, model: ExecuTorchModelForSpeechSeq2Seq):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(model_id, recipe=recipe)
         processor = AutoProcessor.from_pretrained(model_id)
 
         self.assertIsInstance(model, ExecuTorchModelForSpeechSeq2Seq)
@@ -84,6 +84,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             f"\nExpected transcription:\n\t{expected_text}\nGenerated transcription:\n\t{generated_transcription}"
         )
         self.assertEqual(generated_transcription, expected_text)
+
+    def _helper_whisper_transcription(self, recipe: str):
+        model_id = "openai/whisper-tiny"
+        model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(model_id, recipe=recipe)
+        self._test_whisper_transcription(model_id, model)
 
     @slow
     @pytest.mark.run_slow

@@ -68,10 +68,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 check=True,
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+            model = ExecuTorchModelForCausalLM.from_pretrained(f"{tempdir}/executorch")
+            self._test_qwen3_text_generation(model_id, model)
 
-    def _helper_qwen3_text_generation(self, recipe: str):
-        model_id = "Qwen/Qwen3-0.6B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe=recipe)
+    def _test_qwen3_text_generation(self, model_id: str, model: ExecuTorchModelForCausalLM):
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -90,6 +90,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    def _helper_qwen3_text_generation(self, recipe: str):
+        model_id = "Qwen/Qwen3-0.6B"
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe=recipe)
+        self._test_qwen3_text_generation(model_id, model)
 
     @slow
     @pytest.mark.run_slow

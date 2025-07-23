@@ -337,20 +337,23 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 f"Could not infer whether the model was already converted or not to the ExecuTorch IR, keeping `export={export}`.\n{exception}"
             )
 
-        from_pretrained_method = cls._export if _export else cls._from_pretrained
-
-        models_dict = from_pretrained_method(
-            model_id=model_id,
-            config=config,
-            revision=revision,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            token=token,
-            subfolder=subfolder,
-            local_files_only=local_files_only,
-            trust_remote_code=trust_remote_code,
-            **kwargs,
-        )
+        if _export:
+            models_dict = cls._export(
+                model_id=model_id,
+                config=config,
+                revision=revision,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                token=token,
+                subfolder=subfolder,
+                local_files_only=local_files_only,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
+            )
+        else:
+            models_dict = {}
+            for pte_file in pte_files:
+                models_dict.update(cls._from_pretrained(model_id, file_name=pte_file.name, config=config))
 
         return cls(models_dict, config)
 
