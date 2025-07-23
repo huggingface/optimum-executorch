@@ -353,7 +353,20 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         else:
             models_dict = {}
             for pte_file in pte_files:
-                models_dict.update(cls._from_pretrained(model_id, file_name=pte_file.name, config=config))
+                models_dict.update(
+                    cls._from_pretrained(
+                        model_id,
+                        config=config,
+                        revision=revision,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        token=token,
+                        subfolder=subfolder,
+                        local_files_only=local_files_only,
+                        trust_remote_code=trust_remote_code,
+                        file_name=pte_file.name,
+                    )
+                )
 
         return cls(models_dict, config)
 
