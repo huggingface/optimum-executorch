@@ -71,22 +71,59 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True
 
-    eager_model = AutoModelForCausalLM.from_pretrained(
+    def _load_eager_pretrained(
         model_name_or_path,
-        device_map=device,
-        torch_dtype=dtype,
-        config=config,
-        attn_implementation=attn_implementation,
-        generation_config=GenerationConfig(
-            use_cache=True,
-            cache_implementation=cache_implementation,
-            max_length=max_length,
-            cache_config={
-                "batch_size": batch_size,
-                "max_cache_len": max_length,
-            },
-        ),
-    )
+        device,
+        dtype,
+        config,
+        attn_implementation,
+        cache_implementation,
+        batch_size,
+        max_length,
+    ):
+        eager_model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            device_map=device,
+            torch_dtype=dtype,
+            config=config,
+            attn_implementation=attn_implementation,
+            generation_config=GenerationConfig(
+                use_cache=True,
+                cache_implementation=cache_implementation,
+                max_length=max_length,
+                cache_config={
+                    "batch_size": batch_size,
+                    "max_cache_len": max_length,
+                },
+            ),
+        )
+        return eager_model
+
+    try:
+        eager_model = _load_eager_pretrained(
+            model_name_or_path,
+            device,
+            dtype,
+            config,
+            attn_implementation,
+            cache_implementation,
+            batch_size,
+            max_length,
+        )
+    except ValueError as e:
+        if "torch.nn.functional.scaled_dot_product_attention" in str(e):
+            logging.info("⚠ SDPA attention not supported, falling back to eager implementation")
+            attn_implementation = "eager"
+            eager_model = _load_eager_pretrained(
+                model_name_or_path,
+                device,
+                dtype,
+                config,
+                attn_implementation,
+                cache_implementation,
+                batch_size,
+                max_length,
+            )
 
     for param in eager_model.parameters():
         # Must disable gradient for quantized checkpoint
