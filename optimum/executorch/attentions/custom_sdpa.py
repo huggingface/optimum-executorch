@@ -59,7 +59,7 @@ def custom_sdpa_with_start_pos_forward(
         # Calculate the input pos from attention mask.
         # Branch out for float vs bool mask
         # assert attention_mask.dim() == 2, f"attention_mask must be a 2D matrix."
-        attention_mask = attention_mask.reshape(-1, max_seq_len)
+        attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1])
         first_row_mask = attention_mask[0, :]
         # [0, 0, 0, 0, -inf, -inf, -inf, -inf], start_pos = 3
         start_pos = torch.argmin(first_row_mask.to(torch.long)).item() - 1
