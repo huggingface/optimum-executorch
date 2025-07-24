@@ -501,8 +501,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         max_dim = min(max_seq_len, sliding_window) - 1
         seq_len_dim = torch.export.Dim("seq_length_dim", max=max_dim)
         dynamic_shapes = {
-            "input_ids": {1: seq_len_dim},
-        }
+            "input": {1: seq_len_dim},
+        }  # nn.embedding forward() here - https://github.com/pytorch/pytorch/blob/febf3c475e6fe369b41ef009f3598659a6df0911/torch/nn/modules/sparse.py#L15.
         strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
         return example_input_ids, dynamic_shapes, strict
 
@@ -563,6 +563,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             max_batch_size=1,
             max_cache_len=self.metadata.get("get_max_seq_len"),
         )
+        exported_programs = {}
+        
         self._register_attention_mask_for_4_53(exportable_module)
 
         if self.use_custom_kv_cache:
@@ -604,37 +606,50 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
             )
+            exported_programs["decoder"] = exported_program
 
-            # # 2. Export token embeddings
-            # input_ids, dynamic_shapes, strict = self._prepare_text_embedding_export_inputs()
-            # logging.info(f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
+            # 2. Export token embeddings
+            input_ids, dynamic_shapes, strict = self._prepare_text_embedding_export_inputs()
+            logging.info(f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
 
-            # token_embeddings_exported_program = torch.export.export(
-            #     exportable_module.model.model.language_model.get_input_embeddings(),
-            #     args=(input_ids,),
-            #     kwargs={},
-            #     dynamic_shapes=dynamic_shapes,
-            #     strict=strict,
-            # )
+            token_embeddings_exported_program = torch.export.export(
+                self.model.language_model.get_input_embeddings(),
+                args=(input_ids,),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
+            )
+            exported_programs["token_embeddings"] = token_embeddings_exported_program
 
-            # # 3. Export encoder embeddings
-            # pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
-            # logging.info(f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
-            # # Setting the _attn_implementation to "sdpa_without_vmap" for vision encoder
-            # exportable_module.model.model.vision_tower.config._attn_implementation = "sdpa_without_vmap"
-            # vision_encoder = ImageEncoderExportableModule(exportable_module.model.model)
-            # vision_embeddings_exported_program = torch.export.export(
-            #     vision_encoder,
-            #     args=(pixel_values,),
-            #     kwargs={},
-            #     dynamic_shapes=dynamic_shapes,
-            #     strict=strict,
-            # )
-        return {
-            "decoder": exported_program,
-            # "token_embeddings": token_embeddings_exported_program,
-            # "vision_embeddings": vision_embeddings_exported_program,
-        }
+            # 3. Export encoder.
+            if isinstance(model, VoxtralForConditionalGeneration):
+                audio_input, dynamic_shapes, strict = self._prepare_audio_embedding_export_inputs()
+                logging.info(f"Exporting audio embeddings using audio_input={audio_input.shape}, dynamic_shapes={dynamic_shapes}, strict={strict}")
+                self.model.audio_tower.config._attn_implementation = "sdpa_without_vmap"
+                audio_encoder = AudioEncoderExportableModule()
+                audio_encoder_exported_program = torch.export.export(
+                    audio_encoder,
+                    args=(audio_input,),
+                    dynamic_shapes=dynamic_shapes,
+                    strict=strict,
+                )
+                exported_programs["audio_encoder"] = audio_encoder_exported_program
+            elif isinstance(mode, Gemma3ForConditionalGeneration):
+                pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
+                logging.info(f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
+                # Setting the _attn_implementation to "sdpa_without_vmap" for vision encoder
+                exportable_module.model.model.vision_tower.config._attn_implementation = "sdpa_without_vmap"
+                vision_encoder = ImageEncoderExportableModule(exportable_module.model.model)
+                vision_embeddings_exported_program = torch.export.export(
+                    vision_encoder,
+                    args=(pixel_values,),
+                    kwargs={},
+                    dynamic_shapes=dynamic_shapes,
+                    strict=strict,
+                )
+                exported_programs["vision_encoder"] = vision_embeddings_exported_program
+
+        return exported_programs
     
 
 class CausalLMExportableModule(torch.nn.Module):

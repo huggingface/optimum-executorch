@@ -41,6 +41,8 @@ is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTION
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+logging.basicConfig(level=logging.INFO)
+
 
 @pytest.mark.skipif(
     is_transformers_version("<", "4.52.0.dev0"),
@@ -80,92 +82,87 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         res = module.export()
 
-        breakpoint()
-
         # Generate
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        image_url = "https://llava-vl.github.io/static/images/view.jpg"
         conversation = [
-                    {
-                        "role": "system",
-                        "content": [{"type": "text", "text": "You are a helpful assistant."}]
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "url": image_url},
-                            {
-                                "type": "text",
-                                "text": "What are the things I should be cautious about when I visit here?",
-                            },
-                        ],
-                    },
-                ]
+            {
+                "role": "user",
+                "content": [
+                    # {
+                    #     "type": "audio",
+                    #     "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    # },
+                    {"type": "text", "text": "What can you tell me about this audio?"},
+                ],
+            }
+        ]
         processor = AutoProcessor.from_pretrained(model_id)
         inputs = processor.apply_chat_template(
             conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True, 
-            return_tensors="pt",
-        )
-        image_indices = torch.where(inputs["input_ids"] == module.model.model.config.image_token_id)
-        prompt_before_image = inputs["input_ids"][:, :image_indices[1][0]]
-        prompt_after_image = inputs["input_ids"][:, image_indices[1][-1]+1:]
-
-        image_features = res["vision_embeddings"].module().forward(pixel_values=inputs["pixel_values"])
-
-        print(prompt_before_image.shape)
-
-        torch.arange(prompt_before_image.shape[1], device=inputs["input_ids"].device)
-
-        token_embeddings_before_image = res["token_embeddings"].module().forward(
-            input_ids=prompt_before_image)
-
-        token_embeddings_after_image = res["token_embeddings"].module().forward(
-            input_ids=prompt_after_image)
-
-        embeddings = torch.cat(
-            [
-                token_embeddings_before_image,
-                image_features,
-                token_embeddings_after_image,
-            ],
-            dim=1,
+            # add_generation_prompt=True,
+            # tokenize=True,
+            # return_dict=True, 
+            # return_tensors="pt",
         )
 
-        print(embeddings.shape)
+        # image_indices = torch.where(inputs["input_ids"] == module.model.model.config.image_token_id)
+        prompt_before_audio = inputs["input_ids"]
+        # prompt_after_image = inputs["input_ids"][:, image_indices[1][-1]+1:]
+
+        # image_features = res["vision_embeddings"].module().forward(pixel_values=inputs["pixel_values"])
+
+        # print(prompt_before_image.shape)
+
+        token_embeddings_before_audio = res["token_embeddings"].module().forward(
+            input=prompt_before_audio)
+
+        # token_embeddings_after_image = res["token_embeddings"].module().forward(
+        #     input_ids=prompt_after_image)
+
+        # embeddings = torch.cat(
+        #     [
+        #         token_embeddings_before_image,
+        #         image_features,
+        #         token_embeddings_after_image,
+        #     ],
+        #     dim=1,
+        # )
+
+        # print(embeddings.shape)
 
         # Prefill prompt embeddings
         logits = res["decoder"].module().forward(
-            inputs_embeds=embeddings,
-            cache_position=torch.arange(embeddings.shape[1], dtype=torch.long),
+            inputs_embeds=token_embeddings_before_audio,
+            cache_position=torch.arange(token_embeddings_before_audio.shape[1], dtype=torch.long),
         )
 
         token = torch.argmax(logits[:, -1, :])
 
         tokens = [token.item()]
+        print(tokenizer.decode([token.item()]), end="")
 
-        pos = embeddings.shape[1]
+        pos = token_embeddings_before_audio.shape[1]
 
         while pos < 350:
             token_embedding = res["token_embeddings"].module().forward(
-                input_ids=token.unsqueeze(0).unsqueeze(0)
+                input=token.unsqueeze(0).unsqueeze(0)
             )
             logits = res["decoder"].module().forward(
                 inputs_embeds=token_embedding,
                 cache_position=torch.tensor([pos], dtype=torch.long),
             )
             token = torch.argmax(logits[:, -1, :])
+            print(tokenizer.decode([token.item()]), end="")
             tokens.append(token.item())
             pos += 1
 
         output = tokenizer.decode(tokens, skip_special_tokens=True)
-        self.assertEqual(
-            output,
-            """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
+        breakpoint()
+#         self.assertEqual(
+#             output,
+#             """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
 
-Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you should be cautious about, categorized for clarity:
+# Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you should be cautious about, categorized for clarity:
 
-**1""",
-        )
+# **1""",
+#         )
