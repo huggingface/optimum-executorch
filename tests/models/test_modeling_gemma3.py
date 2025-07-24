@@ -30,7 +30,7 @@ from packaging.version import parse
 from transformers import AutoTokenizer, AutoProcessor
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForImageTextToTextCausalLM
 from optimum.utils.import_utils import is_transformers_version
 from optimum.exporters.executorch.tasks.image_text_to_text import load_image_text_to_text_model
 
@@ -281,15 +281,16 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         model_id = "google/gemma-3-4b-it"
 
-        module = load_image_text_to_text_model(
+        model = ExecuTorchModelForImageTextToTextCausalLM.from_pretrained(
             model_id,
+            recipe="xnnpack",
+            task="image-text-to-text",
+            export=True,
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
             qlinear=True,
             qembedding_config=True,
         )
-
-        res = module.export()
 
         # Generate
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -318,63 +319,15 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             return_dict=True, 
             return_tensors="pt",
         )
-        image_indices = torch.where(inputs["input_ids"] == module.model.model.config.image_token_id)
-        prompt_before_image = inputs["input_ids"][:, :image_indices[1][0]]
-        prompt_after_image = inputs["input_ids"][:, image_indices[1][-1]+1:]
-
-        image_features = res["vision_embeddings"].module().forward(pixel_values=inputs["pixel_values"])
-
-        print(prompt_before_image.shape)
-
-        torch.arange(prompt_before_image.shape[1], device=inputs["input_ids"].device)
-
-        token_embeddings_before_image = res["token_embeddings"].module().forward(
-            input_ids=prompt_before_image)
-
-        token_embeddings_after_image = res["token_embeddings"].module().forward(
-            input_ids=prompt_after_image)
-
-        embeddings = torch.cat(
-            [
-                token_embeddings_before_image,
-                image_features,
-                token_embeddings_after_image,
-            ],
-            dim=1,
+        output = model.generate(
+            AutoTokenizer.from_pretrained(model_id),
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
+            max_new_tokens=50,
         )
-
-        print(embeddings.shape)
-
-        # Prefill prompt embeddings
-        logits = res["decoder"].module().forward(
-            inputs_embeds=embeddings,
-            cache_position=torch.arange(embeddings.shape[1], dtype=torch.long),
-        )
-
-        token = torch.argmax(logits[:, -1, :])
-
-        tokens = [token.item()]
-
-        pos = embeddings.shape[1]
-
-        while pos < 350:
-            token_embedding = res["token_embeddings"].module().forward(
-                input_ids=token.unsqueeze(0).unsqueeze(0)
-            )
-            logits = res["decoder"].module().forward(
-                inputs_embeds=token_embedding,
-                cache_position=torch.tensor([pos], dtype=torch.long),
-            )
-            token = torch.argmax(logits[:, -1, :])
-            tokens.append(token.item())
-            pos += 1
-
-        output = tokenizer.decode(tokens, skip_special_tokens=True)
         self.assertEqual(
             output,
             """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
 
-Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you should be cautious about, categorized for clarity:
-
-**1""",
+Based on the picture, we're looking at a serene lake scene with mountains in the background, a wooden pier, and a generally calm appearance. However""",
         )

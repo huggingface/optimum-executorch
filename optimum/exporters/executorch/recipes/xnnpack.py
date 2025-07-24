@@ -77,7 +77,7 @@ def export_to_executorch_with_xnnpack(
         logging.debug(f"\nExported program for {pte_name}.pte: {exported_programs}")
         et_prog = to_edge_transform_and_lower(
             exported_programs,
-            partitioner=XnnpackPartitioner(),
+            partitioner=[XnnpackPartitioner()],
             compile_config=EdgeCompileConfig(
                 _check_ir_validity=False,
                 _skip_dim_order=True,
@@ -87,10 +87,7 @@ def export_to_executorch_with_xnnpack(
         ).to_executorch(
             config=ExecutorchBackendConfig(**backend_config_dict),
         )
-        logging.debug(
-            f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program().graph_module}"
-        )
-        delegation_info = get_delegation_info(et_prog.exported_program().graph_module)
+        delegation_info = get_delegation_info(et_prog.exported_program(list(exported_programs.keys())[0]).graph_module)
         logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
         logging.debug(
             f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"

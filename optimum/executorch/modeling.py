@@ -25,13 +25,13 @@ import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
     PretrainedConfig,
-    PreTrainedProcessor,
     PreTrainedTokenizer,
     add_start_docstrings,
 )
@@ -239,9 +239,12 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
     ) -> Dict[str, "ExecuTorchModule"]:
         task = kwargs.pop("task", None)
         if task is not None:
-            logger.warning(f"task was provided and set to {task} but not used, will be ignored")
-        inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class)
-        logging.info(f"Inferred task from model class: {inferred_task}")
+            logger.warning(f"task was provided and set to {task}")
+        elif hasattr(cls, "task"):
+            task = cls.task
+        else:
+            task = TasksManager.infer_task_from_model(cls.auto_model_class)
+            logging.info(f"Inferred task from model class: {task}")
 
         save_dir = TemporaryDirectory()
         save_dir_path = Path(save_dir.name)
@@ -250,7 +253,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         executorch_progs = main_export(
             model_name_or_path=model_id,
             output_dir=save_dir_path,
-            task=inferred_task,
+            task=task,
             recipe=recipe,
             config=config,
             subfolder=subfolder,
@@ -310,6 +313,8 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
             else:
                 model_dir = model_id
+                if not config:
+                    config = AutoConfig.from_pretrained(model_id)
 
             pte_files = find_files_matching_pattern(
                 model_dir,
@@ -1103,6 +1108,8 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForCausalLM
 
+    task = "image-text-to-text"
+
     def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
         super().__init__(models, config)
         if not hasattr(self, "model"):
@@ -1136,10 +1143,9 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor],
-        pixel_values: Optional[torch.FloatTensor],
-        inputs_embeds: Optional[torch.FloatTensor],
         cache_position: torch.LongTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         """
         Forward pass of the model, which is compatible with the ExecuTorch runtime for LLM. Here we are assuming pixel_values only represent 1 image.
@@ -1147,35 +1153,29 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
         Args:
             input_ids (`torch.Tensor`): Tensor representing current input token id to the model.
             pixel_values (`torch.Tensor`): Tensor representing image input to the model.
-            inputs_embeds (`torch.Tensor`): Tensor representing input embeddings to the model.
             cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
 
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if (input_ids is None) and (pixel_values is None):
+            raise ValueError("You must specify at least one of input_ids or pixel_values")
         self.stats.on_model_execution_start()
 
-        if inputs_embeds is None:
-            inputs_embeds = self.model.run_method("text_embeddings")(input_ids)
+        inputs_embeds = self.model.run_method("token_embeddings", (input_ids,))[0]
 
         if pixel_values is not None:
-            image_features = self.model.run_method("vision_embeddings")(pixel_values) if pixel_values is not None else None
+            image_features = self.model.run_method("vision_embeddings", (pixel_values,))[0]
 
             if input_ids is None:
-                special_image_mask = inputs_embeds == self.model.run_method("text_embeddings")(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
+                special_image_mask = inputs_embeds == self.model.run_method("token_embeddings", (torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device),))[0]
             else:
                 special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        logits = self.model.run_method("decoder")(
-            (inputs_embeds, cache_position)
-        )[0]
+        logits = self.model.run_method("decoder", (cache_position, inputs_embeds))[0]
         self.stats.on_model_execution_end()
         return logits
     
@@ -1186,6 +1186,39 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
         pixel_values: Optional[torch.FloatTensor] = None,
         max_new_tokens: int = 100,
     ):
+        # Sanity check
+
+        if max_new_tokens <= 0:
+            raise ValueError(f"max_new_tokens must be greater than 0, got {max_new_tokens}.")
+        elif max_new_tokens > self.max_cache_size:
+            logging.warning(
+                f"max_new_tokens={max_new_tokens} is larger than max_cache_size={self.max_cache_size}. Generating tokens will be truncated to max_cache_size."
+            )
+            max_new_tokens = self.max_cache_size
         
         # Prefill
-        
+        logits = self.forward(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            cache_position=torch.arange(input_ids.size(1), dtype=torch.long, device=input_ids.device),
+        )
+
+        tokens = []
+
+        token = torch.argmax(logits[:, -1, :], dim=-1).item()
+        tokens.append(token)
+        i = 1
+        while i < max_new_tokens:
+            # Generate next token
+            logits = self.forward(
+                input_ids=torch.tensor([token], dtype=torch.long, device=input_ids.device).unsqueeze(0),
+                cache_position=torch.tensor([input_ids.size(1) + i - 1], dtype=torch.long, device=input_ids.device),
+            )
+            token = torch.argmax(logits[:, -1, :], dim=-1).item()
+            tokens.append(token)
+
+            if token in self.eos_token_ids:
+                break
+            i += 1
+
+        return tokenizer.decode(tokens, skip_special_tokens=True)
