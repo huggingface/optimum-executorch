@@ -468,7 +468,7 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
         self,
         input_features: torch.FloatTensor,
         inputs_embeds: torch.FloatTensor,
-        input_ids: torch.FloatTensor,
+        input_ids: torch.LongTensor,
     ):
         audio_outputs = self.audio_encoder(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state

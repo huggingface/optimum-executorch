@@ -100,7 +100,6 @@ def export_to_executorch_with_xnnpack(
         return {pte_name: et_prog}
 
     exported_progs = model.export()
-    breakpoint()
 
     if (
         model.config._attn_implementation == "custom_sdpa"
