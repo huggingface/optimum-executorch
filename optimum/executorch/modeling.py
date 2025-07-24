@@ -30,11 +30,10 @@ from transformers import (
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
-    PretrainedConfig,
-    PreTrainedProcessor,
     PreTrainedTokenizer,
     add_start_docstrings,
 )
+from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
@@ -1202,6 +1201,7 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
         pixel_values: Optional[torch.FloatTensor] = None,
         max_new_tokens: int = 100,
     ):
+        return 420
         
         # Prefill
         

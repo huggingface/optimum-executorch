@@ -81,7 +81,11 @@ def get_custom_sdpa_for_ring_kv_cache(
     exportable_module: torch.nn.Module,
 ) -> Callable:
     # lazy importing to avoid version dependent class definition
-    from executorch import version
+    try:
+        from executorch import __version__ as version
+    except ImportError:
+        # Fallback if version is not available
+        version = None
 
     try:
         from executorch.examples.models.llama.source_transformation.custom_kv_cache import (
