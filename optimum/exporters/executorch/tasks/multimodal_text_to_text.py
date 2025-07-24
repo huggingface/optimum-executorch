@@ -17,7 +17,7 @@ import logging
 import torch
 import torchao
 from packaging.version import parse
-from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
+from transformers import AutoConfig, AutoModelForMultimodalTextToText, GenerationConfig
 
 from ..integrations import MultiModalTextToTextExportableModule
 from ..task_registry import register_task
@@ -27,6 +27,7 @@ from ..task_registry import register_task
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("image-text-to-text")
 @register_task("audio-text-to-text")
+@register_task("multimodal-text-to-text")
 def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     """
     Loads a causal language model for multimodal generation (e.g. image-to-text) generation and registers it under the appropriate task
@@ -79,7 +80,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True
 
-    eager_model = AutoModelForCausalLM.from_pretrained(
+    eager_model = AutoModelForMultimodalTextToText.from_pretrained(
         model_name_or_path,
         device_map=device,
         torch_dtype=dtype,

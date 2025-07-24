@@ -31,6 +31,7 @@ from transformers import AutoTokenizer, AutoProcessor
 from transformers.testing_utils import slow
 
 from optimum.utils.import_utils import is_transformers_version
+from optimum.executorch import ExecuTorchModelForMultiModalToText
 from optimum.exporters.executorch.tasks.multimodal_text_to_text import load_multimodal_text_to_text_model
 
 from ..utils import check_causal_lm_output_quality
@@ -70,7 +71,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     #     reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
     # )
     # @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we(self):
+    @pytest.mark.skip()
+    def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_exported_program(self):
         model_id = "mistralai/Voxtral-Mini-3B-2507"
         module = load_multimodal_text_to_text_model(
             model_id,
@@ -88,10 +90,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    # {
-                    #     "type": "audio",
-                    #     "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
-                    # },
+                    {
+                        "type": "audio",
+                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
                     {"type": "text", "text": "What can you tell me about this audio?"},
                 ],
             }
@@ -105,35 +107,21 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             # return_tensors="pt",
         )
 
-        # image_indices = torch.where(inputs["input_ids"] == module.model.model.config.image_token_id)
-        prompt_before_audio = inputs["input_ids"]
-        # prompt_after_image = inputs["input_ids"][:, image_indices[1][-1]+1:]
+        input_ids = inputs["input_ids"]
+        token_embeddings = res["token_embeddings"].module().forward(
+            input=input_ids)
 
-        # image_features = res["vision_embeddings"].module().forward(pixel_values=inputs["pixel_values"])
-
-        # print(prompt_before_image.shape)
-
-        token_embeddings_before_audio = res["token_embeddings"].module().forward(
-            input=prompt_before_audio)
-
-        # token_embeddings_after_image = res["token_embeddings"].module().forward(
-        #     input_ids=prompt_after_image)
-
-        # embeddings = torch.cat(
-        #     [
-        #         token_embeddings_before_image,
-        #         image_features,
-        #         token_embeddings_after_image,
-        #     ],
-        #     dim=1,
-        # )
-
-        # print(embeddings.shape)
+        if "input_features" in inputs:
+            token_embeddings = res["audio_encoder"].module().forward(
+                input_features=inputs["input_features"],
+                inputs_embeds=token_embeddings,
+                input_ids=inputs["input_ids"],
+            )
 
         # Prefill prompt embeddings
         logits = res["decoder"].module().forward(
-            inputs_embeds=token_embeddings_before_audio,
-            cache_position=torch.arange(token_embeddings_before_audio.shape[1], dtype=torch.long),
+            inputs_embeds=token_embeddings,
+            cache_position=torch.arange(token_embeddings.shape[1], dtype=torch.long),
         )
 
         token = torch.argmax(logits[:, -1, :])
@@ -141,9 +129,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         tokens = [token.item()]
         print(tokenizer.decode([token.item()]), end="")
 
-        pos = token_embeddings_before_audio.shape[1]
+        pos = token_embeddings.shape[1]
 
-        while pos < 350:
+        while pos < 2000:
             token_embedding = res["token_embeddings"].module().forward(
                 input=token.unsqueeze(0).unsqueeze(0)
             )
@@ -155,14 +143,44 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             print(tokenizer.decode([token.item()]), end="")
             tokens.append(token.item())
             pos += 1
+            # TODO(JZ): end early.
 
         output = tokenizer.decode(tokens, skip_special_tokens=True)
+        self.assertTrue(output.startswith("The audio features a conversation between two individuals, likely friends or acquaintances, who are discussing a series of tattoos."))
+
+    def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_pte(self):
+        model_id = "mistralai/Voxtral-Mini-3B-2507"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        processor = AutoProcessor.from_pretrained(model_id)
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
+                    {"type": "text", "text": "What can you tell me about this audio?"},
+                ],
+            }
+        ]
+
+        model = ExecuTorchModelForMultiModalToText.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            use_custom_kv_cache=True,
+            **{"qlinear": True, "qembeeding": True, "task": "multimodal-text-to-text"},
+        )
+        self.assertIsInstance(model, ExecuTorchModelForMultiModalToText)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        generated_text = model.text_generation(
+            processor=processor,
+            tokenizer=tokenizer,
+            input_conversation=conversation,
+            max_seq_len=64,
+        )
+        print(generated_text)
         breakpoint()
-#         self.assertEqual(
-#             output,
-#             """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
 
-# Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you should be cautious about, categorized for clarity:
-
-# **1""",
-#         )

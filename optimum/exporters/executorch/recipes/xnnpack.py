@@ -19,7 +19,8 @@ from packaging.version import parse
 from tabulate import tabulate
 from torch.export import ExportedProgram
 
-from executorch import version as executorch_version
+# from executorch import version as executorch_version
+from executorch import __version__ as executorch_version
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -36,14 +37,14 @@ from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
     Seq2SeqLMExportableModule,
-    ImageTextToTextExportableModule
+    MultiModalTextToTextExportableModule
 )
 from ..recipe_registry import register_recipe
 
 
 @register_recipe("xnnpack")
 def export_to_executorch_with_xnnpack(
-    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, ImageTextToTextExportableModule],
+    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule],
     **kwargs,
 ):
     """
@@ -52,7 +53,7 @@ def export_to_executorch_with_xnnpack(
     This function also write metadata required by the ExecuTorch runtime to the model.
 
     Args:
-        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, ImageTextToTextExportableModule]):
+        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule]):
             The PyTorch model to be exported to ExecuTorch.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.
@@ -69,7 +70,7 @@ def export_to_executorch_with_xnnpack(
     ) -> Dict[str, ExecutorchProgram]:
         backend_config_dict = {
             "extract_delegate_segments": True,
-            "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
+            # "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
         }
         if parse(executorch_version.__version__).base_version > "0.6.0":
             backend_config_dict["do_quant_fusion_and_const_prop"] = True
@@ -77,14 +78,15 @@ def export_to_executorch_with_xnnpack(
         logging.debug(f"\nExported program for {pte_name}.pte: {exported_programs}")
         et_prog = to_edge_transform_and_lower(
             exported_programs,
-            partitioner=XnnpackPartitioner(),
+            partitioner=[XnnpackPartitioner()],
             compile_config=EdgeCompileConfig(
                 _check_ir_validity=False,
                 _skip_dim_order=True,
             ),
             constant_methods=metadata,
             transform_passes=[RemovePaddingIdxEmbeddingPass()],
-        ).to_executorch(
+        )
+        et_prog = et_prog.to_executorch(
             config=ExecutorchBackendConfig(**backend_config_dict),
         )
         logging.debug(
@@ -98,6 +100,7 @@ def export_to_executorch_with_xnnpack(
         return {pte_name: et_prog}
 
     exported_progs = model.export()
+    breakpoint()
 
     if (
         model.config._attn_implementation == "custom_sdpa"

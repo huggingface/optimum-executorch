@@ -30,6 +30,7 @@ from transformers import (
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
+    AutoModelForMultimodalTextToText,
     PreTrainedTokenizer,
     add_start_docstrings,
 )
@@ -237,9 +238,9 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         **kwargs,
     ) -> Dict[str, "ExecuTorchModule"]:
         task = kwargs.pop("task", None)
-        if task is not None:
-            logger.warning(f"task was provided and set to {task} but not used, will be ignored")
-        inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class)
+        # if task is not None:
+        #     logger.warning(f"task was provided and set to {task} but not used, will be ignored")
+        inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class) if not task else task
         logging.info(f"Inferred task from model class: {inferred_task}")
 
         save_dir = TemporaryDirectory()
@@ -1204,4 +1205,191 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
         return 420
         
         # Prefill
-        
+
+class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
+    """
+    An ExecuTorch model for inference of multimodal input to text models using the ExecuTorch Runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForSpeechSeq2Seq`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+        use_kv_cache (`bool`):
+            Whether key-value caching is enabled. For performance reasons, the exported model is
+            optimized to use a static cache.
+        max_cache_size (`int`):
+            Maximum sequence length supported by the cache.
+        max_batch_size (`int`):
+            Maximum supported batch size.
+        dtype (`str`):
+            Data type of the model parameters.
+        bos_token_id (`int`):
+            Beginning-of-sequence token ID.
+        eos_token_id (`int`):
+            End-of-sequence token ID.
+        vocab_size (`int`):
+            Size of the model vocabulary.
+    """
+
+    auto_model_class = AutoModelForMultimodalTextToText
+    # auto_model_class = AutoModel
+
+    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+        super().__init__(models=models, config=config)
+        if not hasattr(self, "decoder"):
+            raise AttributeError("Expected attribute 'decoder' not found in the instance.")
+        if not hasattr(self, "token_embeddings"):
+            raise AttributeError("Expected attribute 'token_embeddings' not found in the instance.")
+        if not hasattr(self, "audio_encoder"):
+            raise AttributeError("Expected attribute 'audio_encoder' not found in the instance.")
+        metadata = self.decoder.method_names()
+        if "use_kv_cache" in metadata:
+            self.use_kv_cache = self.decoder.run_method("use_kv_cache")[0]
+        if "get_max_seq_len" in metadata:
+            self.max_cache_size = self.decoder.run_method("get_max_seq_len")[0]
+        if "get_max_batch_size" in metadata:
+            self.max_batch_size = self.decoder.run_method("get_max_batch_size")[0]
+        if "get_dtype" in metadata:
+            self.dtype = self.decoder.run_method("get_dtype")[0]
+        if "get_bos_id" in metadata:
+            self.bos_token_id = self.decoder.run_method("get_bos_id")[0]
+        if "get_eos_id" in metadata:
+            self.eos_token_id = self.decoder.run_method("get_eos_id")[0]
+        if "get_vocab_size" in metadata:
+            self.vocab_size = self.decoder.run_method("get_vocab_size")[0]
+        if "max_hidden_seq_length" in metadata:
+            self.max_hidden_seq_length = self.decoder.run_method("max_hidden_seq_length")[0]
+        if "decoder_start_token_id" in metadata:
+            self.decoder_start_token_id = self.decoder.run_method("decoder_start_token_id")[0]
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        cache_position: torch.Tensor,
+        input_features: Optional[torch.Tensor] = None,
+    ):
+        token_embeddings = self.token_embeddings.forward(input_ids)
+        if input_features:
+            token_embeddings = self.audio_encoder.forward(
+                input_features,
+                token_embeddings,
+                input_ids,
+            )
+        output = self.decoder.forward(
+            token_embeddings,
+            cache_position,
+        )
+        return output
+
+    def generate(
+        self,
+        prompt_tokens: torch.Tensor,
+        echo: bool = False,
+        pos_base: int = 0,
+        max_seq_len: Optional[int] = None,
+        input_features: Optional[torch.Tensor] = None,
+    ) -> List[int]:
+        self.device = torch.device("cpu")
+        if max_seq_len is None:
+            # Default to max_cache_size if max_seq_len is not specified
+            max_seq_len = self.max_cache_size
+        elif max_seq_len > self.max_cache_size:
+            logging.warning(
+                f"max_seq_len={max_seq_len} is larger than max_cache_size={self.max_cache_size}. Generating tokens will be truncated to max_cache_size."
+            )
+            max_seq_len = self.max_cache_size
+
+        self.stats.on_sampling_begin()
+        logits = self.forward(
+            input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
+            cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
+            input_features=input_features,
+        )
+        self.stats.on_sampling_end()
+        next_token = torch.argmax(logits, dim=-1)[0, -1].item()
+        self.stats.on_prompt_eval_end()
+        first_token_generated = False
+
+        generated_tokens = prompt_tokens + [next_token]
+
+        while len(generated_tokens) < max_seq_len:
+            self.stats.on_sampling_begin()
+            logits = self.forward(
+                input_ids=torch.tensor([next_token], dtype=torch.long, device=self.device).unsqueeze(0),
+                cache_position=torch.tensor(
+                    [pos_base + len(generated_tokens) - 1],
+                    dtype=torch.long,
+                    device=self.device,
+                ),
+            )
+            self.stats.on_sampling_end()
+            if not first_token_generated:
+                self.stats.on_first_token()
+                first_token_generated = True
+
+            next_token = torch.argmax(logits, dim=-1).item()
+            generated_tokens.append(next_token)
+
+            if next_token in self.eos_token_ids:
+                break
+
+        self.stats.set_num_generated_tokens(len(generated_tokens) - len(prompt_tokens))
+
+        return generated_tokens if echo else generated_tokens[len(prompt_tokens) :]
+
+    def text_generation(
+        self,
+        processor: "ProcessorMixin",
+        tokenizer: "PreTrainedTokenizer",
+        input_conversation: List[Dict],
+        echo: bool = True,
+        max_seq_len: Optional[int] = None,
+    ):
+        """
+        Perform text generation task for a given prompt using the ExecuTorch model.
+
+        Args:
+            tokenizer (`PreTrainedTokenizer`):
+                The tokenizer used to encode and decode the prompt and output.
+            prompt (`str`):
+                The text prompt to complete.
+            echo (`bool`, *optional*):
+                Whether to include prompt tokens in the generated output. Defaults to `True`.
+            max_seq_len (`int`, *optional*):
+                Maximum sequence length for the generated output.
+                Defaults to None and uses the model's `max_cache_size` attribute.
+                Will be truncated to maximal cache size if larger than `max_cache_size`.
+        """
+        self.tokenizer = tokenizer
+
+        # Sanity check
+        if self.tokenizer.bos_token_id is not None and self.tokenizer.bos_token_id != self.bos_token_id:
+            raise ValueError(
+                f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
+            )
+        if not verify_eos_tokens_in_tokenizer(self.eos_token_ids, self.tokenizer):
+            raise ValueError(
+                f"The tokenizer's eos_token_id does not match with the model's eos_token_ids={self.eos_token_ids}."
+            )
+
+        # Reset stats for a new generation
+        self.stats.reset()
+        self.stats.on_inference_start()
+
+        inputs = processor.apply_chat_template(input_conversation)
+        prompt_tokens = self.tokenizer.encode(inputs["input_ids"])
+        self.stats.on_token_encode_end()
+        self.stats.set_num_prompt_tokens(len(prompt_tokens))
+
+        generated_tokens = self.generate(
+            prompt_tokens=prompt_tokens,
+            input_features=inputs["input_features"],
+            echo=echo,
+            max_seq_len=max_seq_len,
+        )
+
+        self.stats.on_inference_end()
+        self.stats.print_report()
+
+        return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)

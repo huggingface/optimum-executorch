@@ -25,6 +25,8 @@ from transformers import (
     StaticCache,
     T5ForConditionalGeneration,
     WhisperForConditionalGeneration,
+    VoxtralForConditionalGeneration,
+    Gemma3ForConditionalGeneration,
 )
 from transformers.configuration_utils import PretrainedConfig
 from transformers.generation.configuration_utils import GenerationConfig
@@ -98,6 +100,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             device=self.generation_config.cache_config.device,
             dtype=self.model.dtype,
         )
+        # TODO(JZ): figure out why len(self.static_cache) doesn't work like it does in upstream.
         for i in range(len(self.static_cache.key_cache)):
             self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
             self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
@@ -448,6 +451,36 @@ class ImageEncoderExportableModule(torch.nn.Module):
         image_features = self.model.multi_modal_projector(vision_outputs)
         return image_features
 
+
+class VoxtralEncoderExportableModule(torch.nn.Module):
+    """
+    Subgraph which handles all of the audio-related work: encoder, multimodal projection, combinining with text tokens.
+    The result of this subgraph should stream directly into the decoder subgraph.
+    """
+    def __init__(self, model: torch.nn.Module):
+        super().__init__()
+        self.audio_encoder = model.audio_tower
+        self.mm_projector = model.multi_modal_projector
+        self.intermediate_size = model.config.audio_config.intermediate_size
+        self.audio_token_id = model.config.audio_token_id
+
+    def forward(
+        self,
+        input_features: torch.FloatTensor,
+        inputs_embeds: torch.FloatTensor,
+        input_ids: torch.FloatTensor,
+    ):
+        audio_outputs = self.audio_encoder(input_features)
+        audio_hidden_states = audio_outputs.last_hidden_state
+        audio_hidden_states = audio_hidden_states.reshape(-1, self.intermediate_size)
+        audio_embeds = self.mm_projector(audio_hidden_states)
+
+        audio_token_mask = input_ids == self.audio_token_id
+        inputs_embeds[audio_token_mask] = audio_embeds
+        
+        return inputs_embeds
+    
+
 class MultiModalTextToTextExportableModule(torch.nn.Module):
     """
     A wrapper module designed to make an multimodal model, e.g. image-text-to-text, exportable with `torch.export`.
@@ -480,9 +513,24 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         return pixel_values, dynamic_shapes, strict
 
     def _prepare_audio_embedding_export_inputs(self):
-        dynamic_shapes = None
+        # TODO(JZ): specific to Voxtral, should generalize.
+        batch_size = 3
+        chunk_length = self.model.audio_tower.config.max_source_positions * self.model.audio_tower.conv1.stride[0] * self.model.audio_tower.conv2.stride[0]
+        spectrogram_features = 128
+        audio_input = torch.rand(batch_size, spectrogram_features, chunk_length)
+
+        max_audio_len = 150  # In s, should be a multiple of 30.
+        dynamic_shapes = {
+            "input_features": {
+                0: torch.export.Dim("batch_size", min=1, max=max_audio_len/30),
+                1: torch.export.Dim.STATIC,
+                2: torch.export.Dim.STATIC,
+            },
+        }
+        
         strict = True
-        return None, dynamic_shapes, strict
+
+        return audio_input, dynamic_shapes, strict
     
     def _prepare_text_embedding_export_inputs(self):
         """
@@ -622,19 +670,38 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_programs["token_embeddings"] = token_embeddings_exported_program
 
             # 3. Export encoder.
-            if isinstance(model, VoxtralForConditionalGeneration):
-                audio_input, dynamic_shapes, strict = self._prepare_audio_embedding_export_inputs()
-                logging.info(f"Exporting audio embeddings using audio_input={audio_input.shape}, dynamic_shapes={dynamic_shapes}, strict={strict}")
+            if isinstance(self.model, VoxtralForConditionalGeneration):
+                # TODO(JZ): specific to Voxtral, should generalize.
+                chunk_length = self.model.audio_tower.config.max_source_positions * self.model.audio_tower.conv1.stride[0] * self.model.audio_tower.conv2.stride[0]
+                encoder_input_kwargs = {
+                    "input_features": torch.rand(3, 128, chunk_length),  # (bsz, features, seq_len)
+                    "inputs_embeds": inputs_embeds,
+                    "input_ids": inputs_embeds[:, :, 0],
+                }
+
+                max_audio_len = 150  # In s, should be a multiple of 30. TODO(JZ): make this configurable top-level.
+                max_seq_len = self.metadata.get("get_max_seq_len") - 1  # TODO(JZ): why - 1? Copied from Gemma3 draft PR.
+                dynamic_shapes = {
+                    "input_features": {
+                        0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_audio_len//30),
+                        # 1: torch.export.Dim.STATIC,
+                        # 2: torch.export.Dim.STATIC,
+                    },
+                    "inputs_embeds": {1: torch.export.Dim("input_embeds_seq_length_dim", max=max_seq_len)},
+                    "input_ids": {1: torch.export.Dim("input_ids_seq_length_dim", max=max_seq_len)},
+                }
+
                 self.model.audio_tower.config._attn_implementation = "sdpa_without_vmap"
-                audio_encoder = AudioEncoderExportableModule()
+                audio_encoder = VoxtralEncoderExportableModule(self.model)
                 audio_encoder_exported_program = torch.export.export(
                     audio_encoder,
-                    args=(audio_input,),
+                    args=(),
+                    kwargs=encoder_input_kwargs,
                     dynamic_shapes=dynamic_shapes,
-                    strict=strict,
+                    strict=False,
                 )
                 exported_programs["audio_encoder"] = audio_encoder_exported_program
-            elif isinstance(mode, Gemma3ForConditionalGeneration):
+            elif isinstance(self.model, Gemma3ForConditionalGeneration):
                 pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
                 logging.info(f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
                 # Setting the _attn_implementation to "sdpa_without_vmap" for vision encoder
