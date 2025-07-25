@@ -603,31 +603,32 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     def export(
         self,
     ) -> Dict[str, ExportedProgram]:
-        # 1. Export text decoder.
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            self.model.language_model,
-            self.config.text_config,
-            self.model.generation_config,
-            max_batch_size=1,
-            max_cache_len=self.metadata.get("get_max_seq_len"),
-        )
-        exported_programs = {}
-        
-        self._register_attention_mask_for_4_53(exportable_module)
-
-        if self.use_custom_kv_cache:
-            from optimum.executorch.attentions.custom_kv_cache import (
-                replace_with_et_custom_kv_cache,
-            )
-
-            replace_with_et_custom_kv_cache(
-                exportable_module.model,
-                self.model.config.text_config,
-                self.model.generation_config,
-                self.model.dtype,
-            )
-
         with torch.no_grad():
+            # 1. Export text decoder.
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(
+                self.model.language_model,
+                self.config.text_config,
+                self.model.generation_config,
+                max_batch_size=1,
+                max_cache_len=self.metadata.get("get_max_seq_len"),
+            )
+            exported_programs = {}
+
+            # Custom SDPA for text decoder.
+            self._register_attention_mask_for_4_53(exportable_module)
+
+            if self.use_custom_kv_cache:
+                from optimum.executorch.attentions.custom_kv_cache import (
+                    replace_with_et_custom_kv_cache,
+                )
+
+                replace_with_et_custom_kv_cache(
+                    exportable_module.model,
+                    self.model.config.text_config,
+                    self.model.generation_config,
+                    self.model.dtype,
+                )
+
             inputs_embeds, cache_position, dynamic_shapes, strict = self._prepare_decoder_only_export_inputs()
             logging.info(
                 f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
@@ -691,7 +692,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                     "input_ids": {1: torch.export.Dim("input_ids_seq_length_dim", max=max_seq_len)},
                 }
 
-                self.model.audio_tower.config._attn_implementation = "sdpa_without_vmap"
+                # self.model.audio_tower.config._attn_implementation = "sdpa_without_vmap"
+                self.model.audio_tower.config._attn_implementation = "custom_sdpa"
                 audio_encoder = VoxtralEncoderExportableModule(self.model)
                 audio_encoder_exported_program = torch.export.export(
                     audio_encoder,
