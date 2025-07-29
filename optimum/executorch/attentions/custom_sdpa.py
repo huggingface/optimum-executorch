@@ -83,20 +83,14 @@ def custom_sdpa_with_start_pos_forward(
 def get_custom_sdpa_for_ring_kv_cache(
     exportable_module: torch.nn.Module,
 ) -> Callable:
-    # lazy importing to avoid version dependent class definition
-    # try:
-    #     from executorch import __version__ as version
-    # except ImportError:
-    #     # Fallback if version is not available
-    #     version = None
+    from executorch import version
 
     try:
         from executorch.examples.models.llama.source_transformation.custom_kv_cache import (
             CustomRingKVCache,
         )
     except ImportError:
-        # raise ImportError(f"CustomRingKVCache not available in version {version.__version__} of ExecuTorch.")
-        print()
+        raise ImportError(f"CustomRingKVCache not available in version {version.__version__} of ExecuTorch.")
 
     def _custom_sdpa_for_ring_kv_cache(
         module: torch.nn.Module,

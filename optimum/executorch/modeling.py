@@ -239,8 +239,6 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         **kwargs,
     ) -> Dict[str, "ExecuTorchModule"]:
         task = kwargs.pop("task", None)
-        # if task is not None:
-        #     logger.warning(f"task was provided and set to {task} but not used, will be ignored")
         inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class) if not task else task
         logging.info(f"Inferred task from model class: {inferred_task}")
 
@@ -1203,7 +1201,6 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
         pixel_values: Optional[torch.FloatTensor] = None,
         max_new_tokens: int = 100,
     ):
-        return 420
         
         # Prefill
 
