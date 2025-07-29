@@ -20,13 +20,19 @@ import tempfile
 import unittest
 
 import pytest
+import torchao
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForMaskedLM
 
 
+@pytest.mark.skipif(
+    parse(torchao.__version__) < parse("0.11.0.dev0"),
+    reason="Only available on torchao >= 0.11.0.dev0",
+)
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,6 +46,20 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             subprocess.run(
                 f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
+    @slow
+    @pytest.mark.run_slow
+    def test_bert_export_to_executorch_quantized(self):
+        model_id = "google-bert/bert-base-uncased"
+        task = "fill-mask"
+        recipe = "xnnpack"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --qlinear 8da4w --output_dir {tempdir}/executorch",
                 shell=True,
                 check=True,
             )
