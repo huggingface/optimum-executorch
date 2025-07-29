@@ -64,14 +64,13 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     
             AttentionMaskInterface.register("custom_sdpa", sdpa_mask_without_vmap)
 
-    # @slow
-    # @pytest.mark.run_slow
-    # @pytest.mark.skipif(
-    #     parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-    #     reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    # )
-    # @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    # @pytest.mark.skip()
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
+    )
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_exported_program(self):
         model_id = "mistralai/Voxtral-Mini-3B-2507"
         config = AutoConfig.from_pretrained(model_id)
@@ -100,13 +99,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             }
         ]
         processor = AutoProcessor.from_pretrained(model_id)
-        inputs = processor.apply_chat_template(
-            conversation,
-            # add_generation_prompt=True,
-            # tokenize=True,
-            # return_dict=True, 
-            # return_tensors="pt",
-        )
+        inputs = processor.apply_chat_template(conversation)
 
         input_ids = inputs["input_ids"]
         token_embeddings = res["token_embeddings"].module().forward(
@@ -149,6 +142,13 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         output = tokenizer.decode(tokens, skip_special_tokens=True)
         self.assertTrue(output.startswith("The audio features a conversation between two individuals, likely friends or acquaintances, who are discussing a series of tattoos."))
 
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
+    )
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
     def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_pte(self):
         model_id = "mistralai/Voxtral-Mini-3B-2507"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -167,8 +167,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         ]
 
         model = ExecuTorchModelForMultiModalToText.from_pretrained(
-            # model_id,
-            "/Users/jackzhxng/Documents/voxtral",  # Load already exported model in local file path.
+            model_id,
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
