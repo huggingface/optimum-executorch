@@ -70,7 +70,7 @@ def export_to_executorch_with_xnnpack(
     ) -> Dict[str, ExecutorchProgram]:
         backend_config_dict = {
             "extract_delegate_segments": True,
-            # "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
+            "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
         }
         if parse(executorch_version.__version__).base_version > "0.6.0":
             backend_config_dict["do_quant_fusion_and_const_prop"] = True
@@ -89,14 +89,16 @@ def export_to_executorch_with_xnnpack(
         et_prog = et_prog.to_executorch(
             config=ExecutorchBackendConfig(**backend_config_dict),
         )
-        logging.debug(
-            f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program().graph_module}"
-        )
-        delegation_info = get_delegation_info(et_prog.exported_program().graph_module)
-        logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
-        logging.debug(
-            f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
-        )
+        for method in et_prog.methods:
+            logging.debug(f"---------------------- Method: {method} ----------------------")
+            logging.debug(
+                f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}"
+            )
+            delegation_info = get_delegation_info(et_prog.exported_program(method).graph_module)
+            logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
+            logging.debug(
+                f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
+            )
         return {pte_name: et_prog}
 
     exported_progs = model.export()

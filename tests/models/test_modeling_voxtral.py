@@ -27,7 +27,7 @@ import torchao
 import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
-from transformers import AutoTokenizer, AutoProcessor
+from transformers import AutoConfig, AutoTokenizer, AutoProcessor
 from transformers.testing_utils import slow
 
 from optimum.utils.import_utils import is_transformers_version
@@ -42,7 +42,7 @@ is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTION
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 @pytest.mark.skipif(
@@ -71,15 +71,16 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     #     reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
     # )
     # @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    @pytest.mark.skip()
+    # @pytest.mark.skip()
     def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_exported_program(self):
         model_id = "mistralai/Voxtral-Mini-3B-2507"
+        config = AutoConfig.from_pretrained(model_id)
         module = load_multimodal_text_to_text_model(
             model_id,
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
             qlinear=True,
-            qembedding_config=True,
+            qembedding=True,
         )
 
         res = module.export()
@@ -166,11 +167,12 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         ]
 
         model = ExecuTorchModelForMultiModalToText.from_pretrained(
-            model_id,
+            # model_id,
+            "/Users/jackzhxng/Documents/voxtral",  # Load already exported model in local file path.
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
-            **{"qlinear": True, "qembeeding": True, "task": "multimodal-text-to-text"},
+            **{"qlinear": True, "qembedding": True, "task": "multimodal-text-to-text"},
         )
         self.assertIsInstance(model, ExecuTorchModelForMultiModalToText)
         self.assertIsInstance(model.model, ExecuTorchModule)

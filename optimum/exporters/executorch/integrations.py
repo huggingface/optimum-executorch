@@ -671,17 +671,19 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_programs["token_embeddings"] = token_embeddings_exported_program
 
             # 3. Export encoder.
+            input_ids = torch.zeros_like(inputs_embeds[:, :, 0], dtype=torch.long)
+            input_ids[0, 1] = self.config.audio_token_id  # Make sure we don't have an all-false mask for the imput_embeds.
             if isinstance(self.model, VoxtralForConditionalGeneration):
                 # TODO(JZ): specific to Voxtral, should generalize.
                 chunk_length = self.model.audio_tower.config.max_source_positions * self.model.audio_tower.conv1.stride[0] * self.model.audio_tower.conv2.stride[0]
                 encoder_input_kwargs = {
                     "input_features": torch.rand(3, 128, chunk_length),  # (bsz, features, seq_len)
                     "inputs_embeds": inputs_embeds,
-                    "input_ids": inputs_embeds[:, :, 0],
+                    "input_ids": input_ids,
                 }
 
                 max_audio_len = 150  # In s, should be a multiple of 30. TODO(JZ): make this configurable top-level.
-                max_seq_len = self.metadata.get("get_max_seq_len") - 1  # TODO(JZ): why - 1? Copied from Gemma3 draft PR.
+                max_seq_len = self.metadata.get("get_max_seq_len")
                 dynamic_shapes = {
                     "input_features": {
                         0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_audio_len//30),

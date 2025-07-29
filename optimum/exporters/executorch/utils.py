@@ -16,6 +16,7 @@ from typing import List, Optional, Set
 
 import torch
 from transformers import GenerationConfig, PretrainedConfig
+from transformers.tokenization_utils import PreTrainedTokenizer
 
 
 def save_config_to_constant_methods(
@@ -65,7 +66,7 @@ def save_config_to_constant_methods(
     return {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
 
 
-def verify_eos_tokens_in_tokenizer(model_eos_ids: List[int], tokenizer) -> bool:
+def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenizer: PreTrainedTokenizer) -> bool:
     """
     Verifies that the model's EOS token IDs are present in the tokenizer's
     set of potential end-of-sequence tokens.

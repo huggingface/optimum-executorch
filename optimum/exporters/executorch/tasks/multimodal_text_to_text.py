@@ -61,6 +61,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
     use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
+    qlinear_config = kwargs.get("qlinear", None)
+    qembedding_config = kwargs.get("qembedding", None)
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
 
@@ -111,8 +113,6 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
 
     # TODO: Move quantization recipe out for better composability.
     # TODO: Should switch to `TorchAoConfig` once the quant issue on final lm_head layer is fixed.
-    qlinear_config = kwargs.get("qlinear", None)
-    qembedding_config = kwargs.get("qembedding", None)
     if qlinear_config or qembedding_config:
         # TODO: Update torchao to use 0.11.0 once released
         if parse(torchao.__version__) < parse("0.11.0.dev0"):
