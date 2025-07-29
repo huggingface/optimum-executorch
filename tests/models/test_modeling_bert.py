@@ -20,13 +20,19 @@ import tempfile
 import unittest
 
 import pytest
+import torchao
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForMaskedLM
 
 
+@pytest.mark.skipif(
+    parse(torchao.__version__) < parse("0.11.0.dev0"),
+    reason="Only available on torchao >= 0.11.0.dev0",
+)
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
