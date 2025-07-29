@@ -45,6 +45,20 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
+    @slow
+    @pytest.mark.run_slow
+    def test_bert_export_to_executorch_quantized(self):
+        model_id = "google-bert/bert-base-uncased"
+        task = "fill-mask"
+        recipe = "xnnpack"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --qlinear 8da4w --output_dir {tempdir}/executorch",
+                shell=True,
+                check=True,
+            )
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
+
     def _helper_bert_fill_mask(self, recipe: str):
         model_id = "google-bert/bert-base-uncased"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
