@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import causal_lm, image_classification, masked_lm, seq2seq_lm
+from . import causal_lm, image_classification, image_text_to_text, masked_lm, seq2seq_lm

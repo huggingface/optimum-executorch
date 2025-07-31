@@ -496,3 +496,146 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                     break
 
             return generated_ids
+
+
+class ImageTextToTextExportableModule(torch.nn.Module):
+    """
+    A wrapper module designed to make an image-text-to-text model exportable with `torch.export`.
+    This module ensures that the exported model is compatible with ExecuTorch.
+    """
+
+    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False):
+        super().__init__()
+        self.model = model
+        self.config = model.config
+        self.use_custom_kv_cache = use_custom_kv_cache
+        self.use_custom_sdpa = use_custom_sdpa
+        from .utils import save_config_to_constant_methods
+        self.metadata = save_config_to_constant_methods(
+            model.config.text_config, model.generation_config
+        )
+        logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
+
+    def _prepare_vision_embedding_export_inputs(self):
+        """
+        Prepare example inputs and configurations for export.
+
+        Returns:
+            pixel_values (torch.Tensor): Example pixel values tensor.
+            dynamic_shapes (dict or None): Dynamic shape specifications for export.
+            strict (bool): Whether to use strict export mode.
+        """
+        image_size = self.config.vision_config.image_size
+        pixel_values = torch.rand((1, 3, image_size, image_size))
+        dynamic_shapes = None
+        strict = False
+
+        return pixel_values, dynamic_shapes, strict
+
+    def _prepare_text_embedding_export_inputs(self):
+        """
+        Prepare example inputs and configurations for export.
+
+        Returns:
+            inputs_embeds (torch.Tensor): Example inputs embeddings tensor.
+            cache_position (torch.Tensor): Example cache position tensor.
+            dynamic_shapes (dict or None): Dynamic shape specifications for export.
+            strict (bool): Whether to use strict export mode.
+        """
+        # Prepare inputs with dynamic shapes
+        seq_length = 3  # Sequence length > 1 to avoid specialization issues
+        hidden_size = self.config.text_config.hidden_size
+        example_inputs_embeds = torch.zeros((1, seq_length, hidden_size), dtype=torch.float32)
+        example_cache_position = torch.arange(seq_length, dtype=torch.long)
+        max_seq_len = self.metadata.get("get_max_seq_len")
+        sliding_window = self.metadata.get("sliding_window", float("inf"))
+        max_dim = min(max_seq_len, sliding_window) - 1
+        seq_len_dim = torch.export.Dim("seq_length_dim", max=max_dim)
+        dynamic_shapes = {
+            "inputs_embeds": {1: seq_len_dim},
+            "cache_position": {0: seq_len_dim},
+        }
+        strict = False
+
+        return example_inputs_embeds, example_cache_position, dynamic_shapes, strict
+
+    def export(
+        self,
+    ) -> Dict[str, ExportedProgram]:
+        """
+        Export both the vision encoder and text decoder components.
+
+        Returns:
+            Dict[str, ExportedProgram]: Dictionary containing exported programs for vision and text components.
+        """
+        # Export vision encoder
+        pixel_values, vision_dynamic_shapes, vision_strict = self._prepare_vision_embedding_export_inputs()
+        logging.info(
+            f"Exporting vision encoder using pixel_values({pixel_values.shape}), dynamic_shapes={vision_dynamic_shapes}, strict={vision_strict}"
+        )
+        
+        # Create vision encoder wrapper
+        vision_encoder = VisionEncoderExportableModule(self.model)
+        with torch.no_grad():
+            vision_exported_program = vision_encoder.export(pixel_values)["model"]
+
+        # Export text decoder
+        inputs_embeds, cache_position, text_dynamic_shapes, text_strict = self._prepare_text_embedding_export_inputs()
+        logging.info(
+            f"Exporting text decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape}), dynamic_shapes={text_dynamic_shapes}, strict={text_strict}"
+        )
+
+        # Use the enhanced transformers integration for multimodal support
+        if is_transformers_version(">", "4.52.0"):
+            from transformers.integrations.executorch import (
+                TorchExportableModuleForImageTextLM,
+            )
+
+            exportable_module = TorchExportableModuleForImageTextLM(
+                self.model.language_model,
+                max_batch_size=1,
+                max_cache_len=self.metadata.get("get_max_seq_len"),
+            )
+            self._register_attention_mask_for_4_53(exportable_module)
+
+            if self.use_custom_kv_cache:
+                from optimum.executorch.attentions.custom_kv_cache import (
+                    replace_with_et_custom_kv_cache,
+                )
+
+                replace_with_et_custom_kv_cache(
+                    exportable_module.model,
+                    self.model.language_model.config,
+                    self.model.generation_config,
+                    self.model.dtype,
+                )
+
+            with torch.no_grad():
+                text_exported_program = exportable_module.export(inputs_embeds, cache_position, text_dynamic_shapes, text_strict)
+        else:
+            raise ValueError("Image-text-to-text export requires transformers > 4.52.0")
+
+        return {
+            "vision_encoder": vision_exported_program,
+            "text_decoder": text_exported_program
+        }
+
+    def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
+        """Register attention mask for transformers >= 4.53.0"""
+        if is_transformers_version(">=", "4.53.0.dev0"):
+            from transformers.integrations.executorch import sdpa_mask_without_vmap
+            from transformers.masking_utils import AttentionMaskInterface
+            from transformers.modeling_utils import AttentionInterface
+
+            _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
+            if self.use_custom_sdpa:
+                if self.use_custom_kv_cache:
+                    AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+                    AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                    # This handles both regular sdpa and one for sliding window/local attention
+                    exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
+                else:
+                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                    # This handles both regular sdpa and one for sliding window/local attention
+                    exportable_module.model.model.config._attn_implementation = "custom_sdpa"
