@@ -63,7 +63,7 @@ model = ExecuTorchModelForCausalLM.from_pretrained(
     recipe="xnnpack",
     attn_implementation="custom_sdpa",  # Use custom SDPA implementation for better performance
     use_custom_kv_cache=True,  # Use custom KV cache for better performance
-    **{"qlinear": True, "qembeeding": True},  # Quantize linear and embedding layers
+    **{"qlinear": "8da4w", "qembedding": "8w"},  # Quantize linear and embedding layers
 )
 
 # Generate text right away
@@ -90,8 +90,8 @@ optimum-cli export executorch \
     --recipe "xnnpack" \
     --use_custom_sdpa \
     --use_custom_kv_cache \
-    --qlinear \
-    --qembedding \
+    --qlinear 8da4w \
+    --qembedding 8w \
     --output_dir="hf_smollm2"
 ```
 Explore the various export options by running the command: `optimum-cli export executorch --help`
