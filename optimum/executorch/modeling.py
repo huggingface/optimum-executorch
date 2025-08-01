@@ -1090,14 +1090,14 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
 
-class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
+class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
     """
-    ExecuTorch model with an image-text-to-text causal language modeling head for inference using the ExecuTorch Runtime.
+    ExecuTorch model for CausalLM with multimodal capability.
 
     Although the auto_model_class is `AutoModelForCausalLM` same as `ExecuTorchModelForCausalLM`, this model is specifically designed for
-    image-text-to-text tasks. This class provides an interface for loading, running, and generating outputs from a vision-language model
-    optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models
-    compatible with ExecuTorch runtime.
+    multimodal-text-to-text tasks. This class provides an interface for loading, running, and generating outputs from a vision-language model
+    or a audio-language model optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models compatible 
+    with ExecuTorch runtime.
 
     Attributes:
         auto_model_class (`Type`):
@@ -1108,7 +1108,7 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForCausalLM
 
-    task = "image-text-to-text"
+    task = "multimodal-text-to-text"
 
     def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
         super().__init__(models, config)
@@ -1162,26 +1162,26 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
             raise ValueError("You must specify at least one of input_ids or pixel_values")
         self.stats.on_model_execution_start()
 
-        inputs_embeds = self.model.run_method("token_embeddings", (input_ids,))[0]
+        inputs_embeds = self.model.run_method("token_embedding", (input_ids,))[0]
 
         if pixel_values is not None:
-            image_features = self.model.run_method("vision_embeddings", (pixel_values,))[0]
+            image_features = self.model.run_method("image_encoder", (pixel_values,))[0]
 
             if input_ids is None:
-                special_image_mask = inputs_embeds == self.model.run_method("token_embeddings", (torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device),))[0]
+                special_image_mask = inputs_embeds == self.model.run_method("token_embedding", (torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device),))[0]
             else:
                 special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        logits = self.model.run_method("decoder", (cache_position, inputs_embeds))[0]
+        logits = self.model.run_method("text_model", (cache_position, inputs_embeds))[0]
         self.stats.on_model_execution_end()
         return logits
     
     def generate(
         self,
-        tokenizer: "PretrainedTokenizer",
+        tokenizer: "PreTrainedTokenizer",
         input_ids: torch.LongTensor,
         pixel_values: Optional[torch.FloatTensor] = None,
         max_new_tokens: int = 100,

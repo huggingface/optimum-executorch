@@ -37,7 +37,6 @@ from optimum.utils.import_utils import is_transformers_version
 
 from .utils import save_config_to_constant_methods
 
-
 class TorchExportableModuleWithHybridCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -53,12 +52,10 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
     ):
         """
         Initializes the exportable module with `HybridCache`.
-
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
             max_batch_size (int): Maximum batch size for the cache.
             max_cache_len (int): Maximum sequence length for the cache.
-
         Raises:
             AssertionError: If the model doesn't have the expected configuration for HybridCache.
         """
@@ -80,8 +77,12 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
         # Register all key and value cache tensors as buffers
         for i in range(len(self.cache.key_cache)):
-            self.register_buffer(f"key_cache_{i}", self.cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.cache.value_cache[i], persistent=False)
+            self.register_buffer(
+                f"key_cache_{i}", self.cache.key_cache[i], persistent=False
+            )
+            self.register_buffer(
+                f"value_cache_{i}", self.cache.value_cache[i], persistent=False
+            )
 
     def forward(
         self,
@@ -92,16 +93,16 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
-
         Args:
             cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
             input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
             inputs_embeds (`torch.Tensor`): Optional tensor representing input embeddings.
-
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+        batch_size = (
+            input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+        )
 
         # Generate position_ids from cache_position
         position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
@@ -136,22 +137,28 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
     ):
         """
         Initializes the exportable module with `HybridCache`.
-
         Args:
             model (`PreTrainedModel`): The pretrained model to wrap.
             max_batch_size (int): Maximum batch size for the cache.
             max_cache_len (int): Maximum sequence length for the cache.
-
         Raises:
             ValueError: If the model is configured with a unsupported cache implementation.
         """
         super().__init__()
-    
-        if not hasattr(model.config.text_config, "use_cache") or model.config.text_config.use_cache is False:
+
+        if (
+            not hasattr(model.config.text_config, "use_cache")
+            or model.config.text_config.use_cache is False
+        ):
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if hasattr(model.config.text_config, "layer_types") and getattr(model.config.text_config, "sliding_window", None) is not None:
-            self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
+        if (
+            hasattr(model.config.text_config, "layer_types")
+            and getattr(model.config.text_config, "sliding_window", None) is not None
+        ):
+            self.model = TorchExportableModuleWithHybridCache(
+                model, max_batch_size, max_cache_len
+            )
         else:
             # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
             # there is only 1 type of layers, so export will use `StaticCache` by default.
@@ -159,8 +166,12 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
                 "Using `StaticCache` for exporting image-text LM is not implemented yet."
             )
         # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
-        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
-        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        ALL_MASK_ATTENTION_FUNCTIONS.register(
+            "sdpa_without_vmap", sdpa_mask_without_vmap
+        )
+        ALL_ATTENTION_FUNCTIONS.register(
+            "sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"]
+        )
         self.model.model.config._attn_implementation = "sdpa_without_vmap"
 
     def forward(
@@ -170,11 +181,9 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
     ) -> torch.Tensor:
         """
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
-
         Args:
             input_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
             cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
-
         Returns:
             torch.Tensor: Logits output from the model.
         """
@@ -189,7 +198,6 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
     ) -> torch.export.ExportedProgram:
         """
         Export the wrapped module using `torch.export`.
-
         Args:
             input_embeds (`Optional[torch.Tensor]`):
                 Tensor representing current input embeddings to the module. If not provided, a default tensor will be used.
@@ -200,16 +208,6 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
-        if hasattr(self.model, "base_model_prefix"):
-            base = getattr(self.model, self.model.base_model_prefix, self.model)
-            model_device = base.device
-        elif hasattr(self.model, "model"):
-            model_device = self.model.model.device
-        else:
-            model_device = "cpu"
-            logging.warning(
-                "TorchExportableModuleForImageTextLM.export Can't infer device from the model. Set to CPU by default."
-            )
         seq_length = 3
 
         if dynamic_shapes is None:
@@ -227,7 +225,7 @@ class TorchExportableModuleForImageTextLM(torch.nn.Module):
             strict=strict if strict is not None else True,
         )
         return exported_program
-    
+
 
 class ImageEncoderExportableModule(torch.nn.Module):
     """
@@ -242,14 +240,15 @@ class ImageEncoderExportableModule(torch.nn.Module):
     def forward(self, pixel_values):
         """
         Projects the last hidden state from the vision model into language model space.
-
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        vision_outputs = self.model.vision_tower(pixel_values=pixel_values).last_hidden_state
+        vision_outputs = self.model.vision_tower(
+            pixel_values=pixel_values
+        ).last_hidden_state
         image_features = self.model.multi_modal_projector(vision_outputs)
         return image_features
 
@@ -266,13 +265,14 @@ class ImageTextToTextExportableModule(torch.nn.Module):
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
-        self.metadata = save_config_to_constant_methods(model.config.text_config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(
+            model.config.text_config, model.generation_config
+        )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
     def _prepare_vision_embedding_export_inputs(self):
         """
         Prepare example inputs and configurations for export.
-
         Returns:
             pixel_values (torch.Tensor): Example pixel values tensor.
             dynamic_shapes (dict or None): Dynamic shape specifications for export.
@@ -284,11 +284,10 @@ class ImageTextToTextExportableModule(torch.nn.Module):
         strict = False
 
         return pixel_values, dynamic_shapes, strict
-    
+
     def _prepare_text_embedding_export_inputs(self):
         """
         Prepare example inputs and configurations for export.
-
         Returns:
             input_ids (torch.Tensor): Example input IDs tensor.
             dynamic_shapes (dict or None): Dynamic shape specifications for export.
@@ -304,13 +303,14 @@ class ImageTextToTextExportableModule(torch.nn.Module):
         dynamic_shapes = {
             "input_ids": {1: seq_len_dim},
         }
-        strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
+        strict = parse(torch.__version__) != parse(
+            "2.7.0"
+        )  # Workaround for PyTorch bug #150994
         return example_input_ids, dynamic_shapes, strict
 
     def _prepare_decoder_only_export_inputs(self):
         """
         Prepare example inputs and configurations for export.
-
         Returns:
             inputs_embeds (torch.Tensor): Example input embeddings tensor.
             cache_position (torch.Tensor): Example cache position tensor.
@@ -320,7 +320,9 @@ class ImageTextToTextExportableModule(torch.nn.Module):
 
         # Prepare inputs with dynamic shapes
         seq_length = 3
-        example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=torch.float)
+        example_inputs_embeds = torch.zeros(
+            (1, seq_length, self.config.text_config.hidden_size), dtype=torch.float
+        )
         example_cache_position = torch.arange(seq_length, dtype=torch.long)
         max_seq_len = self.metadata.get("get_max_seq_len")
         sliding_window = self.metadata.get("sliding_window", float("inf"))
@@ -330,28 +332,38 @@ class ImageTextToTextExportableModule(torch.nn.Module):
             "inputs_embeds": {1: seq_len_dim},
             "cache_position": {0: seq_len_dim},
         }
-        strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
+        strict = parse(torch.__version__) != parse(
+            "2.7.0"
+        )  # Workaround for PyTorch bug #150994
         return example_inputs_embeds, example_cache_position, dynamic_shapes, strict
 
-
     def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
-        if is_transformers_version(">=", "4.53.0.dev0"):
-            from transformers.integrations.executorch import sdpa_mask_without_vmap
-            from transformers.masking_utils import AttentionMaskInterface
-            from transformers.modeling_utils import AttentionInterface
+        from transformers.integrations.executorch import sdpa_mask_without_vmap
+        from transformers.masking_utils import AttentionMaskInterface
+        from transformers.modeling_utils import AttentionInterface
 
-            _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
-            if self.use_custom_sdpa:
-                if self.use_custom_kv_cache:
-                    AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
-                    AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
-                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                    # This handles both regular sdpa and one for sliding window/local attention
-                    exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
-                else:
-                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                    # This handles both regular sdpa and one for sliding window/local attention
-                    exportable_module.model.model.config._attn_implementation = "custom_sdpa"
+        _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(
+            exportable_module
+        )
+        if self.use_custom_sdpa:
+            if self.use_custom_kv_cache:
+                AttentionInterface.register(
+                    "custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache
+                )
+                AttentionMaskInterface.register(
+                    "custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap
+                )
+                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                # This handles both regular sdpa and one for sliding window/local attention
+                exportable_module.model.model.config._attn_implementation = (
+                    "custom_sdpa_ring_kv_cache"
+                )
+            else:
+                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                # This handles both regular sdpa and one for sliding window/local attention
+                exportable_module.model.model.config._attn_implementation = (
+                    "custom_sdpa"
+                )
 
     def export(
         self,
@@ -377,11 +389,15 @@ class ImageTextToTextExportableModule(torch.nn.Module):
             )
 
         with torch.no_grad():
-            inputs_embeds, cache_position, dynamic_shapes, strict = self._prepare_decoder_only_export_inputs()
+            inputs_embeds, cache_position, dynamic_shapes, strict = (
+                self._prepare_decoder_only_export_inputs()
+            )
             logging.info(
                 f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
             )
-            exported_program = exportable_module.export(inputs_embeds, cache_position, dynamic_shapes, strict)
+            exported_program = exportable_module.export(
+                inputs_embeds, cache_position, dynamic_shapes, strict
+            )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
             # e.g. output of update_cache is transposed and
@@ -394,14 +410,21 @@ class ImageTextToTextExportableModule(torch.nn.Module):
             exported_program = torch.export.export(
                 mutated_gm,
                 args=(),
-                kwargs={"cache_position": cache_position, "inputs_embeds": inputs_embeds},
+                kwargs={
+                    "cache_position": cache_position,
+                    "inputs_embeds": inputs_embeds,
+                },
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
             )
 
             # Export token embeddings
-            input_ids, dynamic_shapes, strict = self._prepare_text_embedding_export_inputs()
-            logging.info(f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
+            input_ids, dynamic_shapes, strict = (
+                self._prepare_text_embedding_export_inputs()
+            )
+            logging.info(
+                f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}"
+            )
 
             token_embeddings_exported_program = torch.export.export(
                 exportable_module.model.model.language_model.get_input_embeddings(),
@@ -412,10 +435,16 @@ class ImageTextToTextExportableModule(torch.nn.Module):
             )
 
             # Export vision embeddings
-            pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
-            logging.info(f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}")
+            pixel_values, dynamic_shapes, strict = (
+                self._prepare_vision_embedding_export_inputs()
+            )
+            logging.info(
+                f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}"
+            )
             # Setting the _attn_implementation to "sdpa_without_vmap" for vision encoder
-            exportable_module.model.model.vision_tower.config._attn_implementation = "sdpa_without_vmap"
+            exportable_module.model.model.vision_tower.config._attn_implementation = (
+                "sdpa_without_vmap"
+            )
             vision_encoder = ImageEncoderExportableModule(exportable_module.model.model)
             vision_embeddings_exported_program = torch.export.export(
                 vision_encoder,
@@ -424,12 +453,13 @@ class ImageTextToTextExportableModule(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
             )
+        # These keys need to match with the runner
         return {
-            "decoder": exported_program,
-            "token_embeddings": token_embeddings_exported_program,
-            "vision_embeddings": vision_embeddings_exported_program,
+            "text_model": exported_program,
+            "token_embedding": token_embeddings_exported_program,
+            "image_encoder": vision_embeddings_exported_program,
         }
-    
+
 
 class CausalLMExportableModule(torch.nn.Module):
     """

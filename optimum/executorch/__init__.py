@@ -21,7 +21,7 @@ _import_structure = {
     "modeling": [
         "ExecuTorchModelForCausalLM",
         "ExecuTorchModelForImageClassification",
-        "ExecuTorchModelForImageTextToTextCausalLM",
+        "ExecuTorchModelForMultimodalCausalLM",
         "ExecuTorchModelForMaskedLM",
         "ExecuTorchModelForSeq2SeqLM",
         "ExecuTorchModelForSpeechSeq2Seq",
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from .modeling import (
         ExecuTorchModelForCausalLM,
         ExecuTorchModelForImageClassification,
-        ExecuTorchModelForImageTextToTextCausalLM,
+        ExecuTorchModelForMultimodalCausalLM,
         ExecuTorchModelForMaskedLM,
         ExecuTorchModelForSeq2SeqLM,
         ExecuTorchModelForSpeechSeq2Seq,

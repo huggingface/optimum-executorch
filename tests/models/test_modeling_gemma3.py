@@ -30,7 +30,7 @@ from packaging.version import parse
 from transformers import AutoTokenizer, AutoProcessor
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForImageTextToTextCausalLM
+from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultimodalCausalLM
 from optimum.utils.import_utils import is_transformers_version
 from optimum.exporters.executorch.tasks.image_text_to_text import load_image_text_to_text_model
 
@@ -281,7 +281,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         model_id = "google/gemma-3-4b-it"
 
-        model = ExecuTorchModelForImageTextToTextCausalLM.from_pretrained(
+        model = ExecuTorchModelForMultimodalCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
             task="image-text-to-text",
@@ -293,7 +293,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         )
 
         # Generate
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
         image_url = "https://llava-vl.github.io/static/images/view.jpg"
         conversation = [
                     {
@@ -329,5 +328,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             output,
             """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
 
-Based on the picture, we're looking at a serene lake scene with mountains in the background, a wooden pier, and a generally calm appearance. However""",
+Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you""",
         )
