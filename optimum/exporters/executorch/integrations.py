@@ -95,15 +95,16 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         self.generation_config = generation_config
         self.static_cache = StaticCache(
             config=config,
-            max_batch_size=self.generation_config.cache_config.batch_size,
-            max_cache_len=self.generation_config.cache_config.max_cache_len,
-            device=self.generation_config.cache_config.device,
+            max_batch_size=self.generation_config.cache_config.get("batch_size"),
+            max_cache_len=self.generation_config.cache_config.get("max_cache_len"),
+            device=self.generation_config.cache_config.get("device"),
             dtype=self.model.dtype,
         )
-        # TODO(JZ): figure out why len(self.static_cache) doesn't work like it does in upstream.
-        for i in range(len(self.static_cache.key_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
+
+        for i in range(len(self.static_cache)):
+            self.register_buffer(f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False)
+            self.register_buffer(f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False)
+
 
     def forward(
         self,
