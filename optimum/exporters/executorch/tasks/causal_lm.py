@@ -14,12 +14,11 @@
 
 import logging
 
-import torch
 import torchao
-from packaging.version import parse
 from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
 
 from ..integrations import CausalLMExportableModule
+from ..quantization import quantize_model_
 from ..task_registry import register_task
 
 
@@ -130,47 +129,8 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         if isinstance(param, torchao.utils.TorchAOBaseTensor):
             param.requires_grad = False
 
-    # TODO: Move quantization recipe out for better composability.
-    # TODO: Should switch to `TorchAoConfig` once the quant issue on final lm_head layer is fixed.
     qlinear_config = kwargs.get("qlinear", None)
     qembedding_config = kwargs.get("qembedding", None)
-    if qlinear_config or qembedding_config:
-        # TODO: Update torchao to use 0.11.0 once released
-        if parse(torchao.__version__) < parse("0.11.0.dev0"):
-            raise RuntimeError("Quantization 8da4w requires torchao >= 0.11.0. Please upgrade torchao.")
-
-        from torchao.quantization.granularity import PerAxis, PerGroup
-        from torchao.quantization.quant_api import (
-            Int8DynamicActivationIntxWeightConfig,
-            IntxWeightOnlyConfig,
-            quantize_,
-        )
-        from torchao.utils import unwrap_tensor_subclass
-
-        if qembedding_config:
-            logging.info("Quantizing embedding layers.")
-            # TODO: Should switch to `AOPerModuleConfig` once fix for tied weights is available.
-            embedding_config = IntxWeightOnlyConfig(
-                weight_dtype=torch.int8,
-                granularity=PerAxis(0),
-            )
-            quantize_(
-                eager_model,
-                embedding_config,
-                lambda m, fqn: isinstance(m, torch.nn.Embedding),
-            )
-
-        if qlinear_config:
-            logging.info("Quantizing linear layers.")
-            linear_config = Int8DynamicActivationIntxWeightConfig(
-                weight_dtype=torch.int4,
-                weight_granularity=PerGroup(32),
-            )
-            quantize_(
-                eager_model,
-                linear_config,
-            )
-
-        unwrap_tensor_subclass(eager_model)
+    quantize_model_(eager_model, qlinear_config=qlinear_config, qembedding_config=qembedding_config)
 
     return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
