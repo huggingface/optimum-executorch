@@ -399,7 +399,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
         )
 
-        if input_ids:
+        if input_ids is not None:
             exported_program = torch.export.export(
                 self.model,
                 args=(input_ids, example_cache_position),
@@ -407,7 +407,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
-        elif input_emebds:
+        elif inputs_embeds is not None:
             exported_program = torch.export.export(
                 self.model,
                 args=(),
