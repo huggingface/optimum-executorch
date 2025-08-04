@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Union
 import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageClassification,
