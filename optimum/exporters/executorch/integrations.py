@@ -291,7 +291,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
-    specifically for image-text LM with cache. This module ensures that the
+    specifically for decoder-only LM with cache. This module ensures that the
     exported model is compatible with further lowering and execution in `ExecuTorch`.
     """
 
@@ -315,7 +315,7 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             ValueError: If the model is configured with a unsupported cache implementation.
         """
         super().__init__()
-    
+
         if not hasattr(config, "use_cache") or config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
@@ -344,8 +344,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         Forward pass of the module, which is compatible with the ExecuTorch llm runner.
 
         Args:
-            input_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
             cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
+            input_ids (`torch.Tensor`): Tensor representing current input token id to the module.
+            input_embeds (`torch.Tensor`): Tensor representing current input embeddings to the module.
 
         Returns:
             torch.Tensor: Logits output from the model.
@@ -370,9 +371,9 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
 
         Args:
             input_ids (`Optional[torch.Tensor]`):
-                Tensor representing current input token id to the module. If not provided, a default tensor will be used.
+                Tensor representing current input token id to the module. If this and input_embeds are not provided, a default tensor will be used.
             input_embeds (`Optional[torch.Tensor]`):
-                Tensor representing current input embeddings to the module. If not provided, a default tensor will be used.
+                Tensor representing current input embeddings to the module.
             cache_position (`Optional[torch.Tensor]`):
                 Tensor representing current input position in the cache. If not provided, a default tensor will be used.
             dynamic_shapes (`Optional[dict]`):
@@ -388,35 +389,25 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         else:
             model_device = "cpu"
             logging.warning(
-                "TorchExportableModuleForImageTextLM.export Can't infer device from the model. Set to CPU by default."
+                "TorchExportableModuleForDecoderOnlyLM.export Can't infer device from the model. Set to CPU by default."
             )
 
-        if not ((input_ids is None) ^ (inputs_embeds is None)):
-            raise ValueError("Must specify either input_ids or inputs_embeds")
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("Can't specify both input_ids and inputs_embeds.")
+
+        example_cache_position = (
+            cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
+        )
 
         if input_ids:
-            example_input_ids = (
-                input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long, device=model_device)
-            )
-            example_cache_position = (
-                cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
-            )
             exported_program = torch.export.export(
                 self.model,
-                args=(example_input_ids, example_cache_position),
+                args=(input_ids, example_cache_position),
                 kwargs={},
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
-        else:
-            seq_length = 3
-            # TODO(JZ): remove this and pass this in instead?
-            # if dynamic_shapes is None:
-            #     seq_len_dim = torch.export.Dim("seq_length_dim", max=seq_length)
-            #     dynamic_shapes = {
-            #         "inputs_embeds": {1: seq_len_dim},
-            #         "cache_position": {0: seq_len_dim},
-            #     }
+        elif input_emebds:
             exported_program = torch.export.export(
                 self.model,
                 args=(),
@@ -424,6 +415,19 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=strict if strict is not None else True,
             )
+        else:
+            # No inputs specified, assuming we are exporting with input_ids for legacy reasons.
+            # Also because LLMs use input_ids and are the more common use case.
+            example_input_ids = (
+                input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long, device=model_device)
+            )
+            exported_program = torch.export.export(
+                self.model,
+                args=(example_input_ids, example_cache_position),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict if strict is not None else True,
+            )            
 
         return exported_program
     

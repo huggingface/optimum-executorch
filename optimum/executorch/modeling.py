@@ -1201,7 +1201,7 @@ class ExecuTorchModelForImageTextToTextCausalLM(ExecuTorchModelBase):
         pixel_values: Optional[torch.FloatTensor] = None,
         max_new_tokens: int = 100,
     ):
-        
+        return
         # Prefill
 
 class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
