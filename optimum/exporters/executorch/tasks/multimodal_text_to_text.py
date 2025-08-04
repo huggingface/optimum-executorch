@@ -134,7 +134,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
                 granularity=PerAxis(0),
             )
             quantize_(
-                eager_model,
+                eager_model.language_model,
                 embedding_config,
                 lambda m, fqn: isinstance(m, torch.nn.Embedding),
             )
