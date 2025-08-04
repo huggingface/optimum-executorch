@@ -28,6 +28,7 @@ from transformers import (
 )
 from transformers.generation.configuration_utils import GenerationConfig
 
+from executorch import version as executorch_version
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 from optimum.utils.import_utils import is_transformers_version
 
@@ -89,7 +90,10 @@ class CausalLMExportableModule(torch.nn.Module):
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
     def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
-        if is_transformers_version(">=", "4.53.0.dev0"):
+        if (
+            is_transformers_version(">=", "4.53.0.dev0")
+            and parse(executorch_version.__version__).base_version > "0.6.0"
+        ):
             from transformers.integrations.executorch import sdpa_mask_without_vmap
             from transformers.masking_utils import AttentionMaskInterface
             from transformers.modeling_utils import AttentionInterface
@@ -126,7 +130,7 @@ class CausalLMExportableModule(torch.nn.Module):
             )
             self._register_attention_mask_for_4_53(exportable_module)
 
-            if self.use_custom_kv_cache:
+            if self.use_custom_kv_cache and parse(executorch_version.__version__).base_version > "0.6.0":
                 from optimum.executorch.attentions.custom_kv_cache import (
                     replace_with_et_custom_kv_cache,
                 )
