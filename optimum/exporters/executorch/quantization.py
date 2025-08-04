@@ -26,10 +26,6 @@ def quantize_model_(
     if not (qlinear_config or qembedding_config):
         return
 
-    # TODO: Update torchao to use 0.11.0 once released
-    if parse(torchao.__version__) < parse("0.11.0.dev0"):
-        raise RuntimeError("Quantization requires torchao >= 0.11.0. Please upgrade torchao.")
-
     from torchao.quantization.granularity import PerAxis, PerGroup
     from torchao.quantization.quant_api import (
         Int8DynamicActivationIntxWeightConfig,
