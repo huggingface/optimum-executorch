@@ -210,7 +210,7 @@ class ETCustomHybridCache(HybridCache):
         # Use CustomKVCache for global layers and CustomRingKVCache for sliding window layers.
         self.kv_cache = torch.nn.ModuleList()
         for layer in self.layers:
-            if layer.is_sliding():
+            if layer.is_sliding:
                 # This is a sliding window layer
                 layer_cache = CustomRingKVCache(
                     max_batch_size=layer.max_batch_size,
@@ -281,7 +281,7 @@ class ETCustomHybridCache(HybridCache):
 
         # For CustomRingKVCache, we need to handle the sequence length differently
         layer_cache = self.kv_cache[layer_idx]
-        if self.layers[layer_idx].is_sliding():
+        if self.layers[layer_idx].is_sliding:
             # CustomRingKVCache cache_position_manager which
             # maintains cache position for each slot in the kv cache
             # we return the max position + 1 to indicate max position
@@ -385,7 +385,7 @@ def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dt
             for i in range(len(module.cache.kv_cache)):
                 setattr(module, f"key_cache_{i}", module.cache.kv_cache[i].k_cache)
                 setattr(module, f"value_cache_{i}", module.cache.kv_cache[i].v_cache)
-                if module.cache.layers[i].is_sliding():
+                if module.cache.layers[i].is_sliding:
                     # Register cache_positions as buffer for sliding window layers
                     # This prevents it from being traced as a constant
                     module.register_buffer(

@@ -186,6 +186,13 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             subfolder=subfolder,
             local_files_only=local_files_only,
         )
+
+        from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
+        from executorch.kernels import quantized  # noqa
+        from executorch.extension.pybindings.portable_lib import _get_operator_names
+        print("----------- LOADED OPS ----------")
+        print('\n'.join(_get_operator_names()))
+        print("---------------------------------")
         model = _load_for_executorch(model_cache_path)
         logging.info(
             f"Loaded model from {model_cache_path} ({os.path.getsize(model_cache_path) / (1024 * 1024):.2f} MB)"
