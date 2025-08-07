@@ -32,7 +32,6 @@ from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultimodalCausalLM
 from optimum.utils.import_utils import is_transformers_version
-from optimum.exporters.executorch.tasks.image_text_to_text import load_image_text_to_text_model
 
 from ..utils import check_causal_lm_output_quality
 
@@ -295,27 +294,24 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # Generate
         image_url = "https://llava-vl.github.io/static/images/view.jpg"
         conversation = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image_url},
                     {
-                        "role": "system",
-                        "content": [{"type": "text", "text": "You are a helpful assistant."}]
+                        "type": "text",
+                        "text": "What are the things I should be cautious about when I visit here?",
                     },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "image", "url": image_url},
-                            {
-                                "type": "text",
-                                "text": "What are the things I should be cautious about when I visit here?",
-                            },
-                        ],
-                    },
-                ]
+                ],
+            },
+        ]
         processor = AutoProcessor.from_pretrained(model_id)
         inputs = processor.apply_chat_template(
             conversation,
             add_generation_prompt=True,
             tokenize=True,
-            return_dict=True, 
+            return_dict=True,
             return_tensors="pt",
         )
         output = model.generate(

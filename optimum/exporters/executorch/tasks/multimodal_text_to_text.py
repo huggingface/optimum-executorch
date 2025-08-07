@@ -19,14 +19,14 @@ import torchao
 from packaging.version import parse
 from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
 
-from ..integrations import ImageTextToTextExportableModule
+from ..integrations import MultimodalTextToTextExportableModule
 from ..task_registry import register_task
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("image-text-to-text")
-def load_image_text_to_text_model(model_name_or_path: str, **kwargs):
+def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     """
     Loads a causal language model for image-to-text generation and registers it under the task
     'image-text-to-text' using Hugging Face's AutoModelForCausalLM.
@@ -68,7 +68,7 @@ def load_image_text_to_text_model(model_name_or_path: str, **kwargs):
             f"The model {model_name_or_path} does not have a `text_config` or `vision_config` attribute in its config. "
             "This is required for image-text-to-text models."
         )
-    
+
     if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
         # the data-dependent control flow in _longrope_frequency_update. Alternatively, users should rewrite
@@ -101,7 +101,7 @@ def load_image_text_to_text_model(model_name_or_path: str, **kwargs):
             f"The model {model_name_or_path} does not have a `language_model` or `vision_tower` attribute. "
             "This is required for image-text-to-text models."
         )
-    
+
     for param in eager_model.parameters():
         # Must disable gradient for quantized checkpoint
         if isinstance(param, torchao.utils.TorchAOBaseTensor):
@@ -150,4 +150,4 @@ def load_image_text_to_text_model(model_name_or_path: str, **kwargs):
 
         unwrap_tensor_subclass(eager_model)
 
-    return ImageTextToTextExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
+    return MultimodalTextToTextExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)

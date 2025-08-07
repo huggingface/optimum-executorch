@@ -36,14 +36,16 @@ from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
     Seq2SeqLMExportableModule,
-    ImageTextToTextExportableModule
+    ImageTextToTextExportableModule,
 )
 from ..recipe_registry import register_recipe
 
 
 @register_recipe("xnnpack")
 def export_to_executorch_with_xnnpack(
-    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, ImageTextToTextExportableModule],
+    model: Union[
+        CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, ImageTextToTextExportableModule
+    ],
     **kwargs,
 ):
     """

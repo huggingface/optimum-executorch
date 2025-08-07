@@ -1096,7 +1096,7 @@ class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
 
     Although the auto_model_class is `AutoModelForCausalLM` same as `ExecuTorchModelForCausalLM`, this model is specifically designed for
     multimodal-text-to-text tasks. This class provides an interface for loading, running, and generating outputs from a vision-language model
-    or a audio-language model optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models compatible 
+    or a audio-language model optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models compatible
     with ExecuTorch runtime.
 
     Attributes:
@@ -1114,8 +1114,9 @@ class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
         super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
-        
+
         # Make sure config contains vision_config and text_config, otherwise raise an error
+        # TODO(jackzhxng): check for audio config as well.
         if not hasattr(config, "vision_config") or not hasattr(config, "text_config"):
             raise ValueError(
                 "The configuration must contain 'vision_config' and 'text_config' attributes for image-text-to-text task."
@@ -1149,7 +1150,7 @@ class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
     ) -> torch.Tensor:
         """
         Forward pass of the model, which is compatible with the ExecuTorch runtime for LLM. Here we are assuming pixel_values only represent 1 image.
-
+        TODO(jackzhxng): Support `input_features` for audio modality.
         Args:
             input_ids (`torch.Tensor`): Tensor representing current input token id to the model.
             pixel_values (`torch.Tensor`): Tensor representing image input to the model.
@@ -1168,7 +1169,13 @@ class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
             image_features = self.model.run_method("image_encoder", (pixel_values,))[0]
 
             if input_ids is None:
-                special_image_mask = inputs_embeds == self.model.run_method("token_embedding", (torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device),))[0]
+                special_image_mask = (
+                    inputs_embeds
+                    == self.model.run_method(
+                        "token_embedding",
+                        (torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device),),
+                    )[0]
+                )
             else:
                 special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -1178,7 +1185,7 @@ class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
         logits = self.model.run_method("text_model", (cache_position, inputs_embeds))[0]
         self.stats.on_model_execution_end()
         return logits
-    
+
     def generate(
         self,
         tokenizer: "PreTrainedTokenizer",
@@ -1195,7 +1202,7 @@ class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
                 f"max_new_tokens={max_new_tokens} is larger than max_cache_size={self.max_cache_size}. Generating tokens will be truncated to max_cache_size."
             )
             max_new_tokens = self.max_cache_size
-        
+
         # Prefill
         logits = self.forward(
             input_ids=input_ids,
