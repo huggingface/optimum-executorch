@@ -397,7 +397,7 @@ class MultimodalTextToTextExportableModule(torch.nn.Module):
                 "token_embedding": token_embeddings_exported_program,
             }
 
-            if (hasattr(exportable_module.model.model, "vision_tower")):
+            if hasattr(exportable_module.model.model, "vision_tower"):
                 # Export vision embeddings
                 pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
                 logging.info(
