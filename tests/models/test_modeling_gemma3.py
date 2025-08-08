@@ -22,14 +22,15 @@ import tempfile
 import unittest
 
 import pytest
+import torch
 import torchao
 import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoProcessor
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultimodalCausalLM
 from optimum.utils.import_utils import is_transformers_version
 
 from ..utils import check_causal_lm_output_quality
@@ -267,3 +268,61 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(
+        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
+        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
+    )
+    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    def test_gemma3_image_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we(self):
+
+        model_id = "google/gemma-3-4b-it"
+
+        model = ExecuTorchModelForMultimodalCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            task="image-text-to-text",
+            export=True,
+            use_custom_sdpa=True,
+            use_custom_kv_cache=True,
+            qlinear=True,
+            qembedding_config=True,
+        )
+
+        # Generate
+        image_url = "https://llava-vl.github.io/static/images/view.jpg"
+        conversation = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image_url},
+                    {
+                        "type": "text",
+                        "text": "What are the things I should be cautious about when I visit here?",
+                    },
+                ],
+            },
+        ]
+        processor = AutoProcessor.from_pretrained(model_id)
+        inputs = processor.apply_chat_template(
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        output = model.generate(
+            AutoTokenizer.from_pretrained(model_id),
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
+            max_new_tokens=50,
+        )
+        self.assertEqual(
+            output,
+            """Okay, let's analyze the image and discuss potential cautions for visiting this location. 
+
+Based on the picture, we're looking at a serene lakeside scene with a wooden pier extending into the water. Here's a breakdown of what you""",
+        )

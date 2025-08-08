@@ -25,6 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
@@ -238,9 +239,12 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
     ) -> Dict[str, "ExecuTorchModule"]:
         task = kwargs.pop("task", None)
         if task is not None:
-            logger.warning(f"task was provided and set to {task} but not used, will be ignored")
-        inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class)
-        logging.info(f"Inferred task from model class: {inferred_task}")
+            logger.warning(f"task was provided and set to {task}")
+        elif hasattr(cls, "task"):
+            task = cls.task
+        else:
+            task = TasksManager.infer_task_from_model(cls.auto_model_class)
+            logging.info(f"Inferred task from model class: {task}")
 
         save_dir = TemporaryDirectory()
         save_dir_path = Path(save_dir.name)
@@ -249,7 +253,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         executorch_progs = main_export(
             model_name_or_path=model_id,
             output_dir=save_dir_path,
-            task=inferred_task,
+            task=task,
             recipe=recipe,
             config=config,
             subfolder=subfolder,
@@ -309,6 +313,8 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
             else:
                 model_dir = model_id
+                if not config:
+                    config = AutoConfig.from_pretrained(model_id)
 
             pte_files = find_files_matching_pattern(
                 model_dir,
@@ -1098,3 +1104,144 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         self.stats.on_inference_end()
         self.stats.print_report()
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+
+class ExecuTorchModelForMultimodalCausalLM(ExecuTorchModelBase):
+    """
+    ExecuTorch model for CausalLM with multimodal capability.
+
+    Although the auto_model_class is `AutoModelForCausalLM` same as `ExecuTorchModelForCausalLM`, this model is specifically designed for
+    multimodal-text-to-text tasks. This class provides an interface for loading, running, and generating outputs from a vision-language model
+    or a audio-language model optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models compatible
+    with ExecuTorch runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForCausalLM`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+    """
+
+    auto_model_class = AutoModelForCausalLM
+
+    task = "multimodal-text-to-text"
+
+    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+        super().__init__(models, config)
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+
+        # Make sure config contains vision_config and text_config, otherwise raise an error
+        # TODO(jackzhxng): check for audio config as well.
+        if not hasattr(config, "vision_config") or not hasattr(config, "text_config"):
+            raise ValueError(
+                "The configuration must contain 'vision_config' and 'text_config' attributes for image-text-to-text task."
+            )
+        metadata = self.model.method_names()
+        logging.debug(f"Load all static methods: {metadata}")
+        if "use_kv_cache" in metadata:
+            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
+        if "get_max_seq_len" in metadata:
+            self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
+        if "get_max_batch_size" in metadata:
+            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
+        if "get_dtype" in metadata:
+            self.dtype = self.model.run_method("get_dtype")[0]
+        if "get_bos_id" in metadata:
+            self.bos_token_id = self.model.run_method("get_bos_id")[0]
+        for key in ("get_eos_id", "get_eos_ids"):
+            if key in metadata:
+                self.eos_token_ids = self.model.run_method(key)
+                break
+        if "get_vocab_size" in metadata:
+            self.vocab_size = self.model.run_method("get_vocab_size")[0]
+        if "use_sdpa_with_kv_cache" in metadata:
+            self.use_sdpa_with_kv_cache = self.model.run_method("use_sdpa_with_kv_cache")[0]
+
+    def forward(
+        self,
+        cache_position: torch.LongTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the model, which is compatible with the ExecuTorch runtime for LLM. Here we are assuming pixel_values only represent 1 image.
+        TODO(jackzhxng): Support `input_features` for audio modality.
+        Args:
+            input_ids (`torch.Tensor`): Tensor representing current input token id to the model.
+            pixel_values (`torch.Tensor`): Tensor representing image input to the model.
+            cache_position (`torch.Tensor`): Tensor representing current input position in the cache.
+
+        Returns:
+            torch.Tensor: Logits output from the model.
+        """
+        if (input_ids is None) and (pixel_values is None):
+            raise ValueError("You must specify at least one of input_ids or pixel_values")
+        self.stats.on_model_execution_start()
+
+        inputs_embeds = self.model.run_method("token_embedding", (input_ids,))[0]
+
+        if pixel_values is not None:
+            image_features = self.model.run_method("image_encoder", (pixel_values,))[0]
+
+            if input_ids is None:
+                special_image_mask = (
+                    inputs_embeds
+                    == self.model.run_method(
+                        "token_embedding",
+                        (torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device),),
+                    )[0]
+                )
+            else:
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        logits = self.model.run_method("text_model", (cache_position, inputs_embeds))[0]
+        self.stats.on_model_execution_end()
+        return logits
+
+    def generate(
+        self,
+        tokenizer: "PreTrainedTokenizer",
+        input_ids: torch.LongTensor,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        max_new_tokens: int = 100,
+    ):
+        # Sanity check
+
+        if max_new_tokens <= 0:
+            raise ValueError(f"max_new_tokens must be greater than 0, got {max_new_tokens}.")
+        elif max_new_tokens > self.max_cache_size:
+            logging.warning(
+                f"max_new_tokens={max_new_tokens} is larger than max_cache_size={self.max_cache_size}. Generating tokens will be truncated to max_cache_size."
+            )
+            max_new_tokens = self.max_cache_size
+
+        # Prefill
+        logits = self.forward(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            cache_position=torch.arange(input_ids.size(1), dtype=torch.long, device=input_ids.device),
+        )
+
+        tokens = []
+
+        token = torch.argmax(logits[:, -1, :], dim=-1).item()
+        tokens.append(token)
+        i = 1
+        while i < max_new_tokens:
+            # Generate next token
+            logits = self.forward(
+                input_ids=torch.tensor([token], dtype=torch.long, device=input_ids.device).unsqueeze(0),
+                cache_position=torch.tensor([input_ids.size(1) + i - 1], dtype=torch.long, device=input_ids.device),
+            )
+            token = torch.argmax(logits[:, -1, :], dim=-1).item()
+            tokens.append(token)
+
+            if token in self.eos_token_ids:
+                break
+            i += 1
+
+        return tokenizer.decode(tokens, skip_special_tokens=True)
