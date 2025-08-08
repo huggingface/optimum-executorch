@@ -16,6 +16,8 @@
 
 import logging
 import os
+import tempfile
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -102,6 +104,34 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 setattr(self, key, value)
 
         self.stats = Stats()
+        
+        # Initialize cleanup tracking
+        self._temp_dir = None
+
+    def __del__(self):
+        """Clean up temporary files when the model instance is destroyed."""
+        self._cleanup_temp_resources()
+    
+    def _cleanup_temp_resources(self):
+        """Clean up temporary directory and files."""
+        if hasattr(self, '_temp_dir') and self._temp_dir is not None:
+            try:
+                if hasattr(self._temp_dir, 'cleanup'):
+                    # It's a TemporaryDirectory object
+                    logging.info(f"Cleaning up temporary directory: {self._temp_dir.name}")
+                    self._temp_dir.cleanup()
+                    logging.info(f"Temporary directory cleanup completed")
+                elif isinstance(self._temp_dir, (str, Path)):
+                    # It's a path
+                    logging.info(f"Cleaning up temporary path: {self._temp_dir}")
+                    shutil.rmtree(self._temp_dir, ignore_errors=True)
+                    logging.info(f"Temporary path cleanup completed")
+            except Exception as e:
+                # Log cleanup errors for debugging
+                logging.warning(f"Error during temp directory cleanup: {e}")
+                pass
+            finally:
+                self._temp_dir = None
 
     @abstractmethod
     def forward(self, *args, **kwargs):
@@ -250,7 +280,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class)
         logging.info(f"Inferred task from model class: {inferred_task}")
 
-        save_dir = TemporaryDirectory()
+        save_dir = TemporaryDirectory(prefix="executorch_export_")
         save_dir_path = Path(save_dir.name)
 
         # Export to ExecuTorch and save the pte file to the temporary directory
@@ -274,7 +304,16 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         for name, _ in executorch_progs.items():
             models.update(cls._from_pretrained(save_dir_path, file_name=f"{name}.pte", config=config))
 
-        return models
+        # Log temp directory info for debugging
+        logging.info(f"Created temporary directory: {save_dir_path}")
+        for name in executorch_progs.keys():
+            pte_file = save_dir_path / f"{name}.pte"
+            if pte_file.exists():
+                logging.info(f"PTE file exists at export: {pte_file} (size: {pte_file.stat().st_size} bytes)")
+            else:
+                logging.warning(f"PTE file missing at export: {pte_file}")
+        
+        return models, save_dir
 
     def _save_pretrained(self, save_directory):
         """
@@ -345,8 +384,9 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 f"Could not infer whether the model was already converted or not to the ExecuTorch IR, keeping `export={export}`.\n{exception}"
             )
 
+        temp_dir = None
         if _export:
-            models_dict = cls._export(
+            models_dict, temp_dir = cls._export(
                 model_id=model_id,
                 config=config,
                 revision=revision,
@@ -376,7 +416,14 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                     )
                 )
 
-        return cls(models_dict, config)
+        model_instance = cls(models_dict, config)
+        
+        # Store the TemporaryDirectory reference to prevent GC
+        if temp_dir is not None:
+            model_instance._temp_dir = temp_dir
+            logging.info(f"Stored temp directory reference in model: {temp_dir.name}")
+            
+        return model_instance
 
 
 class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
@@ -647,12 +694,30 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         Returns:
             torch.Tensor: Logits output from the model.
         """
+        # Check if temp directory and PTE file still exist before forward pass
+        if hasattr(self, '_temp_dir') and self._temp_dir is not None:
+            temp_path = Path(self._temp_dir.name)
+            logging.info(f"Forward pass - temp directory exists: {temp_path.exists()}")
+            if temp_path.exists():
+                pte_files = list(temp_path.glob("*.pte"))
+                logging.info(f"Forward pass - PTE files found: {len(pte_files)}")
+                for pte_file in pte_files:
+                    logging.info(f"Forward pass - PTE file: {pte_file} exists: {pte_file.exists()}, size: {pte_file.stat().st_size if pte_file.exists() else 'N/A'}")
+            else:
+                logging.error(f"Forward pass - temp directory missing: {temp_path}")
+        else:
+            logging.info("Forward pass - no temp directory reference stored")
+
         self.stats.on_model_execution_start()
 
         try:
             logits = self.model.forward((input_ids, cache_position))[0]
         except Exception as e:
             shapes = {name: val.shape for name, val in locals().items() if hasattr(val, "shape")}
+            logging.error(f"Forward pass failed - temp dir exists: {hasattr(self, '_temp_dir') and self._temp_dir is not None}")
+            if hasattr(self, '_temp_dir') and self._temp_dir is not None:
+                temp_path = Path(self._temp_dir.name)
+                logging.error(f"Forward pass failed - temp directory: {temp_path} exists: {temp_path.exists()}")
             print(f"Exception: {e}.\n{self.model.method_meta('forward')}\narg shapes: {shapes}")
             raise
 
