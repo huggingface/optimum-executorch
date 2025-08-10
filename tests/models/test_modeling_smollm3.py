@@ -36,7 +36,7 @@ is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
 @pytest.mark.skipif(
-    is_transformers_version("<", "4.53.1") or is_linux_ci,
+    is_transformers_version("<", "4.53.1"),
     reason="Only available on transformers >= 4.53.1",
 )
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
