@@ -345,6 +345,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             logger.info("Offline mode: setting `local_files_only=True`")
             local_files_only = True
 
+        # See if model was already exported to ExecuTorch and uplaoded to the HuggingFace repo.
         _export = export
         try:
             if local_files_only and not os.path.isdir(model_id):
@@ -371,13 +372,11 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 if export:
                     logger.warning(
                         f"The model {model_id} was already converted to the ExecuTorch IR but got `export=True`, the model will be converted to ExecuTorch once again. "
-                        # "Don't forget to save the resulting model with `.save_pretrained()`"
                     )
                     _export = True
                 else:
                     logger.warning(
                         f"No ExecuTorch files were found for {model_id}, setting `export=True` to convert the model to the ExecuTorch IR. "
-                        # "Don't forget to save the resulting model with `.save_pretrained()`"
                     )
         except Exception as exception:
             logger.warning(
@@ -386,6 +385,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
 
         temp_dir = None
         if _export:
+            logging.info(f"Exporting {model_id} to ExecuTorch program...")
             models_dict, temp_dir = cls._export(
                 model_id=model_id,
                 config=config,
@@ -399,6 +399,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 **kwargs,
             )
         else:
+            logging.info(f"Pre-exported `.pte` artifact already exists in HuggingFace repo or provided file path for {model_id}, skipping export.")
             models_dict = {}
             for pte_file in pte_files:
                 models_dict.update(
@@ -711,7 +712,9 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         self.stats.on_model_execution_start()
 
         try:
+            logging.info("Running forward()...")
             logits = self.model.forward((input_ids, cache_position))[0]
+            logging.info(f"logits from forward(): {logits}")
         except Exception as e:
             shapes = {name: val.shape for name, val in locals().items() if hasattr(val, "shape")}
             logging.error(f"Forward pass failed - temp dir exists: {hasattr(self, '_temp_dir') and self._temp_dir is not None}")
