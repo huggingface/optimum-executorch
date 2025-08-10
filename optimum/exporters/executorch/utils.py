@@ -54,8 +54,8 @@ def save_config_to_constant_methods(
         # Check for cache_config and its attributes
         cache_config = getattr(generation_config, "cache_config", None)
         if cache_config is not None:
-            max_batch_size = cache_config.get("batch_size")
-            max_seq_len = cache_config.get("max_cache_len")
+            max_batch_size = getattr(cache_config, "batch_size", None)
+            max_seq_len = getattr(cache_config, "max_cache_len", None)
 
             if max_batch_size is not None:
                 metadata["get_max_batch_size"] = max_batch_size
