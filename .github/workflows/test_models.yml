@@ -36,7 +36,7 @@ jobs:
         test-modeling: ${{ fromJson(needs.discover-tests.outputs.model_names) }}
         executorch-version: ['0.6.0', 'nightly']
         python-version: ['3.11']
-        os: [macos-15-large, ubuntu-22.04]
+        os: [macos-15, ubuntu-22.04]
 
     # Custom job name, now shortened and cleaner
     name: ${{ matrix.test-modeling }} (et=${{ matrix.executorch-version }}, py=${{ matrix.python-version }}, ${{ matrix.os }})
