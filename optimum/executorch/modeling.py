@@ -217,6 +217,9 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             local_files_only=local_files_only,
         )
         model = _load_for_executorch(model_cache_path)
+        logging.info(
+            f"Loaded model from {model_cache_path} ({os.path.getsize(model_cache_path) / (1024 * 1024):.2f} MB)"
+        )
 
         return {default_file_name.removesuffix(_PTE_SUFFIX): model}
 
