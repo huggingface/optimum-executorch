@@ -54,7 +54,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             model_id,
             config=config,
             recipe="xnnpack",
-            **{"qlinear": True, "qembeeding": True},
+            **{"qlinear": "8da4w", "qembeeding": "8w"},
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)

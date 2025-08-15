@@ -62,8 +62,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --recipe {recipe} \
                     --output_dir {tempdir}/executorch \
                     --use_custom_sdpa \
-                    --qlinear \
-                    --qembedding",
+                    --qlinear 8da4w \
+                    --qembedding 8w",
                 shell=True,
                 check=True,
             )
@@ -188,7 +188,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
-        kwargs = {"qlinear": True, "qembedding": True}
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -262,7 +262,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
-            **{"qlinear": True, "qembeeding": True},
+            **{"qlinear": "8da4w", "qembedding": "8w"},
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)

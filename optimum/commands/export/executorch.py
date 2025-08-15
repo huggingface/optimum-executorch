@@ -69,15 +69,28 @@ def parse_args_executorch(parser):
     )
     required_group.add_argument(
         "--qlinear",
+        type=str,
+        choices=["8da4w", "4w", "8w"],
         required=False,
-        action="store_true",
-        help="Quantization config for linear layers. If set, defaults to '8da4w' w/ groupsize 32.",
+        help=(
+            "Quantization config for linear layers.\n\n"
+            "Options:\n"
+            "  8da4w - 8-bit dynamic activation, 4-bit weight with group_size = 32\n"
+            "  4w    - 4-bit weight only, per group with group_size = 32\n"
+            "  8w    - 8-bit weight only, per channel"
+        ),
     )
     required_group.add_argument(
         "--qembedding",
+        type=str,
+        choices=["4w", "8w"],
         required=False,
-        action="store_true",
-        help="Quantization config for embedding. If set, defaults to int8 channelwise.",
+        help=(
+            "Quantization config for embedding layer.\n\n"
+            "Options:\n"
+            "  4w    - 4-bit weight only, per group with group_size = 32\n"
+            "  8w    - 8-bit weight only, per channel"
+        ),
     )
 
 

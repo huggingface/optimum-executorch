@@ -16,6 +16,8 @@
 
 import logging
 import os
+import tempfile
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -24,6 +26,7 @@ from typing import Dict, List, Optional, Union
 import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageClassification,
@@ -103,6 +106,34 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 setattr(self, key, value)
 
         self.stats = Stats()
+
+        # Initialize cleanup tracking
+        self._temp_dir = None
+
+    def __del__(self):
+        """Clean up temporary files when the model instance is destroyed."""
+        self._cleanup_temp_resources()
+
+    def _cleanup_temp_resources(self):
+        """Clean up temporary directory and files."""
+        if hasattr(self, "_temp_dir") and self._temp_dir is not None:
+            try:
+                if hasattr(self._temp_dir, "cleanup"):
+                    # It's a TemporaryDirectory object
+                    logging.info(f"Cleaning up temporary directory: {self._temp_dir.name}")
+                    self._temp_dir.cleanup()
+                    logging.info(f"Temporary directory cleanup completed")
+                elif isinstance(self._temp_dir, (str, Path)):
+                    # It's a path
+                    logging.info(f"Cleaning up temporary path: {self._temp_dir}")
+                    shutil.rmtree(self._temp_dir, ignore_errors=True)
+                    logging.info(f"Temporary path cleanup completed")
+            except Exception as e:
+                # Log cleanup errors for debugging
+                logging.warning(f"Error during temp directory cleanup: {e}")
+                pass
+            finally:
+                self._temp_dir = None
 
     @abstractmethod
     def forward(self, *args, **kwargs):
@@ -242,7 +273,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class) if not task else task
         logging.info(f"Inferred task from model class: {inferred_task}")
 
-        save_dir = TemporaryDirectory()
+        save_dir = TemporaryDirectory(prefix="executorch_export_")
         save_dir_path = Path(save_dir.name)
 
         # Export to ExecuTorch and save the pte file to the temporary directory
@@ -266,7 +297,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         for name, _ in executorch_progs.items():
             models.update(cls._from_pretrained(save_dir_path, file_name=f"{name}.pte", config=config))
 
-        return models
+        return models, save_dir
 
     def _save_pretrained(self, save_directory):
         """
@@ -298,6 +329,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             logger.info("Offline mode: setting `local_files_only=True`")
             local_files_only = True
 
+        # See if model was already exported to ExecuTorch and uplaoded to the HuggingFace repo.
         _export = export
         try:
             if local_files_only and not os.path.isdir(model_id):
@@ -324,21 +356,21 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 if export:
                     logger.warning(
                         f"The model {model_id} was already converted to the ExecuTorch IR but got `export=True`, the model will be converted to ExecuTorch once again. "
-                        # "Don't forget to save the resulting model with `.save_pretrained()`"
                     )
                     _export = True
                 else:
                     logger.warning(
                         f"No ExecuTorch files were found for {model_id}, setting `export=True` to convert the model to the ExecuTorch IR. "
-                        # "Don't forget to save the resulting model with `.save_pretrained()`"
                     )
         except Exception as exception:
             logger.warning(
                 f"Could not infer whether the model was already converted or not to the ExecuTorch IR, keeping `export={export}`.\n{exception}"
             )
 
+        temp_dir = None
         if _export:
-            models_dict = cls._export(
+            logging.info(f"Exporting {model_id} to ExecuTorch program...")
+            models_dict, temp_dir = cls._export(
                 model_id=model_id,
                 config=config,
                 revision=revision,
@@ -351,6 +383,9 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 **kwargs,
             )
         else:
+            logging.info(
+                f"Pre-exported `.pte` artifact already exists in HuggingFace repo or provided file path for {model_id}, skipping export."
+            )
             models_dict = {}
             for pte_file in pte_files:
                 models_dict.update(
@@ -368,7 +403,14 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                     )
                 )
 
-        return cls(models_dict, config)
+        model_instance = cls(models_dict, config)
+
+        # Store the TemporaryDirectory reference to prevent GC
+        if temp_dir is not None:
+            model_instance._temp_dir = temp_dir
+            logging.info(f"Stored temp directory reference in model: {temp_dir.name}")
+
+        return model_instance
 
 
 class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):

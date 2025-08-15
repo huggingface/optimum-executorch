@@ -35,6 +35,7 @@ from transformers.integrations.executorch import sdpa_mask_without_vmap
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 
+from executorch import version as executorch_version
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 from optimum.utils.import_utils import is_transformers_version
 
@@ -1084,8 +1085,8 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         wrapped_decoder = (
             Seq2SeqLMDecoderExportableModuleWithStaticCache(
                 model=self.full_model,
-                max_static_cache_length=self.generation_config.cache_config.max_cache_len,
-                batch_size=self.generation_config.cache_config.batch_size,
+                max_static_cache_length=self.generation_config.cache_config.get("max_cache_len"),
+                batch_size=self.generation_config.cache_config.get("batch_size"),
             )
             .to("cpu")
             .eval()
