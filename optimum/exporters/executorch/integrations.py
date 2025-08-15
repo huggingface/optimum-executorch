@@ -39,12 +39,13 @@ class CausalLMExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False):
+    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False):
         super().__init__()
         self.model = model
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
+        self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
@@ -70,7 +71,7 @@ class CausalLMExportableModule(torch.nn.Module):
             and not (self.use_custom_kv_cache and self.use_custom_sdpa)
         )
 
-        if not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
+        if not self.disable_dynamic_shapes and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
             # Prepare inputs with dynamic shapes
             seq_length = 3  # Sequence length > 1 to avoid specialization issues
             example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
