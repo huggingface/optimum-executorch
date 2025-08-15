@@ -25,7 +25,6 @@ from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
-from optimum.utils.import_utils import is_transformers_version
 
 from ..utils import check_causal_lm_output_quality
 
@@ -35,10 +34,7 @@ is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
 is_linux_ci = sys.platform.startswith("linux") and is_ci
 
 
-@pytest.mark.skipif(
-    is_transformers_version("<", "4.53.1"),
-    reason="Only available on transformers >= 4.53.1",
-)
+@pytest.mark.skipif(is_linux_ci)
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -21,7 +21,6 @@ import unittest
 
 import pytest
 import torchao
-import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoConfig, AutoTokenizer
@@ -43,12 +42,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        is_linux_ci
-        or parse(transformers.__version__) < parse("4.52.0")
-        or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0. OOM on linux runner.",
-    )
     def test_phi4_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
         model_id = "microsoft/Phi-4-mini-instruct"
         model = ExecuTorchModelForCausalLM.from_pretrained(
