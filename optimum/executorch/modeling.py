@@ -16,7 +16,6 @@
 
 import logging
 import os
-import tempfile
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -120,12 +119,12 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                     # It's a TemporaryDirectory object
                     logging.info(f"Cleaning up temporary directory: {self._temp_dir.name}")
                     self._temp_dir.cleanup()
-                    logging.info(f"Temporary directory cleanup completed")
+                    logging.info("Temporary directory cleanup completed")
                 elif isinstance(self._temp_dir, (str, Path)):
                     # It's a path
                     logging.info(f"Cleaning up temporary path: {self._temp_dir}")
                     shutil.rmtree(self._temp_dir, ignore_errors=True)
-                    logging.info(f"Temporary path cleanup completed")
+                    logging.info("Temporary path cleanup completed")
             except Exception as e:
                 # Log cleanup errors for debugging
                 logging.warning(f"Error during temp directory cleanup: {e}")

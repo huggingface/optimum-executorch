@@ -28,7 +28,6 @@ from transformers import (
 )
 from transformers.generation.configuration_utils import GenerationConfig
 
-from executorch import version as executorch_version
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 from optimum.utils.import_utils import is_transformers_version
 
