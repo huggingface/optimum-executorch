@@ -5,21 +5,21 @@ import sys
 
 def install_torch_nightly_deps():
     """Install torch related dependencies from pinned nightly"""
-    EXECUTORCH_NIGHTLY_VERSION = "dev20250625"
-    TORCHAO_NIGHTLY_VERSION = "dev20250620"
+    EXECUTORCH_NIGHTLY_VERSION = "dev20250730"
+    TORCHAO_NIGHTLY_VERSION = "dev20250730"
     # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/install_requirements.py#L74
-    TORCH_NIGHTLY_VERSION = "dev20250601"
+    TORCH_NIGHTLY_VERSION = "dev20250725"
     subprocess.check_call(
         [
             sys.executable,
             "-m",
             "pip",
             "install",
-            f"executorch==0.7.0.{EXECUTORCH_NIGHTLY_VERSION}",
-            f"torch==2.8.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchvision==0.23.0.{TORCH_NIGHTLY_VERSION}",
+            f"executorch==0.8.0.{EXECUTORCH_NIGHTLY_VERSION}",
+            f"torch==2.9.0.{TORCH_NIGHTLY_VERSION}",
+            f"torchvision==0.24.0.{TORCH_NIGHTLY_VERSION}",
             f"torchaudio==2.8.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchao==0.12.0.{TORCHAO_NIGHTLY_VERSION}",
+            f"torchao==0.13.0.{TORCHAO_NIGHTLY_VERSION}",
             "--extra-index-url",
             "https://download.pytorch.org/whl/nightly/cpu",
         ]
@@ -34,7 +34,7 @@ def install_dep_from_source():
             "-m",
             "pip",
             "install",
-            "git+https://github.com/huggingface/transformers@896e9cea1ade521b2648f4798218550f6c72190c#egg=transformers",  # 4.53.1
+            "git+https://github.com/huggingface/transformers@9c641dc16154964e5ffc0c13e9ec6aaffa295ed6#egg=transformers",  # 4.54.1
         ]
     )
     subprocess.check_call(

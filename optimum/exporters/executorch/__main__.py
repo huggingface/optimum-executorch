@@ -15,6 +15,7 @@
 """Entry point to the optimum.exporters.executorch command line."""
 
 import argparse
+import logging
 import os
 import warnings
 from pathlib import Path
@@ -130,10 +131,14 @@ def main_export(
     kwargs["force_download"] = force_download
     kwargs["config"] = config
 
+    # 1. Load model, apply source transformations, and torch.export() into a graph (ExportedProgram).
+    logging.info(f"Loading {model_name_or_path} and exporting to static graph...")
     recipe_kwargs = kwargs.pop("recipe_kwargs", {})
 
     model = task_func(model_name_or_path, **kwargs)
 
+    # 2. Export to ExecuTorch through ExecuTorch's lowering APIs.
+    logging.info(f"Lowering {model_name_or_path} to ExecuTorch...")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
