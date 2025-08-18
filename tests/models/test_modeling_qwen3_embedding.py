@@ -19,8 +19,6 @@ import os
 import unittest
 
 import pytest
-import torchao
-import transformers
 from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
@@ -41,10 +39,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.52.0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0",
-    )
     def test_qwen3_embedding_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
         model_id = "Qwen/Qwen3-Embedding-0.6B"
         prompt = "Explain gravity"
