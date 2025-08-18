@@ -68,6 +68,12 @@ def parse_args_executorch(parser):
         help="For decoder-only models to use custom kv cache for static cache that updates cache using custom op. Defaults to False.",
     )
     required_group.add_argument(
+        "--disable_dynamic_shapes",
+        required=False,
+        action="store_true",
+        help="When this flag is set on decoder-only models, dynamic shapes are disabled during export.",
+    )
+    required_group.add_argument(
         "--qlinear",
         type=str,
         choices=["8da4w", "4w", "8w"],
@@ -109,6 +115,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
         if self.args.use_custom_kv_cache:
             kwargs["use_custom_kv_cache"] = self.args.use_custom_kv_cache
+        if self.args.disable_dynamic_shapes:
+            kwargs["disable_dynamic_shapes"] = self.args.disable_dynamic_shapes
         if self.args.qlinear:
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qembedding:

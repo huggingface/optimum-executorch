@@ -37,7 +37,6 @@ from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
 
 from executorch import version as executorch_version
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
-from optimum.utils.import_utils import is_transformers_version
 
 from .utils import save_config_to_constant_methods
 
@@ -735,12 +734,13 @@ class CausalLMExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False):
+    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False):
         super().__init__()
         self.model = model
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
+        self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
@@ -766,7 +766,7 @@ class CausalLMExportableModule(torch.nn.Module):
             and not (self.use_custom_kv_cache and self.use_custom_sdpa)
         )
 
-        if is_transformers_version(">", "4.52.0") and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
+        if not self.disable_dynamic_shapes and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
             # Prepare inputs with dynamic shapes
             seq_length = 3  # Sequence length > 1 to avoid specialization issues
             example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
@@ -783,24 +783,23 @@ class CausalLMExportableModule(torch.nn.Module):
 
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
-    def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
-        if is_transformers_version(">=", "4.53.0.dev0"):
-            from transformers.integrations.executorch import sdpa_mask_without_vmap
-            from transformers.masking_utils import AttentionMaskInterface
-            from transformers.modeling_utils import AttentionInterface
+    def _register_custom_attention(self, exportable_module: torch.nn.Module):
+        from transformers.integrations.executorch import sdpa_mask_without_vmap
+        from transformers.masking_utils import AttentionMaskInterface
+        from transformers.modeling_utils import AttentionInterface
 
-            _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
-            if self.use_custom_sdpa:
-                if self.use_custom_kv_cache:
-                    AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
-                    AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
-                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                    # This handles both regular sdpa and one for sliding window/local attention
-                    exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
-                else:
-                    # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                    # This handles both regular sdpa and one for sliding window/local attention
-                    exportable_module.model.model.config._attn_implementation = "custom_sdpa"
+        _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
+        if self.use_custom_sdpa:
+            if self.use_custom_kv_cache:
+                AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                # This handles both regular sdpa and one for sliding window/local attention
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
+            else:
+                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
+                # This handles both regular sdpa and one for sliding window/local attention
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
     def export(
         self,
@@ -809,55 +808,48 @@ class CausalLMExportableModule(torch.nn.Module):
         logging.info(
             f"Exporting using input_ids({input_ids.shape})={input_ids}, cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
         )
-        if is_transformers_version(">", "4.52.0"):
-            from transformers.integrations.executorch import (
-                TorchExportableModuleForDecoderOnlyLM,
+
+        from transformers.integrations.executorch import (
+            TorchExportableModuleForDecoderOnlyLM,
+        )
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(
+            self.model,
+            max_batch_size=1,
+            max_cache_len=self.metadata.get("get_max_seq_len"),
+        )
+        self._register_custom_attention(exportable_module)
+
+        if self.use_custom_kv_cache:
+            from optimum.executorch.attentions.custom_kv_cache import (
+                replace_with_et_custom_kv_cache,
             )
 
-            exportable_module = TorchExportableModuleForDecoderOnlyLM(
-                self.model,
-                max_batch_size=1,
-                max_cache_len=self.metadata.get("get_max_seq_len"),
-            )
-            self._register_attention_mask_for_4_53(exportable_module)
-
-            if self.use_custom_kv_cache:
-                from optimum.executorch.attentions.custom_kv_cache import (
-                    replace_with_et_custom_kv_cache,
-                )
-
-                replace_with_et_custom_kv_cache(
-                    exportable_module.model,
-                    self.model.config,
-                    self.model.generation_config,
-                    self.model.dtype,
-                )
-
-            with torch.no_grad():
-                exported_program = exportable_module.export(input_ids, cache_position, dynamic_shapes, strict)
-                # Apply RemoveTransposes pass to remove
-                # any back-to-back transpose ops that are not needed
-                # e.g. output of update_cache is transposed and
-                # input to custom_sdpa is transposed.
-                from executorch.extension.llm.export.export_passes import (
-                    RemoveRedundantTransposes,
-                )
-
-                mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
-                exported_program = torch.export.export(
-                    mutated_gm,
-                    args=(input_ids, cache_position),
-                    kwargs={},
-                    dynamic_shapes=dynamic_shapes,
-                    strict=strict,
-                )
-        else:
-            # Path to use legacy API, static export only due to pinned transformers version
-            from transformers.integrations.executorch import (
-                convert_and_export_with_cache,
+            replace_with_et_custom_kv_cache(
+                exportable_module.model,
+                self.model.config,
+                self.model.generation_config,
+                self.model.dtype,
             )
 
-            exported_program = convert_and_export_with_cache(self.model, input_ids, cache_position)
+        with torch.no_grad():
+            exported_program = exportable_module.export(input_ids, cache_position, dynamic_shapes, strict)
+            # Apply RemoveTransposes pass to remove
+            # any back-to-back transpose ops that are not needed
+            # e.g. output of update_cache is transposed and
+            # input to custom_sdpa is transposed.
+            from executorch.extension.llm.export.export_passes import (
+                RemoveRedundantTransposes,
+            )
+
+            mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
+            exported_program = torch.export.export(
+                mutated_gm,
+                args=(input_ids, cache_position),
+                kwargs={},
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
+            )
 
         return {"model": exported_program}
 

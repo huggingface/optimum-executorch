@@ -53,6 +53,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     device = "cpu"
     batch_size = 1
     dtype = kwargs.get("dtype", "float32")
+    disable_dynamic_shapes = kwargs.get("disable_dynamic_shapes", False)
     use_custom_sdpa = kwargs.get("use_custom_sdpa", False)
     use_custom_kv_cache = kwargs.get("use_custom_kv_cache", False)
     attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
@@ -133,4 +134,4 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     qembedding_config = kwargs.get("qembedding", None)
     quantize_model_(eager_model, qlinear_config=qlinear_config, qembedding_config=qembedding_config)
 
-    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
+    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa, disable_dynamic_shapes)

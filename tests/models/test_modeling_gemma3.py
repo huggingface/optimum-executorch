@@ -22,17 +22,11 @@ import tempfile
 import unittest
 
 import pytest
-import torch
-import torchao
-import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from packaging.version import parse
-from transformers import AutoTokenizer, AutoProcessor
+from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
-from optimum.utils.import_utils import is_transformers_version
-from optimum.exporters.executorch.tasks.image_text_to_text import load_image_text_to_text_model
 
 from ..utils import check_causal_lm_output_quality
 
@@ -43,10 +37,6 @@ is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTION
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-@pytest.mark.skipif(
-    is_transformers_version("<", "4.52.0.dev0"),
-    reason="Only available on transformers >= 4.52.0.dev0",
-)
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -121,10 +111,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    )
     def test_gemma3_text_generation_with_custom_sdpa(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
@@ -193,10 +179,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    )
     def test_gemma3_text_generation_with_custom_sdpa_8da4w_8we(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
@@ -232,10 +214,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    )
     def test_gemma3_text_generation_with_custom_sdpa_kv_cache_8da4w_8we(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"

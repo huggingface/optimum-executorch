@@ -16,8 +16,6 @@ import logging
 from typing import Optional
 
 import torch
-import torchao
-from packaging.version import parse
 
 
 def quantize_model_(
