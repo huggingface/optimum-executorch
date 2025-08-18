@@ -63,7 +63,7 @@ model = ExecuTorchModelForCausalLM.from_pretrained(
     recipe="xnnpack",
     attn_implementation="custom_sdpa",  # Use custom SDPA implementation for better performance
     use_custom_kv_cache=True,  # Use custom KV cache for better performance
-    **{"qlinear": True, "qembeeding": True},  # Quantize linear and embedding layers
+    **{"qlinear": "8da4w", "qembedding": "8w"},  # Quantize linear and embedding layers
 )
 
 # Generate text right away
@@ -90,8 +90,8 @@ optimum-cli export executorch \
     --recipe "xnnpack" \
     --use_custom_sdpa \
     --use_custom_kv_cache \
-    --qlinear \
-    --qembedding \
+    --qlinear 8da4w \
+    --qembedding 8w \
     --output_dir="hf_smollm2"
 ```
 Explore the various export options by running the command: `optimum-cli export executorch --help`
@@ -154,7 +154,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Codegen](https://huggingface.co/Salesforce/codegen-350M-mono): Salesforce's `codegen-350M-mono` and its variants
 - [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
 - [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
-- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants
+- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants (270M, 1B)
 - [Glm](https://huggingface.co/THUDM/glm-edge-1.5b-chat): `glm-edge-1.5b` and its variants
 - [Gpt2](https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m): `gpt-sw3-126m` and its variants
 - [GptJ](https://huggingface.co/Milos/slovak-gpt-j-405M): `gpt-j-405M` and its variants

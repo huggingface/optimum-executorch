@@ -15,6 +15,7 @@
 from transformers import AutoModelForMaskedLM
 
 from ..integrations import MaskedLMExportableModule
+from ..quantization import quantize_model_
 from ..task_registry import register_task
 
 
@@ -38,5 +39,10 @@ def load_masked_lm_model(model_name_or_path: str, **kwargs) -> MaskedLMExportabl
             An instance of `MaskedLMExportableModule` for exporting and lowering to ExecuTorch.
     """
 
-    eager_model = AutoModelForMaskedLM.from_pretrained(model_name_or_path, **kwargs).to("cpu").eval()
+    eager_model = AutoModelForMaskedLM.from_pretrained(model_name_or_path).to("cpu").eval()
+
+    qlinear_config = kwargs.get("qlinear", None)
+    qembedding_config = kwargs.get("qembedding", None)
+    quantize_model_(eager_model, qlinear_config=qlinear_config, qembedding_config=qembedding_config)
+
     return MaskedLMExportableModule(eager_model)

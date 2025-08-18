@@ -22,15 +22,11 @@ import tempfile
 import unittest
 
 import pytest
-import torchao
-import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForCausalLM
-from optimum.utils.import_utils import is_transformers_version
 
 from ..utils import check_causal_lm_output_quality
 
@@ -41,10 +37,6 @@ is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTION
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-@pytest.mark.skipif(
-    is_transformers_version("<", "4.52.0.dev0"),
-    reason="Only available on transformers >= 4.52.0.dev0",
-)
 class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -66,8 +58,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --recipe {recipe} \
                     --output_dir {tempdir}/executorch \
                     --use_custom_sdpa \
-                    --qlinear \
-                    --qembedding",
+                    --qlinear 8da4w \
+                    --qembedding 8w",
                 shell=True,
                 check=True,
             )
@@ -119,10 +111,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    )
     def test_gemma3_text_generation_with_custom_sdpa(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
@@ -191,10 +179,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    )
     def test_gemma3_text_generation_with_custom_sdpa_8da4w_8we(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
@@ -202,7 +186,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         prompt = "Write a poem about a machine learning."
 
         # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
-        kwargs = {"qlinear": True, "qembedding": True}
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -230,10 +214,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.53.0.dev0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.53.0.dev0 and torchao >= 0.11.0",
-    )
     def test_gemma3_text_generation_with_custom_sdpa_kv_cache_8da4w_8we(self):
         # TODO: Until https://github.com/huggingface/optimum/issues/2127 is fixed, have to use non-gated model on CI
         # model_id = "google/gemma-3-1b-it"
@@ -241,12 +221,43 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         prompt = "Write a poem about a machine learning."
 
         # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
-        kwargs = {"qlinear": True, "qembedding": True}
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
+            **kwargs,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    def test_gemma3_270m_text_generation_with_custom_sdpa_8da4w_8we(self):
+        model_id = "unsloth/gemma-3-270m-it"
+        prompt = "Are seals friendly?"
+
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
             **kwargs,
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)

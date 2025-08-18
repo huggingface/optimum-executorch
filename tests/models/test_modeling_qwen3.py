@@ -23,7 +23,6 @@ import unittest
 
 import pytest
 import torchao
-import transformers
 from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
@@ -62,8 +61,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                     --recipe {recipe} \
                     --output_dir {tempdir}/executorch \
                     --use_custom_sdpa \
-                    --qlinear \
-                    --qembedding",
+                    --qlinear 8da4w \
+                    --qembedding 8w",
                 shell=True,
                 check=True,
             )
@@ -188,7 +187,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
-        kwargs = {"qlinear": True, "qembedding": True}
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
             recipe="xnnpack",
@@ -214,10 +213,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.52.0.dev0"),
-        reason="Only available on transformers >= 4.52.0.dev0",
-    )
     def test_qwen3_text_generation_with_custom_sdpa_and_kv_cache(self):
         model_id = "Qwen/Qwen3-0.6B"
         prompt = "Give me a short introduction to large language model."
@@ -249,10 +244,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skipif(
-        parse(transformers.__version__) < parse("4.52.0") or parse(torchao.__version__) < parse("0.11.0"),
-        reason="Only available on transformers >= 4.52.0 and torchao >= 0.11.0",
-    )
     def test_qwen3_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
         model_id = "Qwen/Qwen3-0.6B"
         prompt = "Give me a short introduction to large language model."
@@ -262,7 +253,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
-            **{"qlinear": True, "qembeeding": True},
+            **{"qlinear": "8da4w", "qembedding": "8w"},
         )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
