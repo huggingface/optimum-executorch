@@ -247,3 +247,34 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    def test_gemma3_270m_text_generation_with_custom_sdpa_8da4w_8we(self):
+        model_id = "unsloth/gemma-3-270m-it"
+        prompt = "Are seals friendly?"
+
+        # ExecuTorch model + custom sdpa + 8da4w linear quantization + int8 embedding quantization
+        kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            attn_implementation="custom_sdpa",
+            **kwargs,
+        )
+        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
+        self.assertIsInstance(model.model, ExecuTorchModule)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        generated_text = model.text_generation(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        # Free memory before loading eager for quality check
+        del model
+        del tokenizer
+        gc.collect()
+
+        self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))

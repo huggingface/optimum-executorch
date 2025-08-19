@@ -154,7 +154,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Codegen](https://huggingface.co/Salesforce/codegen-350M-mono): Salesforce's `codegen-350M-mono` and its variants
 - [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
 - [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
-- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants
+- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants (270M, 1B)
 - [Glm](https://huggingface.co/THUDM/glm-edge-1.5b-chat): `glm-edge-1.5b` and its variants
 - [Gpt2](https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m): `gpt-sw3-126m` and its variants
 - [GptJ](https://huggingface.co/Milos/slovak-gpt-j-405M): `gpt-j-405M` and its variants
