@@ -37,7 +37,7 @@ from transformers import (
     add_start_docstrings,
 )
 from transformers.configuration_utils import PretrainedConfig
-from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.processing_utils import ProcessorMixin
 from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
@@ -295,8 +295,6 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         models = {}
         for name, _ in executorch_progs.items():
             models.update(cls._from_pretrained(save_dir_path, file_name=f"{name}.pte", config=config))
-
-        breakpoint()
 
         return models, save_dir
 
@@ -1176,7 +1174,9 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         required_methods = ["decoder", "token_embeddings"]
         for required_method in required_methods:
             if required_method not in self.model.method_names():
-                raise ValueError(f"Exported .pte file needs to contain the following required methods: {required_methods}")
+                raise ValueError(
+                    f"Exported .pte file needs to contain the following required methods: {required_methods}"
+                )
 
         self.encoder_name = None
         for method_name in self.model.method_names():
@@ -1185,8 +1185,10 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             elif method_name == "vision_encoder":
                 self.encoder_name = "vision_encoder"
         if not self.encoder_name:
-            raise ValueError("Exported .pte file needs to contain either an an \"audio_encoder\" or a \"vision_encoder\" in its methods.")
-        
+            raise ValueError(
+                'Exported .pte file needs to contain either an an "audio_encoder" or a "vision_encoder" in its methods.'
+            )
+
         metadata = self.model.method_names()
         if "use_kv_cache" in metadata:
             self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
@@ -1228,7 +1230,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             (
                 cache_position,
                 token_embeddings,
-            )
+            ),
         )[0]
         return output
 
@@ -1293,7 +1295,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
 
     def text_generation(
         self,
-        processor: "ProcessorMixin",
+        processor: ProcessorMixin,
         tokenizer: PreTrainedTokenizer,
         input_conversation: List[Dict],
         echo: bool = True,
@@ -1321,7 +1323,9 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             raise ValueError(
                 f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
             )
-        if isinstance(self.tokenizer, PreTrainedTokenizer) and verify_eos_tokens_in_pretrained_tokenizer(self.eos_token_id, self.tokenizer):
+        if isinstance(self.tokenizer, PreTrainedTokenizer) and verify_eos_tokens_in_pretrained_tokenizer(
+            self.eos_token_id, self.tokenizer
+        ):
             raise ValueError(
                 f"The tokenizer's eos_token_id does not match with the model's eos_token_id={self.eos_token_id}."
             )

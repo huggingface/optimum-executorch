@@ -15,7 +15,6 @@
 import logging
 from typing import Dict, Union
 
-from packaging.version import parse
 from tabulate import tabulate
 from torch.export import ExportedProgram
 
@@ -28,21 +27,25 @@ from executorch.exir import (
     to_edge_transform_and_lower,
 )
 from executorch.exir.passes import MemoryPlanningPass
-
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
 from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
+    MultiModalTextToTextExportableModule,
     Seq2SeqLMExportableModule,
-    MultiModalTextToTextExportableModule
 )
 from ..recipe_registry import register_recipe
 
 
 @register_recipe("xnnpack")
 def export_to_executorch_with_xnnpack(
-    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule],
+    model: Union[
+        CausalLMExportableModule,
+        MaskedLMExportableModule,
+        Seq2SeqLMExportableModule,
+        MultiModalTextToTextExportableModule,
+    ],
     **kwargs,
 ):
     """
@@ -88,9 +91,7 @@ def export_to_executorch_with_xnnpack(
         )
         for method in et_prog.methods:
             logging.debug(f"---------------------- Method: {method} ----------------------")
-            logging.debug(
-                f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}"
-            )
+            logging.debug(f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}")
             delegation_info = get_delegation_info(et_prog.exported_program(method).graph_module)
             logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
             logging.debug(

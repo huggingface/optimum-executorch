@@ -12,19 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 
-import torch
 import torchao
-from packaging.version import parse
-from transformers import AutoConfig, AutoModelForMultimodalTextToText, GenerationConfig
+from transformers import AutoConfig, AutoModel, GenerationConfig
 
 from ..integrations import MultiModalTextToTextExportableModule
 from ..quantization import quantize_model_
 from ..task_registry import register_task
 
 
-# NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
+def _validate_multimodal_components(model):
+    """
+    Validates that the multimodal model has required decoder and encoder components.
+
+    Args:
+        model: The loaded model instance
+
+    Returns:
+        tuple: (decoder_name, audio_encoder_name, vision_encoder_name)
+    """
+    POTENTIAL_DECODER_NAMES = [
+        "language_model",
+        "text_model",
+    ]
+    POTENTIAL_AUDIO_ENCODER_NAMES = [
+        "audio_tower",
+        "audio_model",
+    ]
+    POTENTIAL_VISION_ENCODER_NAMES = [
+        "vision_tower",
+        "vision_model",
+    ]
+
+    # Find decoder component
+    decoder_name = None
+    for name in POTENTIAL_DECODER_NAMES:
+        if hasattr(model, name):
+            decoder_name = name
+            break
+
+    if decoder_name is None:
+        raise ValueError(
+            "The model does not have any of the expected decoder attributes: "
+            f"{POTENTIAL_DECODER_NAMES}. This is required for multimodal text-to-text models."
+        )
+
+    # Find encoder components
+    audio_encoder_name = None
+    for name in POTENTIAL_AUDIO_ENCODER_NAMES:
+        if hasattr(model, name):
+            audio_encoder_name = name
+            break
+
+    vision_encoder_name = None
+    for name in POTENTIAL_VISION_ENCODER_NAMES:
+        if hasattr(model, name):
+            vision_encoder_name = name
+            break
+
+    if audio_encoder_name is None and vision_encoder_name is None:
+        raise ValueError(
+            "The model does not have any of the expected encoder attributes: "
+            f"{POTENTIAL_AUDIO_ENCODER_NAMES + POTENTIAL_VISION_ENCODER_NAMES}. "
+            "This is required for multimodal text-to-text models."
+        )
+
+    return decoder_name, audio_encoder_name, vision_encoder_name
+
+
+# NOTE: It's important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("image-text-to-text")
 @register_task("audio-text-to-text")
@@ -65,23 +121,20 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
 
-    # # Make sure config has text_config and vision_config:
-    # if not hasattr(config, "text_config") or not hasattr(config, "vision_config"):
-    #     raise ValueError(
-    #         f"The model {model_name_or_path} does not have a `text_config` or `vision_config` attribute in its config. "
-    #         "This is required for image-text-to-text models."
-    #     )
-    
-    if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-        # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
-        # the data-dependent control flow in _longrope_frequency_update. Alternatively, users should rewrite
-        # that function to avoid the data-dependent control flow.
-        config.rope_scaling["type"] = "default"
+    # Make sure config has text_config and vision_config:
+    if not (hasattr(config, "text_config") and (hasattr(config, "vision_config") or hasattr(config, "audio_config"))):
+        raise ValueError(
+            f"The model {model_name_or_path} does not have a `text_config` or `vision_config`/`audio_config` attribute in its config. "
+            "This is required for multimodal text-to-text models."
+        )
 
+    if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+        # NOTE: Avoid hitting the data-dependent control flow in _longrope_frequency_update.
+        config.rope_scaling["type"] = "default"
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True
 
-    eager_model = AutoModelForMultimodalTextToText.from_pretrained(
+    eager_model = AutoModel.from_pretrained(
         model_name_or_path,
         device_map=device,
         torch_dtype=dtype,
@@ -97,52 +150,12 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
             },
         ),
     )
+    decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
+    # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
+    # config, it always comes from the generation_config.json file, not the `generation_config` override
+    # from from_pretrained().
+    getattr(eager_model, decoder_name).generation_config = eager_model.generation_config
 
-    POTENTIAL_DECODER_NAMES = [
-        "language_model",
-        "text_model",
-    ]
-    POTENTIAL_AUDIO_ENCODER_NAMES = [
-        "audio_tower",
-        "audio_model",
-    ]
-    POTENTIAL_VISION_ENCODER_NAMES = [
-        "vision_tower",
-        "vision_model",
-    ]
-    
-    # Validate and store component names for dynamic access
-    decoder_name = None
-    for name in POTENTIAL_DECODER_NAMES:
-        if hasattr(eager_model, name):
-            decoder_name = name
-            break
-    
-    if decoder_name is None:
-        raise ValueError(
-            f"The model {model_name_or_path} does not have any of the expected decoder attributes: "
-            f"{POTENTIAL_DECODER_NAMES}. This is required for multimodal text-to-text models."
-        )
-    
-    audio_encoder_name = None
-    for name in POTENTIAL_AUDIO_ENCODER_NAMES:
-        if hasattr(eager_model, name):
-            audio_encoder_name = name
-            break
-    
-    vision_encoder_name = None
-    for name in POTENTIAL_VISION_ENCODER_NAMES:
-        if hasattr(eager_model, name):
-            vision_encoder_name = name
-            break
-    
-    if audio_encoder_name is None and vision_encoder_name is None:
-        raise ValueError(
-            f"The model {model_name_or_path} does not have any of the expected encoder attributes: "
-            f"{POTENTIAL_AUDIO_ENCODER_NAMES + POTENTIAL_VISION_ENCODER_NAMES}. "
-            "This is required for multimodal text-to-text models."
-        )
-    
     for param in eager_model.parameters():
         # Must disable gradient for quantized checkpoint
         if isinstance(param, torchao.utils.TorchAOBaseTensor):

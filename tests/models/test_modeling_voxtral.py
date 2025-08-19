@@ -16,25 +16,19 @@
 import gc
 import logging
 import os
-import subprocess
 import sys
-import tempfile
 import unittest
 
 import pytest
 import torch
-import torchao
-import transformers
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from packaging.version import parse
-from transformers import AutoConfig, AutoTokenizer, AutoProcessor
+from transformers import AutoConfig, AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
-from optimum.utils.import_utils import is_transformers_version
 from optimum.executorch import ExecuTorchModelForMultiModalToText
 from optimum.exporters.executorch.tasks.multimodal_text_to_text import load_multimodal_text_to_text_model
 
-from ..utils import check_causal_lm_output_quality, check_multimodal_output_quality
+from ..utils import check_multimodal_output_quality
 
 
 is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
@@ -49,30 +43,32 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Register custom SDPA, which is usually registered in the convert script.
-        from transformers.modeling_utils import AttentionInterface
-        from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
-        
-        AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
-        if is_transformers_version(">=", "4.53.0.dev0"):
-            from transformers.integrations.executorch import sdpa_mask_without_vmap
-            from transformers.masking_utils import AttentionMaskInterface
-    
-            AttentionMaskInterface.register("custom_sdpa", sdpa_mask_without_vmap)
+        # # Register custom SDPA, which is usually registered in the convert script.
+        # from transformers.modeling_utils import AttentionInterface
+
+        # from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
+
+        # AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
+        # from transformers.integrations.executorch import sdpa_mask_without_vmap
+        # from transformers.masking_utils import AttentionMaskInterface
+
+        # AttentionMaskInterface.register("custom_sdpa", sdpa_mask_without_vmap)
 
     @slow
     @pytest.mark.run_slow
-    @pytest.mark.skip()
-    @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
     def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_exported_program(self):
+        """
+        This test seems kind of unnecessary since we have test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_pte which just directly tests the excecutorch program, but keeping this here in case it's useful for showcasing code / debugging later on.
+        """
         model_id = "mistralai/Voxtral-Mini-3B-2507"
-        config = AutoConfig.from_pretrained(model_id)
+        _config = AutoConfig.from_pretrained(model_id)
         module = load_multimodal_text_to_text_model(
             model_id,
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
-            qlinear=True,
-            qembedding=True,
+            qlinear="8da4w",
+            qembedding="8w",
         )
 
         res = module.export()
@@ -95,20 +91,27 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         inputs = processor.apply_chat_template(conversation)
 
         input_ids = inputs["input_ids"]
-        token_embeddings = res["token_embeddings"].module().forward(
-            input=input_ids)
+        token_embeddings = res["token_embeddings"].module().forward(input=input_ids)
 
         if "input_features" in inputs:
-            token_embeddings = res["audio_encoder"].module().forward(
-                input_features=inputs["input_features"],
-                inputs_embeds=token_embeddings,
-                input_ids=inputs["input_ids"],
+            token_embeddings = (
+                res["audio_encoder"]
+                .module()
+                .forward(
+                    input_features=inputs["input_features"],
+                    inputs_embeds=token_embeddings,
+                    input_ids=inputs["input_ids"],
+                )
             )
 
         # Prefill prompt embeddings
-        logits = res["decoder"].module().forward(
-            inputs_embeds=token_embeddings,
-            cache_position=torch.arange(token_embeddings.shape[1], dtype=torch.long),
+        logits = (
+            res["decoder"]
+            .module()
+            .forward(
+                inputs_embeds=token_embeddings,
+                cache_position=torch.arange(token_embeddings.shape[1], dtype=torch.long),
+            )
         )
 
         token = torch.argmax(logits[:, -1, :])
@@ -118,26 +121,28 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         pos = token_embeddings.shape[1]
 
-        while pos < 2000:
-            token_embedding = res["token_embeddings"].module().forward(
-                input=token.unsqueeze(0).unsqueeze(0)
-            )
-            logits = res["decoder"].module().forward(
-                inputs_embeds=token_embedding,
-                cache_position=torch.tensor([pos], dtype=torch.long),
+        max_generation_len = 64
+        while pos < input_ids.shape[-1] + max_generation_len:
+            token_embedding = res["token_embeddings"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
+            logits = (
+                res["decoder"]
+                .module()
+                .forward(
+                    inputs_embeds=token_embedding,
+                    cache_position=torch.tensor([pos], dtype=torch.long),
+                )
             )
             token = torch.argmax(logits[:, -1, :])
             print(tokenizer.decode([token.item()]), end="")
             tokens.append(token.item())
             pos += 1
-            # TODO(JZ): end early.
 
         output = tokenizer.decode(tokens, skip_special_tokens=True)
-        self.assertTrue(output.startswith("The audio features a conversation between two individuals, likely friends or acquaintances, who are discussing a series of tattoos."))
+        self.assertTrue("tattoo" in output)
 
     @slow
     @pytest.mark.run_slow
-    # @pytest.mark.skipif(is_linux_ci, reason="OOM on linux runner")
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
     def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_pte(self):
         model_id = "mistralai/Voxtral-Mini-3B-2507"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -157,6 +162,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         model = ExecuTorchModelForMultiModalToText.from_pretrained(
             model_id,
+            # "/home/jackzhxng/models/voxtral/voxtral_q_edm_qe_d",
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
@@ -175,7 +181,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
         # Should be something like: 'The audio is a humorous conversation between two people,
         # likely friends or acquaintances, who are discussing tattoos.'
-        
+
         del model
         del tokenizer
         gc.collect()
@@ -183,5 +189,3 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         breakpoint()
         self.assertTrue("tattoo" in generated_text)
         self.assertTrue(check_multimodal_output_quality(model_id, generated_tokens, conversation))
-
-

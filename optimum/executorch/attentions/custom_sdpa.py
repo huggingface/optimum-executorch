@@ -29,9 +29,6 @@ def custom_sdpa_with_start_pos_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
-    # This is before the transpose
-    max_seq_len = key.shape[2]
-
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
