@@ -19,8 +19,6 @@ from packaging.version import parse
 from tabulate import tabulate
 from torch.export import ExportedProgram
 
-# from executorch import version as executorch_version
-from executorch import __version__ as executorch_version
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -72,8 +70,7 @@ def export_to_executorch_with_xnnpack(
             "extract_delegate_segments": True,
             "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
         }
-        if parse(executorch_version.__version__).base_version > "0.6.0":
-            backend_config_dict["do_quant_fusion_and_const_prop"] = True
+        backend_config_dict["do_quant_fusion_and_const_prop"] = True
         pte_name = model.model.config.model_type
         logging.debug(f"\nExported program for {pte_name}.pte: {exported_programs}")
         et_prog = to_edge_transform_and_lower(

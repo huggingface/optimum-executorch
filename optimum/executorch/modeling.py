@@ -1314,17 +1314,23 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         cache_position: torch.Tensor,
         input_features: Optional[torch.Tensor] = None,
     ):
-        token_embeddings = self.token_embeddings.forward(input_ids)
-        if input_features:
-            token_embeddings = self.audio_encoder.forward(
-                input_features,
+        token_embeddings = self.model.run_method("token_embeddings", (input_ids,))[0]
+        if input_features is not None:
+            token_embeddings = self.model.run_method(
+                "audio_encoder",
+                (
+                    input_features,
+                    token_embeddings,
+                    input_ids,
+                ),
+            )[0]
+        output = self.model.run_method(
+            "decoder",
+            (
+                cache_position,
                 token_embeddings,
-                input_ids,
             )
-        output = self.decoder.forward(
-            token_embeddings,
-            cache_position,
-        )
+        )[0]
         return output
 
     def generate(
@@ -1348,8 +1354,8 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         # Prefill.
         self.stats.on_sampling_begin()
         logits = self.forward(
-            input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device),
-            cache_position=torch.arange(len(prompt_tokens[0]), dtype=torch.long, device=self.device),
+            input_ids=prompt_tokens,
+            cache_position=torch.arange(prompt_tokens.size(1), dtype=torch.long, device=self.device),
             input_features=input_features,
         )
         self.stats.on_sampling_end()
@@ -1361,12 +1367,12 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
 
         # Token-by-token generation.
         first_token_generated = False
-        while len(generated_tokens) + len(prompt_tokens) < max_seq_len:
+        while len(generated_tokens) + prompt_tokens.size(1) < max_seq_len:
             self.stats.on_sampling_begin()
             logits = self.forward(
                 input_ids=torch.tensor([next_token], dtype=torch.long, device=self.device).unsqueeze(0),
                 cache_position=torch.tensor(
-                    [pos_base + len(generated_tokens) + len(prompt_tokens) - 1],
+                    [pos_base + len(generated_tokens) + prompt_tokens.size(1) - 1],
                     dtype=torch.long,
                     device=self.device,
                 ),
@@ -1433,7 +1439,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             prompt_tokens=inputs["input_ids"],
             input_features=inputs["input_features"],
             echo=echo,
-            max_seq_len=max_seq_len,
+            max_seq_len=len(inputs["input_ids"][0]) + max_seq_len,
         )
 
         self.stats.on_inference_end()
