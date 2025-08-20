@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from .modeling import (
         ExecuTorchModelForCausalLM,
         ExecuTorchModelForImageClassification,
-        ExecuTorchModelForImageTextToTextCausalLM,
         ExecuTorchModelForMaskedLM,
         ExecuTorchModelForMultiModalToText,
         ExecuTorchModelForSeq2SeqLM,

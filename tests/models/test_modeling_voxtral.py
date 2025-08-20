@@ -151,7 +151,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         model = ExecuTorchModelForMultiModalToText.from_pretrained(
             model_id,
-            # "/home/jackzhxng/models/voxtral/voxtral_q_edm_qe_d",
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,

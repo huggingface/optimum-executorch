@@ -74,8 +74,12 @@ def export_to_executorch_with_xnnpack(
             "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
         }
         backend_config_dict["do_quant_fusion_and_const_prop"] = True
-        pte_name = model.model.config.model_type
-        logging.debug(f"\nExported program for {pte_name}.pte: {exported_programs}")
+        logging.debug(f"\nExported program: {exported_programs}")
+
+        # If just one exported program, the method name in the .pte for it should be "forward".
+        if len(exported_programs) == 1:
+            exported_programs = {"forward": next(iter(exported_programs.values()))}
+
         et_prog = to_edge_transform_and_lower(
             exported_programs,
             partitioner=[XnnpackPartitioner()],
@@ -89,6 +93,7 @@ def export_to_executorch_with_xnnpack(
         et_prog = et_prog.to_executorch(
             config=ExecutorchBackendConfig(**backend_config_dict),
         )
+        pte_name = "model"
         for method in et_prog.methods:
             logging.debug(f"---------------------- Method: {method} ----------------------")
             logging.debug(f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}")
