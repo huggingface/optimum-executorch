@@ -175,6 +175,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         del tokenizer
         gc.collect()
 
-        breakpoint()
         self.assertTrue("tattoo" in generated_text)
         self.assertTrue(check_multimodal_output_quality(model_id, generated_tokens, conversation))

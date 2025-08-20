@@ -565,7 +565,7 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
 
     def text_generation(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizer",
         prompt: str,
         echo: bool = True,
         max_seq_len: Optional[int] = None,
@@ -785,7 +785,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
 
     def text_generation(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizer",
         prompt: str,
         echo: bool = True,
         max_seq_len: Optional[int] = None,
@@ -1106,7 +1106,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
 
     def transcribe(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizer",
         input_features: torch.Tensor,
         echo: bool = True,
         max_seq_len: Optional[int] = None,
@@ -1298,7 +1298,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
     def text_generation(
         self,
         processor: ProcessorMixin,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: "PreTrainedTokenizer",
         input_conversation: List[Dict],
         echo: bool = True,
         max_seq_len: Optional[int] = None,
@@ -1325,7 +1325,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             raise ValueError(
                 f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
             )
-        if isinstance(self.tokenizer, PreTrainedTokenizer) and verify_eos_tokens_in_pretrained_tokenizer(
+        if isinstance(self.tokenizer, PreTrainedTokenizer) and not verify_eos_tokens_in_pretrained_tokenizer(
             self.eos_token_id, self.tokenizer
         ):
             raise ValueError(

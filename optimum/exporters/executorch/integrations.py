@@ -77,6 +77,17 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
         inputs_embeds: torch.FloatTensor,
         input_ids: torch.LongTensor,
     ):
+        """
+        Forward pass of the Voxtral encoder module.
+
+        Args:
+            input_features (torch.FloatTensor): Raw audio features with shape (batch_size, features, seq_len).
+            inputs_embeds (torch.FloatTensor): Text token embeddings with shape (batch_size, seq_len, hidden_size).
+            input_ids (torch.LongTensor): Input token IDs with shape (batch_size, seq_len).
+
+        Returns:
+            torch.FloatTensor: Combined embeddings with audio tokens replaced by audio embeddings.
+        """
         audio_outputs = self.audio_encoder(input_features)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.intermediate_size)
@@ -92,6 +103,18 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     """
     A wrapper module for exporting an early fusion multimodal model (image/audio to text) with `torch.export`.
     This module also ensures that the exported model is compatible with ExecuTorch.
+
+    The module separates the model into three exportable components:
+    1. Token embeddings layer for text encoding
+    2. Multimodal encoder (audio/vision) for processing non-text inputs
+    3. Text decoder for autoregressive generation
+
+    Args:
+        model (torch.nn.Module): The multimodal model to export.
+        modality (str): The input modality type ("audio" or "vision").
+        encoder_name (str): Name of the encoder attribute in the model.
+        use_custom_kv_cache (bool): Whether to use custom key-value caching for optimization.
+        use_custom_sdpa (bool): Whether to use custom scaled dot-product attention.
     """
 
     def __init__(
@@ -178,6 +201,15 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     def export(
         self,
     ) -> Dict[str, ExportedProgram]:
+        """
+        Export the multimodal model into separate ExecuTorch programs.
+
+        Returns:
+            Dict[str, ExportedProgram]: Dictionary containing exported programs:
+                - "decoder": Text generation decoder
+                - "token_embeddings": Token embedding layer
+                - "{modality}_encoder": Multimodal encoder (e.g., "audio_encoder")
+        """
         with torch.no_grad():
             # 1. Export text decoder.
             exportable_module = TorchExportableModuleForDecoderOnlyLM(

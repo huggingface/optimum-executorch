@@ -42,7 +42,6 @@ def custom_sdpa_with_start_pos_forward(
 
     # Ignore the causal flag from kwargs but use the one in module
     kwargs.pop("is_causal", None)
-    # assert module.is_causal, "Current variant supports only causal attention"
 
     is_causal = module.is_causal
     if kwargs.get("is_sliding", False):
