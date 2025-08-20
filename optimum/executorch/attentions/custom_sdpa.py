@@ -80,6 +80,7 @@ def custom_sdpa_with_start_pos_forward(
 def get_custom_sdpa_for_ring_kv_cache(
     exportable_module: torch.nn.Module,
 ) -> Callable:
+    # lazy importing to avoid version dependent class definition
     from executorch import version
 
     try:

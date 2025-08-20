@@ -43,17 +43,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # # Register custom SDPA, which is usually registered in the convert script.
-        # from transformers.modeling_utils import AttentionInterface
-
-        # from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
-
-        # AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
-        # from transformers.integrations.executorch import sdpa_mask_without_vmap
-        # from transformers.masking_utils import AttentionMaskInterface
-
-        # AttentionMaskInterface.register("custom_sdpa", sdpa_mask_without_vmap)
-
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_linux_ci, reason="OOM")

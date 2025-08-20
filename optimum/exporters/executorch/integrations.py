@@ -29,6 +29,8 @@ from transformers import (
 )
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM, sdpa_mask_without_vmap
+from transformers.masking_utils import AttentionMaskInterface
+from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 
@@ -67,8 +69,7 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
             "input_ids": {1: torch.export.Dim("input_ids_seq_length_dim", max=max_seq_len)},
         }
 
-        strict = False
-        return input_features, dynamic_shapes, strict
+        return input_features, dynamic_shapes
 
     def forward(
         self,
@@ -89,8 +90,8 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
 
 class MultiModalTextToTextExportableModule(torch.nn.Module):
     """
-    A wrapper module designed to make an multimodal model, e.g. image-text-to-text, exportable with `torch.export`.
-    This module ensures that the exported model is compatible with ExecuTorch.
+    A wrapper module for exporting an early fusion multimodal model (image/audio to text) with `torch.export`.
+    This module also ensures that the exported model is compatible with ExecuTorch.
     """
 
     def __init__(
@@ -131,8 +132,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             "input": {1: seq_len_dim},
         }  # nn.embedding forward() args are here - https://github.com/pytorch/pytorch/blob/febf3c475e6fe369b41ef009f3598659a6df0911/torch/nn/modules/sparse.py#L15.
 
-        strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
-        return example_input_ids, dynamic_shapes, strict
+        return example_input_ids, dynamic_shapes
 
     def _prepare_decoder_only_export_inputs(self):
         """
@@ -159,13 +159,9 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             "cache_position": {0: seq_len_dim},
         }
 
-        strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
-        return example_inputs_embeds, example_cache_position, dynamic_shapes, strict
+        return example_inputs_embeds, example_cache_position, dynamic_shapes
 
     def _register_attention_mask(self, exportable_module: torch.nn.Module):
-        from transformers.masking_utils import AttentionMaskInterface
-        from transformers.modeling_utils import AttentionInterface
-
         _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
         if self.use_custom_sdpa:
             if self.use_custom_kv_cache:
@@ -204,15 +200,15 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                     self.model.dtype,
                 )
 
-            inputs_embeds, cache_position, dynamic_shapes, strict = self._prepare_decoder_only_export_inputs()
+            inputs_embeds, cache_position, dynamic_shapes = self._prepare_decoder_only_export_inputs()
             logging.info(
-                f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
+                f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}"
             )
             exported_program = exportable_module.export(
                 inputs_embeds=inputs_embeds,
                 cache_position=cache_position,
                 dynamic_shapes=dynamic_shapes,
-                strict=strict,
+                strict=True,
             )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
@@ -228,14 +224,14 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 args=(),
                 kwargs={"cache_position": cache_position, "inputs_embeds": inputs_embeds},
                 dynamic_shapes=dynamic_shapes,
-                strict=strict,
+                strict=True,
             )
             exported_programs["decoder"] = exported_program
 
             # 2. Export token embeddings
-            input_ids, dynamic_shapes, strict = self._prepare_text_embedding_export_inputs()
+            input_ids, dynamic_shapes = self._prepare_text_embedding_export_inputs()
             logging.info(
-                f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}"
+                f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}"
             )
 
             token_embeddings_exported_program = torch.export.export(
@@ -243,7 +239,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 args=(input_ids,),
                 kwargs={},
                 dynamic_shapes=dynamic_shapes,
-                strict=strict,
+                strict=True,
             )
             exported_programs["token_embeddings"] = token_embeddings_exported_program
 
@@ -260,7 +256,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
             if isinstance(self.model, VoxtralForConditionalGeneration):
                 encoder = VoxtralEncoderExportableModule(self.model)
-                input_features, dynamic_shapes, strict = encoder.prepare_export_inputs()
+                input_features, dynamic_shapes = encoder.prepare_export_inputs()
             else:
                 raise ValueError(f'Multimodal model type "{type(self.model)}" has not been enabled yet for Optimum.')
 
@@ -274,7 +270,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 args=(),
                 kwargs=encoder_input_kwargs,
                 dynamic_shapes=dynamic_shapes,
-                strict=strict,
+                strict=True,
             )
             exported_programs[f"{self.modality}_encoder"] = encoder_exported_program
 

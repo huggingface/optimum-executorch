@@ -1167,6 +1167,8 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             Size of the model vocabulary.
     """
 
+    # Using general `AutoModel` since it usually routes to the correct model variant and there is no
+    # auto model class that captures both audio and image.
     auto_model_class = AutoModel
 
     def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
