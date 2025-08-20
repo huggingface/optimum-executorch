@@ -21,7 +21,6 @@ from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
     AutoProcessor,
-    Gemma3ForConditionalGeneration,
     PreTrainedModel,
     StaticCache,
     T5ForConditionalGeneration,
@@ -36,31 +35,6 @@ from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_k
 from .utils import save_config_to_constant_methods
 
 
-class ImageEncoderExportableModule(torch.nn.Module):
-    """
-    A wrapper module designed to make a vision encoder-only model exportable with `torch.export`.
-    This module ensures that the exported model is compatible with ExecuTorch.
-    """
-
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    def forward(self, pixel_values):
-        """
-        Projects the last hidden state from the vision model into language model space.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_outputs = self.model.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.model.multi_modal_projector(vision_outputs)
-        return image_features
-
-
 class VoxtralEncoderExportableModule(torch.nn.Module):
     """
     Subgraph which handles all of the audio-related work: encoder, multimodal projection, combinining with text tokens.
@@ -73,6 +47,28 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
         self.mm_projector = model.multi_modal_projector
         self.intermediate_size = model.config.audio_config.intermediate_size
         self.audio_token_id = model.config.audio_token_id
+        self.metadata = save_config_to_constant_methods(model.config.text_config, model.generation_config)
+
+    def prepare_export_inputs(self):
+        chunk_length = (
+            self.audio_encoder.config.max_source_positions
+            * self.audio_encoder.conv1.stride[0]
+            * self.audio_encoder.conv2.stride[0]
+        )
+        input_features = torch.rand(3, 128, chunk_length)  # (bsz, features, seq_len)
+
+        max_audio_len = 120  # In s, should be a multiple of 30. TODO: make configurable.
+        max_seq_len = self.metadata.get("get_max_seq_len")
+        dynamic_shapes = {
+            "input_features": {
+                0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_audio_len // 30),
+            },
+            "inputs_embeds": {1: torch.export.Dim("input_embeds_seq_length_dim", max=max_seq_len)},
+            "input_ids": {1: torch.export.Dim("input_ids_seq_length_dim", max=max_seq_len)},
+        }
+
+        strict = False
+        return input_features, dynamic_shapes, strict
 
     def forward(
         self,
@@ -97,54 +93,23 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        modality: str,
+        encoder_name: str,
+        use_custom_kv_cache: bool = False,
+        use_custom_sdpa: bool = False,
+    ):
         super().__init__()
         self.model = model
         self.config = model.config
+        self.modality = modality
+        self.encoder_name = encoder_name
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         self.metadata = save_config_to_constant_methods(model.config.text_config, model.generation_config)
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
-
-    def _prepare_vision_embedding_export_inputs(self):
-        """
-        Prepare example inputs and configurations for export.
-
-        Returns:
-            pixel_values (torch.Tensor): Example pixel values tensor.
-            dynamic_shapes (dict or None): Dynamic shape specifications for export.
-            strict (bool): Whether to use strict export mode.
-        """
-        image_size = self.config.vision_config.image_size
-        pixel_values = torch.rand((1, 3, image_size, image_size))
-        dynamic_shapes = None
-        strict = False
-
-        return pixel_values, dynamic_shapes, strict
-
-    def _prepare_audio_embedding_export_inputs(self):
-        # TODO(JZ): specific to Voxtral, should generalize.
-        batch_size = 3
-        chunk_length = (
-            self.model.audio_tower.config.max_source_positions
-            * self.model.audio_tower.conv1.stride[0]
-            * self.model.audio_tower.conv2.stride[0]
-        )
-        spectrogram_features = 128
-        audio_input = torch.rand(batch_size, spectrogram_features, chunk_length)
-
-        max_audio_len = 150  # In s, should be a multiple of 30.
-        dynamic_shapes = {
-            "input_features": {
-                0: torch.export.Dim("batch_size", min=1, max=max_audio_len / 30),
-                1: torch.export.Dim.STATIC,
-                2: torch.export.Dim.STATIC,
-            },
-        }
-
-        strict = True
-
-        return audio_input, dynamic_shapes, strict
 
     def _prepare_text_embedding_export_inputs(self):
         """
@@ -155,16 +120,17 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             dynamic_shapes (dict or None): Dynamic shape specifications for export.
             strict (bool): Whether to use strict export mode.
         """
-        # Prepare inputs with dynamic shapes
         seq_length = 3  # Sequence length > 1 to avoid specialization issues
         example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
+
         max_seq_len = self.metadata.get("get_max_seq_len")
         sliding_window = self.metadata.get("sliding_window", float("inf"))
         max_dim = min(max_seq_len, sliding_window) - 1
         seq_len_dim = torch.export.Dim("seq_length_dim", max=max_dim)
         dynamic_shapes = {
             "input": {1: seq_len_dim},
-        }  # nn.embedding forward() here - https://github.com/pytorch/pytorch/blob/febf3c475e6fe369b41ef009f3598659a6df0911/torch/nn/modules/sparse.py#L15.
+        }  # nn.embedding forward() args are here - https://github.com/pytorch/pytorch/blob/febf3c475e6fe369b41ef009f3598659a6df0911/torch/nn/modules/sparse.py#L15.
+
         strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
         return example_input_ids, dynamic_shapes, strict
 
@@ -183,6 +149,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         seq_length = 3
         example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=torch.float)
         example_cache_position = torch.arange(seq_length, dtype=torch.long)
+
         max_seq_len = self.metadata.get("get_max_seq_len")
         sliding_window = self.metadata.get("sliding_window", float("inf"))
         max_dim = min(max_seq_len, sliding_window) - 1
@@ -191,10 +158,11 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             "inputs_embeds": {1: seq_len_dim},
             "cache_position": {0: seq_len_dim},
         }
+
         strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
         return example_inputs_embeds, example_cache_position, dynamic_shapes, strict
 
-    def _register_attention_mask_for_4_53(self, exportable_module: torch.nn.Module):
+    def _register_attention_mask(self, exportable_module: torch.nn.Module):
         from transformers.masking_utils import AttentionMaskInterface
         from transformers.modeling_utils import AttentionInterface
 
@@ -222,7 +190,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_programs = {}
 
             # Custom SDPA for text decoder.
-            self._register_attention_mask_for_4_53(exportable_module)
+            self._register_attention_mask(exportable_module)
 
             if self.use_custom_kv_cache:
                 from optimum.executorch.attentions.custom_kv_cache import (
@@ -280,62 +248,35 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_programs["token_embeddings"] = token_embeddings_exported_program
 
             # 3. Export encoder.
+            if self.use_custom_sdpa:
+                getattr(self.model, self.encoder_name).config._attn_implementation = "custom_sdpa"
+            else:
+                getattr(self.model, self.encoder_name).config._attn_implementation = "sdpa_without_vmap"
+
             input_ids = torch.zeros_like(inputs_embeds[:, :, 0], dtype=torch.long)
-            input_ids[
-                0, 1
-            ] = self.config.audio_token_id  # Make sure we don't have an all-false mask for the imput_embeds.
+            input_ids[0, 1] = (
+                self.config.audio_token_id if self.modality == "audio" else self.config.image_token_id
+            )  # Make sure we don't have an all-false mask for the imput_embeds.
+
             if isinstance(self.model, VoxtralForConditionalGeneration):
-                # TODO(JZ): specific to Voxtral, should generalize.
-                chunk_length = (
-                    self.model.audio_tower.config.max_source_positions
-                    * self.model.audio_tower.conv1.stride[0]
-                    * self.model.audio_tower.conv2.stride[0]
-                )
-                encoder_input_kwargs = {
-                    "input_features": torch.rand(3, 128, chunk_length),  # (bsz, features, seq_len)
-                    "inputs_embeds": inputs_embeds,
-                    "input_ids": input_ids,
-                }
+                encoder = VoxtralEncoderExportableModule(self.model)
+                input_features, dynamic_shapes, strict = encoder.prepare_export_inputs()
+            else:
+                raise ValueError(f'Multimodal model type "{type(self.model)}" has not been enabled yet for Optimum.')
 
-                max_audio_len = 150  # In s, should be a multiple of 30. TODO(JZ): make this configurable top-level.
-                max_seq_len = self.metadata.get("get_max_seq_len")
-                dynamic_shapes = {
-                    "input_features": {
-                        0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_audio_len // 30),
-                        # 1: torch.export.Dim.STATIC,
-                        # 2: torch.export.Dim.STATIC,
-                    },
-                    "inputs_embeds": {1: torch.export.Dim("input_embeds_seq_length_dim", max=max_seq_len)},
-                    "input_ids": {1: torch.export.Dim("input_ids_seq_length_dim", max=max_seq_len)},
-                }
-
-                # self.model.audio_tower.config._attn_implementation = "sdpa_without_vmap"
-                self.model.audio_tower.config._attn_implementation = "custom_sdpa"
-                audio_encoder = VoxtralEncoderExportableModule(self.model)
-                audio_encoder_exported_program = torch.export.export(
-                    audio_encoder,
-                    args=(),
-                    kwargs=encoder_input_kwargs,
-                    dynamic_shapes=dynamic_shapes,
-                    strict=False,
-                )
-                exported_programs["audio_encoder"] = audio_encoder_exported_program
-            elif isinstance(self.model, Gemma3ForConditionalGeneration):
-                pixel_values, dynamic_shapes, strict = self._prepare_vision_embedding_export_inputs()
-                logging.info(
-                    f"Exporting vision embeddings using pixel_values({pixel_values.shape}), dynamic_shapes={dynamic_shapes}, strict={strict}"
-                )
-                # Setting the _attn_implementation to "sdpa_without_vmap" for vision encoder
-                exportable_module.model.model.vision_tower.config._attn_implementation = "sdpa_without_vmap"
-                vision_encoder = ImageEncoderExportableModule(exportable_module.model.model)
-                vision_embeddings_exported_program = torch.export.export(
-                    vision_encoder,
-                    args=(pixel_values,),
-                    kwargs={},
-                    dynamic_shapes=dynamic_shapes,
-                    strict=strict,
-                )
-                exported_programs["vision_encoder"] = vision_embeddings_exported_program
+            encoder_input_kwargs = {
+                "input_features": input_features,
+                "inputs_embeds": inputs_embeds,
+                "input_ids": input_ids,
+            }
+            encoder_exported_program = torch.export.export(
+                encoder,
+                args=(),
+                kwargs=encoder_input_kwargs,
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
+            )
+            exported_programs[f"{self.modality}_encoder"] = encoder_exported_program
 
         return exported_programs
 
@@ -396,6 +337,7 @@ class CausalLMExportableModule(torch.nn.Module):
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
     def _register_custom_attention(self, exportable_module: torch.nn.Module):
+        from transformers.integrations.executorch import sdpa_mask_without_vmap
         from transformers.masking_utils import AttentionMaskInterface
         from transformers.modeling_utils import AttentionInterface
 

@@ -70,11 +70,13 @@ def _validate_multimodal_components(model):
             vision_encoder_name = name
             break
 
-    if audio_encoder_name is None and vision_encoder_name is None:
+    if (audio_encoder_name is None) == (vision_encoder_name is None):
         raise ValueError(
-            "The model does not have any of the expected encoder attributes: "
+            "The model does not have one of the expected encoder attributes: "
             f"{POTENTIAL_AUDIO_ENCODER_NAMES + POTENTIAL_VISION_ENCODER_NAMES}. "
             "This is required for multimodal text-to-text models."
+            "Currently only a maximum of 1 modality is supported, so there can only be one of these"
+            "encoders in the model."
         )
 
     return decoder_name, audio_encoder_name, vision_encoder_name
@@ -84,7 +86,7 @@ def _validate_multimodal_components(model):
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("image-text-to-text")
 @register_task("audio-text-to-text")
-@register_task("multimodal-text-to-text")
+@register_task("multimodal-text-to-text")  # Fake task name, since audio-text-to-text is not available.
 def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     """
     Loads a causal language model for multimodal generation (e.g. image-to-text) generation and registers it under the appropriate task
@@ -168,4 +170,10 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     # Quantize decoder embeddings using dynamically detected decoder name.
     quantize_model_(getattr(eager_model, decoder_name), qembedding_config=qembedding_config)
 
-    return MultiModalTextToTextExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa)
+    return MultiModalTextToTextExportableModule(
+        model=eager_model,
+        modality="audio" if audio_encoder_name else "vision",
+        encoder_name=audio_encoder_name if audio_encoder_name else vision_encoder_name,
+        use_custom_kv_cache=use_custom_kv_cache,
+        use_custom_sdpa=use_custom_sdpa,
+    )
