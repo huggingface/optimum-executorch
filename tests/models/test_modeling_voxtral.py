@@ -135,6 +135,140 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_split_prefill_exported_program(self):
+        """
+        Similar test as above by testing E2E with ExportedPrograms, but does so by splitting prefill
+        into three parts instead of doing it all at once:
+        - Special tokens denoting applied automatically to the prompt by the mistral tokenizer
+          denoting start of prompt, start of modality, etc.
+        - Audio embeddings
+        - Prompt token embeddings
+
+        This split-up prefill process mirrors how we do multimodal prefill in ET's multimodal runner.
+        To compare, transformers does:
+        - Format text prompt something like input_ids = ["<bos>", "audio_token",
+        "audio_placeholder", ... , "audio_placeholder", "Hello", " ", "world", "<eos>"] in the
+        VoxtralProcessor
+        - Embed the input_ids
+        - Run encoder and replace audio placeholders with audio embeddings with masking
+        - Do one combined prefill with everything
+
+        Splitting the prefill allows us to skip the custom logic of needing to format the
+        input, including calculating how many audio placeholders to add, etc. Another advantage
+        is that it allows us to do multiturn multimodal (submit multiple audios throughout an
+        ongoing chat). Obviously doing a single prefill would be faster though.
+        """
+        model_id = "mistralai/Voxtral-Mini-3B-2507"
+        config = AutoConfig.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
+                    {"type": "text", "text": "What can you tell me about this audio?"},
+                ],
+            }
+        ]
+        processor = AutoProcessor.from_pretrained(model_id)
+        inputs = processor.apply_chat_template(conversation)
+        input_ids = inputs["input_ids"]
+        input_features = inputs["input_features"]
+
+        # Load and torch.export model.
+        module = load_multimodal_text_to_text_model(
+            model_id,
+            use_custom_sdpa=True,
+            use_custom_kv_cache=True,
+            qlinear="8da4w",
+            qembedding="8w",
+        )
+        ep = module.export()
+
+        # 1. Prefill start metadata tokens.
+        cache_pos = 0
+        start_metadata_tokens = input_ids[:, 0:3]  # Starts with [1, 3, 25].
+        start_metadata_embeddings = ep["token_embeddings"].module().forward(input=start_metadata_tokens)
+        start_metadata_len = start_metadata_tokens.shape[1]
+        logits = (
+            ep["decoder"]
+            .module()
+            .forward(
+                inputs_embeds=start_metadata_embeddings,
+                cache_position=torch.arange(cache_pos, cache_pos + start_metadata_len, dtype=torch.long),
+            )
+        )
+        cache_pos += start_metadata_len
+
+        # 2. Prefill audio.
+        if "input_features" in inputs:
+            audio_embeddings = (
+                ep["audio_encoder"]
+                .module()
+                .forward(
+                    input_features=input_features,
+                )
+            )
+        audio_embeddings = audio_embeddings.unsqueeze(0)  # Unsqueeze from (1125, 3072) to (1, 1125, 3072)
+        audio_embeddings_len = audio_embeddings.shape[1]
+        logits = (
+            ep["decoder"]
+            .module()
+            .forward(
+                inputs_embeds=audio_embeddings,
+                cache_position=torch.arange(cache_pos, cache_pos + audio_embeddings_len, dtype=torch.long),
+            )
+        )
+        cache_pos += audio_embeddings_len
+
+        # 3. Prefill text prompt embeddings
+        prompt_start_index = start_metadata_len + audio_embeddings_len
+        prompt_tokens = input_ids[:, prompt_start_index:]
+        prompt_tokens_embeddings = ep["token_embeddings"].module().forward(input=prompt_tokens)
+        prompt_tokens_len = prompt_tokens.shape[1]
+        logits = (
+            ep["decoder"]
+            .module()
+            .forward(
+                inputs_embeds=prompt_tokens_embeddings,
+                cache_position=torch.arange(cache_pos, cache_pos + prompt_tokens_len, dtype=torch.long),
+            )
+        )
+        cache_pos += prompt_tokens_len
+
+        token = torch.argmax(logits[:, -1, :])
+
+        tokens = [token.item()]
+        print(tokenizer.decode([token.item()]), end="")
+
+        pos = cache_pos  # Should be equivalent to input_ids.shape[1]
+        assert(cache_pos == input_ids.shape[1])
+
+        max_generation_len = 64
+        while pos < input_ids.shape[-1] + max_generation_len:
+            token_embedding = ep["token_embeddings"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
+            logits = (
+                ep["decoder"]
+                .module()
+                .forward(
+                    inputs_embeds=token_embedding,
+                    cache_position=torch.tensor([pos], dtype=torch.long),
+                )
+            )
+            token = torch.argmax(logits[:, -1, :])
+            print(tokenizer.decode([token.item()]), end="")
+            tokens.append(token.item())
+            pos += 1
+
+        output = tokenizer.decode(tokens, skip_special_tokens=True)
+        self.assertTrue("tattoo" in output)
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
     def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_pte(self):
         model_id = "mistralai/Voxtral-Mini-3B-2507"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
