@@ -154,7 +154,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
-            **{"qlinear": "8da4w", "qembedding": "8w", "task": "multimodal-text-to-text"},
+            **{"qlinear": "8da4w", "qembedding": "4w", "task": "multimodal-text-to-text"},
         )
         self.assertIsInstance(model, ExecuTorchModelForMultiModalToText)
         self.assertIsInstance(model.model, ExecuTorchModule)
