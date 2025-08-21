@@ -65,8 +65,6 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
             "input_features": {
                 0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_audio_len // 30),
             },
-            "inputs_embeds": {1: torch.export.Dim("input_embeds_seq_length_dim", max=max_seq_len)},
-            "input_ids": {1: torch.export.Dim("input_ids_seq_length_dim", max=max_seq_len)},
         }
 
         return input_features, dynamic_shapes
@@ -74,16 +72,12 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
     def forward(
         self,
         input_features: torch.FloatTensor,
-        inputs_embeds: torch.FloatTensor,
-        input_ids: torch.LongTensor,
     ):
         """
         Forward pass of the Voxtral encoder module.
 
         Args:
             input_features (torch.FloatTensor): Raw audio features with shape (batch_size, features, seq_len).
-            inputs_embeds (torch.FloatTensor): Text token embeddings with shape (batch_size, seq_len, hidden_size).
-            input_ids (torch.LongTensor): Input token IDs with shape (batch_size, seq_len).
 
         Returns:
             torch.FloatTensor: Combined embeddings with audio tokens replaced by audio embeddings.
@@ -92,11 +86,7 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.intermediate_size)
         audio_embeds = self.mm_projector(audio_hidden_states)
-
-        audio_token_mask = input_ids == self.audio_token_id
-        inputs_embeds[audio_token_mask] = audio_embeds
-
-        return inputs_embeds
+        return audio_embeds
 
 
 class MultiModalTextToTextExportableModule(torch.nn.Module):
@@ -281,11 +271,6 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             else:
                 getattr(self.model, self.encoder_name).config._attn_implementation = "sdpa_without_vmap"
 
-            input_ids = torch.zeros_like(inputs_embeds[:, :, 0], dtype=torch.long)
-            input_ids[0, 1] = (
-                self.config.audio_token_id if self.modality == "audio" else self.config.image_token_id
-            )  # Make sure we don't have an all-false mask for the imput_embeds.
-
             if isinstance(self.model, VoxtralForConditionalGeneration):
                 encoder = VoxtralEncoderExportableModule(self.model)
                 input_features, dynamic_shapes = encoder.prepare_export_inputs()
@@ -294,8 +279,6 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
             encoder_input_kwargs = {
                 "input_features": input_features,
-                "inputs_embeds": inputs_embeds,
-                "input_ids": input_ids,
             }
             encoder_exported_program = torch.export.export(
                 encoder,

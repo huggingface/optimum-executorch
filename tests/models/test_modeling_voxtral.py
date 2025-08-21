@@ -51,7 +51,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         This test seems kind of unnecessary since we have test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_pte which just directly tests the excecutorch program, but keeping this here in case it's useful for showcasing code / debugging later on.
         """
         model_id = "mistralai/Voxtral-Mini-3B-2507"
-        _config = AutoConfig.from_pretrained(model_id)
+        config = AutoConfig.from_pretrained(model_id)
         module = load_multimodal_text_to_text_model(
             model_id,
             use_custom_sdpa=True,
@@ -60,7 +60,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             qembedding="8w",
         )
 
-        res = module.export()
+        ep = module.export()
 
         # Generate
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -80,22 +80,25 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         inputs = processor.apply_chat_template(conversation)
 
         input_ids = inputs["input_ids"]
-        token_embeddings = res["token_embeddings"].module().forward(input=input_ids)
+        token_embeddings = ep["token_embeddings"].module().forward(input=input_ids)
 
         if "input_features" in inputs:
-            token_embeddings = (
-                res["audio_encoder"]
+            audio_embeddings = (
+                ep["audio_encoder"]
                 .module()
                 .forward(
                     input_features=inputs["input_features"],
-                    inputs_embeds=token_embeddings,
-                    input_ids=inputs["input_ids"],
+                    # inputs_embeds=token_embeddings,
+                    # input_ids=inputs["input_ids"],
                 )
             )
 
+        audio_token_mask = inputs["input_ids"] == config.audio_token_id
+        token_embeddings[audio_token_mask] = audio_embeddings
+
         # Prefill prompt embeddings
         logits = (
-            res["decoder"]
+            ep["decoder"]
             .module()
             .forward(
                 inputs_embeds=token_embeddings,
@@ -112,9 +115,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         max_generation_len = 64
         while pos < input_ids.shape[-1] + max_generation_len:
-            token_embedding = res["token_embeddings"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
+            token_embedding = ep["token_embeddings"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
             logits = (
-                res["decoder"]
+                ep["decoder"]
                 .module()
                 .forward(
                     inputs_embeds=token_embedding,
