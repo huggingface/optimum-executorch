@@ -1184,8 +1184,10 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         for method_name in self.model.method_names():
             if method_name == "audio_encoder":
                 self.encoder_name = "audio_encoder"
+                self.encoder_token_id = self.model.run_method("audio_token_id")[0]
             elif method_name == "vision_encoder":
                 self.encoder_name = "vision_encoder"
+                self.encoder_token_id = self.model.run_method("vision_token_id")[0]
         if not self.encoder_name:
             raise ValueError(
                 'Exported .pte file needs to contain either an an "audio_encoder" or a "vision_encoder" in its methods.'
@@ -1219,14 +1221,14 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
     ):
         token_embeddings = self.model.run_method("token_embeddings", (input_ids,))[0]
         if input_features is not None:
-            token_embeddings = self.model.run_method(
+            encoder_embeddings = self.model.run_method(
                 self.encoder_name,
                 (
                     input_features,
-                    token_embeddings,
-                    input_ids,
                 ),
             )[0]
+            encoder_token_mask = input_ids == self.encoder_token_id
+            token_embeddings[encoder_token_mask] = encoder_embeddings
         output = self.model.run_method(
             "decoder",
             (

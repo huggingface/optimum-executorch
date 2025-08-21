@@ -122,7 +122,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self.encoder_name = encoder_name
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
-        self.metadata = save_config_to_constant_methods(model.config.text_config, model.generation_config)
+        modality_token_placeholder_id_kwargs = {f"{modality}_token_id": getattr(self.config, f"{modality}_token_id")}
+        self.metadata = save_config_to_constant_methods(model.config.text_config, model.generation_config, **modality_token_placeholder_id_kwargs)
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
     def _prepare_text_embedding_export_inputs(self):

@@ -88,8 +88,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 .module()
                 .forward(
                     input_features=inputs["input_features"],
-                    # inputs_embeds=token_embeddings,
-                    # input_ids=inputs["input_ids"],
                 )
             )
 
