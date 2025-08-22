@@ -85,7 +85,6 @@ def _validate_multimodal_components(model):
 # NOTE: It's important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("image-text-to-text")
-@register_task("audio-text-to-text")
 @register_task("multimodal-text-to-text")  # Fake task name, since audio-text-to-text is not available.
 def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     """
@@ -158,8 +157,9 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     # from from_pretrained().
     getattr(eager_model, decoder_name).generation_config = eager_model.generation_config
 
+    # Must disable gradient when exporting a model with a prequantized checkpoint,
+    # e.g. "pytorch/Phi-4-mini-instruct-8da4w".
     for param in eager_model.parameters():
-        # Must disable gradient for quantized checkpoint
         if isinstance(param, torchao.utils.TorchAOBaseTensor):
             param.requires_grad = False
 
@@ -173,6 +173,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     return MultiModalTextToTextExportableModule(
         model=eager_model,
         modality="audio" if audio_encoder_name else "vision",
+        decoder_name=decoder_name,
         encoder_name=audio_encoder_name if audio_encoder_name else vision_encoder_name,
         use_custom_kv_cache=use_custom_kv_cache,
         use_custom_sdpa=use_custom_sdpa,

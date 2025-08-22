@@ -133,7 +133,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_linux_ci, reason="OOM")
-    def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_split_prefill_exported_program(self):
+    def test_voxtral_audio_text_to_text_generation_with_custom_sdpa_kv_cache_8da4w_8we_split_prefill_exported_program(
+        self,
+    ):
         """
         Similar test as above by testing E2E with ExportedPrograms, but does so by splitting prefill
         into three parts instead of doing it all at once:
@@ -157,7 +159,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         ongoing chat). Obviously doing a single prefill would be faster though.
         """
         model_id = "mistralai/Voxtral-Mini-3B-2507"
-        config = AutoConfig.from_pretrained(model_id)
+        _config = AutoConfig.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         conversation = [
             {
@@ -243,7 +245,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         print(tokenizer.decode([token.item()]), end="")
 
         pos = cache_pos  # Should be equivalent to input_ids.shape[1]
-        assert(cache_pos == input_ids.shape[1])
+        assert cache_pos == input_ids.shape[1]
 
         max_generation_len = 64
         while pos < input_ids.shape[-1] + max_generation_len:

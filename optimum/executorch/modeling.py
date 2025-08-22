@@ -1223,9 +1223,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         if input_features is not None:
             encoder_embeddings = self.model.run_method(
                 self.encoder_name,
-                (
-                    input_features,
-                ),
+                (input_features,),
             )[0]
             encoder_token_mask = input_ids == self.encoder_token_id
             token_embeddings[encoder_token_mask] = encoder_embeddings
@@ -1281,6 +1279,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
                     dtype=torch.long,
                     device=self.device,
                 ),
+                input_features=None,
             )
             self.stats.on_sampling_end()
             if not first_token_generated:
@@ -1294,7 +1293,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             if next_token == self.eos_token_id:
                 break
 
-        self.stats.set_num_generated_tokens(len(generated_tokens) - len(prompt_tokens))
+        self.stats.set_num_generated_tokens(len(generated_tokens))
         return generated_tokens if echo else generated_tokens[len(prompt_tokens) :]
 
     def text_generation(

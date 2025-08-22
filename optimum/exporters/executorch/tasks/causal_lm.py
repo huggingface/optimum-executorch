@@ -125,8 +125,9 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
                 max_length,
             )
 
+    # Must disable gradient when exporting a model with a prequantized checkpoint,
+    # e.g. "pytorch/Phi-4-mini-instruct-8da4w".
     for param in eager_model.parameters():
-        # Must disable gradient for quantized checkpoint
         if isinstance(param, torchao.utils.TorchAOBaseTensor):
             param.requires_grad = False
 
