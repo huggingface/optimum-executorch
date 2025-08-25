@@ -57,7 +57,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
             qlinear="8da4w",
-            qembedding="8w",
+            qembedding="4w",
         )
 
         ep = module.export()
@@ -184,7 +184,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
             qlinear="8da4w",
-            qembedding="8w",
+            qembedding="4w",
         )
         ep = module.export()
 
