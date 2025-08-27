@@ -87,7 +87,8 @@ class VoxtralEncoderExportableModule(torch.nn.Module):
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.intermediate_size)
         audio_embeds = self.mm_projector(audio_hidden_states)
-        return audio_embeds
+        # TODO: Remove unsqueeze(0) and do in custom graph pass instead safter removing Voxtral specific code.
+        return audio_embeds.unsqueeze(0)  # (1, audio_embed_len, hidden_dim)
 
 
 class MultiModalTextToTextExportableModule(torch.nn.Module):
