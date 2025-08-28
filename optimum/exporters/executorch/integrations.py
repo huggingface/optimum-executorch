@@ -105,6 +105,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         model (torch.nn.Module): The multimodal model to export.
         modality (str): The input modality type ("audio" or "vision").
         encoder_name (str): Name of the encoder attribute in the model.
+        processor_config (dict, optional): Preprocessor configuration loaded from preprocessor_config.json.
         use_custom_kv_cache (bool): Whether to use custom key-value caching for optimization.
         use_custom_sdpa (bool): Whether to use custom scaled dot-product attention.
     """
@@ -115,6 +116,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         modality: str,
         decoder_name: str,
         encoder_name: str,
+        processor_config: dict = None,
         use_custom_kv_cache: bool = False,
         use_custom_sdpa: bool = False,
     ):
@@ -132,11 +134,12 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self.modality = modality
         self.decoder_name = decoder_name
         self.encoder_name = encoder_name
+        self.processor_config = processor_config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         modality_token_placeholder_id_kwargs = {f"{modality}_token_id": getattr(self.config, f"{modality}_token_id")}
         self.metadata = save_config_to_constant_methods(
-            model.config.text_config, model.generation_config, **modality_token_placeholder_id_kwargs
+            model.config.text_config, model.generation_config, processor_config, **modality_token_placeholder_id_kwargs
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 

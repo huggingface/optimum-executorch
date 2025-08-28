@@ -13,6 +13,9 @@
 # limitations under the License.
 
 
+import json
+import os.path
+
 import torchao
 from transformers import AutoConfig, AutoModel, GenerationConfig
 
@@ -122,6 +125,27 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     max_length = kwargs.get("max_length", 2048)
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
 
+    # Load preprocessor_config.json if it exists
+    processor_config = None
+    # Check if model_name_or_path is a local directory
+    if os.path.isdir(model_name_or_path):
+        preprocessor_config_path = os.path.join(model_name_or_path, "preprocessor_config.json")
+    else:
+        # For Hugging Face model IDs, try to find it in the cached directory
+        try:
+            from transformers.utils import cached_file
+
+            preprocessor_config_path = cached_file(model_name_or_path, "preprocessor_config.json")
+        except Exception:
+            preprocessor_config_path = None
+
+    if preprocessor_config_path and os.path.exists(preprocessor_config_path):
+        try:
+            with open(preprocessor_config_path, "r") as f:
+                processor_config = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            processor_config = None
+
     # Make sure config has text_config and vision_config:
     if not (hasattr(config, "text_config") and (hasattr(config, "vision_config") or hasattr(config, "audio_config"))):
         raise ValueError(
@@ -175,6 +199,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         modality="audio" if audio_encoder_name else "vision",
         decoder_name=decoder_name,
         encoder_name=audio_encoder_name if audio_encoder_name else vision_encoder_name,
+        processor_config=processor_config,
         use_custom_kv_cache=use_custom_kv_cache,
         use_custom_sdpa=use_custom_sdpa,
     )

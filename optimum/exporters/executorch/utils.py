@@ -22,6 +22,7 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 def save_config_to_constant_methods(
     config: PretrainedConfig,
     generation_config: Optional[GenerationConfig] = None,
+    processor_config: Optional[dict] = None,
     **kwargs,
 ):
     # Initialize metadata with values from model config
@@ -61,6 +62,10 @@ def save_config_to_constant_methods(
                 metadata["get_max_batch_size"] = max_batch_size
             if max_seq_len is not None:
                 metadata["get_max_seq_len"] = max_seq_len
+
+    # Include processor_config keys in metadata if provided
+    if processor_config is not None:
+        metadata.update(processor_config)
 
     # Combine with any additional kwargs and filter out None values
     return {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
