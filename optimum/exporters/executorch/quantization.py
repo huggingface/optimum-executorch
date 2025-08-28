@@ -19,7 +19,7 @@ import torch
 
 
 def quantize_model_(
-    eager_model: torch.nn.Module, qlinear_config: Optional[str], qembedding_config: Optional[str]
+    eager_model: torch.nn.Module, qlinear_config: Optional[str] = None, qembedding_config: Optional[str] = None
 ) -> torch.nn.Module:
     if not (qlinear_config or qembedding_config):
         return

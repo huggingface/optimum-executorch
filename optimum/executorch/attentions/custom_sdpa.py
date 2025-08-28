@@ -29,9 +29,6 @@ def custom_sdpa_with_start_pos_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
-    # This is before the transpose
-    max_seq_len = key.shape[2]
-
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
@@ -45,7 +42,6 @@ def custom_sdpa_with_start_pos_forward(
 
     # Ignore the causal flag from kwargs but use the one in module
     kwargs.pop("is_causal", None)
-    assert module.is_causal, "Current variant supports only causal attention"
 
     is_causal = module.is_causal
     if kwargs.get("is_sliding", False):
@@ -56,13 +52,16 @@ def custom_sdpa_with_start_pos_forward(
         start_pos = 0
     else:
         attn_mask = None
-        # Calculate the input pos from attention mask.
-        # Branch out for float vs bool mask
-        # assert attention_mask.dim() == 2, f"attention_mask must be a 2D matrix."
-        attention_mask = attention_mask.reshape(-1, max_seq_len)
-        first_row_mask = attention_mask[0, :]
-        # [0, 0, 0, 0, -inf, -inf, -inf, -inf], start_pos = 3
-        start_pos = torch.argmin(first_row_mask.to(torch.long)).item() - 1
+        if is_causal:
+            # Calculate the input pos from attention mask.
+            # Branch out for float vs bool mask
+            # assert attention_mask.dim() == 2, f"attention_mask must be a 2D matrix."
+            attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1])
+            first_row_mask = attention_mask[0, :]
+            # [0, 0, 0, 0, -inf, -inf, -inf, -inf], start_pos = 3
+            start_pos = torch.argmin(first_row_mask.to(torch.long)).item() - 1
+        else:
+            start_pos = 0
 
     output = torch.ops.llama.custom_sdpa(
         query,
