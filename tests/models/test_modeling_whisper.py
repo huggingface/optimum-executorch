@@ -61,7 +61,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForSpeechSeq2Seq)
         self.assertTrue(hasattr(model, "encoder"))
         self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "decoder"))
+        self.assertTrue(hasattr(model, "text_decoder"))
         self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")

@@ -448,7 +448,7 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
-        if not hasattr(self, "decoder"):
+        if not hasattr(self, "text_decoder"):
             raise AttributeError("Expected attribute 'decoder' not found in the instance.")
         metadata = self.decoder.method_names()
         if "use_kv_cache" in metadata:
@@ -997,7 +997,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
-        if not hasattr(self, "decoder"):
+        if not hasattr(self, "text_decoder"):
             raise AttributeError("Expected attribute 'decoder' not found in the instance.")
         metadata = self.decoder.method_names()
         if "use_kv_cache" in metadata:
@@ -1173,7 +1173,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
 
     def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
         super().__init__(models=models, config=config)
-        required_methods = ["decoder", "token_embeddings"]
+        required_methods = ["text_decoder", "token_embedding"]
         for required_method in required_methods:
             if required_method not in self.model.method_names():
                 raise ValueError(
@@ -1219,7 +1219,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         cache_position: torch.Tensor,
         input_features: Optional[torch.Tensor] = None,
     ):
-        token_embeddings = self.model.run_method("token_embeddings", (input_ids,))[0]
+        token_embeddings = self.model.run_method("token_embedding", (input_ids,))[0]
         if input_features is not None:
             encoder_embeddings = self.model.run_method(
                 self.encoder_name,
@@ -1228,7 +1228,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             encoder_token_mask = input_ids == self.encoder_token_id
             token_embeddings[encoder_token_mask] = encoder_embeddings
         output = self.model.run_method(
-            "decoder",
+            "text_decoder",
             (
                 cache_position,
                 token_embeddings,
