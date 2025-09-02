@@ -122,11 +122,11 @@ To perform on-device inference, you can use ExecuTorch’s sample runner or the 
 
 ### Custom Operators
 Optimum transformer models utilize:
-- A [**custom SDPA**](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) based on Flash Attention, boosting performance by around **3x** compared to default SDPA.
-- A **custom KV cache** that uses a custom op for in-place cache update, boosting performance by **2.5x** compared to default static KV cache.
+- A [**custom SDPA**](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) for CPU based on Flash Attention, boosting performance by around **3x** compared to default SDPA.
+- A **custom KV cache** that uses a custom op for efficient in-place cache update on CPU, boosting performance by **2.5x** compared to default static KV cache.
 
 ### Backends Delegation
-Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) and [CoreML Backend](https://docs.pytorch.org/executorch/stable/backends-coreml.html) for efficient execution on mobile CPUs.
+Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) for CPU and [CoreML Backend](https://docs.pytorch.org/executorch/stable/backends-coreml.html) for GPU on Apple devices.
 
 For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
 
