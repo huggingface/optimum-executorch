@@ -50,13 +50,45 @@ If the model type doesn't exist in then we will need to write a new class for it
 ### ❌ Model is not torch.exportable
 To address this issue, we will need to upstream changes to the model's modeling file in Transformers to make the model exportable.
 
-# Exporting and running different model types
-<In progress>
+# Exporting different models classes
 
 ### LLMs (Large Language Models)
-<In progress>
+LLMs can be exported using the `text-generation` task like so:
+```
+optimum-cli export executorch \
+  --model <model-id> \
+  --task text-generation \
+  --recipe xnnpack \
+  --use_custom_sdpa \
+  --use_custom_kv_cache \
+  --qlinear 8da4w \
+  --qembedding 8w
+  ...etc...
+```
+
+The export will produce a `.pte` with a single forward method for the decoder: `model`.
+
+Note that most of the arguments here are only applicable to LLMs (multimodal included):
+```
+--use_custom_sdpa \
+--use_custom_kv_cache \
+--qlinear 8da4w \
+--qembedding 8w
+```
 
 ### Multimodal LLMs
+Multimodal LLMs can be exported using the `multimodal-text-to-text` task like so:
+```
+optimum-cli export executorch \
+  --model mistralai/Voxtral-Mini-3B-2507 \
+  --task multimodal-text-to-text \
+  --recipe xnnpack \
+  --use_custom_sdpa \
+  --use_custom_kv_cache \
+  --qlinear 8da4w \
+  --qembedding 8w
+  ...etc...
+```
 
 The export will produce a `.pte` with the following methods:
 - `text_decoder`: the text decoder or language model backbone
@@ -65,14 +97,38 @@ The export will produce a `.pte` with the following methods:
   -  This is needed in order to cleanly separate the entire multimodal model into subgraphs. The text decoder subgraph will take in token embeddings, so multimodal input will be processed into embeddings by the encoder while text input will be processed into embeddings by this method.
 
 ### Seq2Seq
-<In progress>
+Seq2Seq models can be exported using the `text2text-generation` task like so:
+```
+optimum-cli export executorch \
+  --model google-t5/t5-small \
+  --task text2text-generation \
+  --recipe xnnpack
+```
 
 The export will produce a `.pte` with the following methods:
 - `text_decoder`: the decoder half of the Seq2Seq model
 - `encoder`: the encoder half of the Seq2Seq model. This encode can support a variety of modalities, such as text for T5 and audio for Whisper.
 
 ### Image classification
-<In progress>
+Image classification models can be exported using the `image-classification` task like so:
+```
+optimum-cli export executorch \
+  --model google/vit-base-patch16-224 \
+  --task image-classification \
+  --recipe xnnpack
+```
+
+The export will produce a `.pte` with a single forward method for the decoder: `model`.
 
 ### ASR (Automatic speech recognition)
-<In progress>
+ASR is a special case of Seq2Seq that uses the base Seq2Seq exportable modules. It can be exported using the `automatic-speech-recognition` task like so:
+```
+optimum-cli export executorch \
+  --model openai/whisper-tiny \
+  --task automatic-speech-recognition \
+  --recipe xnnpack
+```
+
+The export will produce a `.pte` with the following methods:
+- `text_decoder`: the decoder half of the Seq2Seq model
+- `encoder`: the encoder half of the Seq2Seq model. This encode can support a variety of modalities, such as text for T5 and audio for Whisper.
