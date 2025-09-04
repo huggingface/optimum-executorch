@@ -24,7 +24,6 @@ from transformers import (
     PreTrainedModel,
     StaticCache,
     T5ForConditionalGeneration,
-    VoxtralForConditionalGeneration,
     WhisperForConditionalGeneration,
 )
 from transformers.generation.configuration_utils import GenerationConfig
@@ -37,58 +36,51 @@ from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_k
 from .utils import save_config_to_constant_methods
 
 
-class VoxtralEncoderExportableModule(torch.nn.Module):
-    """
-    Subgraph which handles all of the audio-related work: encoder, multimodal projection, combinining with text tokens.
-    The result of this subgraph should stream directly into the decoder subgraph.
-    """
-
+class AudioExportableModule(torch.nn.Module):
     def __init__(self, model: torch.nn.Module):
         super().__init__()
-        self.audio_encoder = model.audio_tower
-        self.mm_projector = model.multi_modal_projector
-        self.intermediate_size = model.config.audio_config.intermediate_size
-        self.audio_token_id = model.config.audio_token_id
-        self.metadata = save_config_to_constant_methods(model.config.text_config, model.generation_config)
-        self.audio_config = model.config.audio_config
+        self.model = model
 
     def prepare_export_inputs(self):
-        # https://github.com/huggingface/transformers/blob/main/src/transformers/models/voxtral/modeling_voxtral.py#L342
-        chunk_length = (
-            self.audio_encoder.config.max_source_positions
-            * self.audio_encoder.conv1.stride[0]
-            * self.audio_encoder.conv2.stride[0]
-        )
-        input_features = torch.rand(3, self.audio_config.num_mel_bins, chunk_length)  # 3 is an arbitrary batch size.
+        # 1. Get export inputs
+        model_id = self.model.config.name_or_path
+        processor = AutoProcessor.from_pretrained(model_id)
+        sample_conversation_with_audio = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "audio",
+                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                    },
+                ],
+            }
+        ]
+        processed_inputs = processor.apply_chat_template(sample_conversation_with_audio)
+        if "input_features" not in processed_inputs:
+            raise ValueError(
+                f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"
+            )
+        export_inputs = processed_inputs["input_features"]
 
-        max_audio_len = 120  # In s, should be a multiple of 30, see  https://github.com/huggingface/transformers/blob/fbeaf96f9e2291c21277ac658a33ea8752728bf3/src/transformers/models/voxtral/processing_voxtral.py#L93. # TODO(#127): Add CLI args for max_seq_len and max_audio_len.
+        # 2. Get export dynamic shapes
+        # For certain models like Voxtral, each 30 seconds represent one batch. So theoretically this caps
+        # the audio length at 300 seconds (5 minutes).
+        max_bsz = 10
         dynamic_shapes = {
             "input_features": {
-                0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_audio_len // 30),
+                0: torch.export.Dim("enc_batch_size_dim", min=1, max=max_bsz),
             },
         }
 
-        return input_features, dynamic_shapes
+        return export_inputs, dynamic_shapes
 
     def forward(
         self,
         input_features: torch.FloatTensor,
     ):
-        """
-        Forward pass of the Voxtral encoder module.
-
-        Args:
-            input_features (torch.FloatTensor): Raw audio features with shape (batch_size, features, seq_len).
-
-        Returns:
-            torch.FloatTensor: Combined embeddings with audio tokens replaced by audio embeddings.
-        """
-        audio_outputs = self.audio_encoder(input_features)
-        audio_hidden_states = audio_outputs.last_hidden_state
-        audio_hidden_states = audio_hidden_states.reshape(-1, self.intermediate_size)
-        audio_embeds = self.mm_projector(audio_hidden_states)
-        # TODO: Remove unsqueeze(0) and do in custom graph pass instead safter removing Voxtral specific code.
-        return audio_embeds.unsqueeze(0)  # (1, audio_embed_len, hidden_dim)
+        audio_embeds = self.model.get_audio_embeds(input_features)
+        return audio_embeds.unsqueeze(0)
 
 
 class MultiModalTextToTextExportableModule(torch.nn.Module):
@@ -287,19 +279,26 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             if self.use_custom_sdpa:
                 getattr(self.model, self.encoder_name).config._attn_implementation = "custom_sdpa"
 
-            if isinstance(self.model, VoxtralForConditionalGeneration):
-                encoder = VoxtralEncoderExportableModule(self.model)
+            if self.modality == "audio":
+                encoder = AudioExportableModule(self.model)
                 input_features, dynamic_shapes = encoder.prepare_export_inputs()
+            elif self.modality == "vision":
+                raise ValueError("Vision is not yet supported, this will be available soon.")
             else:
-                raise ValueError(f'Multimodal model type "{type(self.model)}" has not been enabled yet for Optimum.')
+                raise ValueError(
+                    f"{self.model.config.name_or_path} has an unsupported modality that is not supported yet for Optimum - please file an issue."
+                )
 
-            encoder_input_kwargs = {
-                "input_features": input_features,
-            }
+            logging.info(
+                f"Exporting {self.modality} encoder using input_features({input_features.shape}), dynamic_shapes={dynamic_shapes}"
+            )
+
             encoder_exported_program = torch.export.export(
                 encoder,
                 args=(),
-                kwargs=encoder_input_kwargs,
+                kwargs={
+                    "input_features": input_features,
+                },
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
