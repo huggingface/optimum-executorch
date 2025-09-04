@@ -208,8 +208,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         Returns:
             Dict[str, ExportedProgram]: Dictionary containing exported programs:
-                - "decoder": Text generation decoder
-                - "token_embeddings": Token embedding layer
+                - "text_decoder": Text generation decoder
+                - "token_embedding": Token embedding layer
                 - "{modality}_encoder": Multimodal encoder (e.g., "audio_encoder")
         """
         with torch.no_grad():
@@ -266,7 +266,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
-            exported_programs["decoder"] = exported_program
+            exported_programs["text_decoder"] = exported_program
 
             # 2. Export token embeddings
             input_ids, dynamic_shapes = self._prepare_text_embedding_export_inputs(max_seq_len)
@@ -274,14 +274,14 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}"
             )
 
-            token_embeddings_exported_program = torch.export.export(
+            token_embedding_exported_program = torch.export.export(
                 getattr(self.model, self.decoder_name).get_input_embeddings(),
                 args=(input_ids,),
                 kwargs={},
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
-            exported_programs["token_embeddings"] = token_embeddings_exported_program
+            exported_programs["token_embedding"] = token_embedding_exported_program
 
             # 3. Export encoder.
             if self.use_custom_sdpa:
@@ -729,8 +729,8 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         )
 
         return {
-            "encoder": self.exported_encoder,
-            "decoder": self.exported_decoder,
+            "encoder": self.exported_encoder,  # Not called "text_encoder" because the encoder could be non-text too, e.g. Whisper.
+            "text_decoder": self.exported_decoder,
         }
 
     def generate(self, prompt_token_ids, max_new_tokens):

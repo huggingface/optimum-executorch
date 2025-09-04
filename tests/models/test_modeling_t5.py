@@ -54,9 +54,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
 
         self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
-        self.assertTrue(hasattr(model, "encoder"))
+        self.assertTrue(hasattr(model, "text_encoder"))
         self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "decoder"))
+        self.assertTrue(hasattr(model, "text_decoder"))
         self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         input_text = "translate English to German: How old are you?"
@@ -91,7 +91,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
         self.assertTrue(hasattr(model, "encoder"))
         self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "decoder"))
+        self.assertTrue(hasattr(model, "text_decoder"))
         self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         article = (

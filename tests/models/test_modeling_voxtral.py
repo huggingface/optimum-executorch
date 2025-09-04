@@ -80,7 +80,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         inputs = processor.apply_chat_template(conversation)
 
         input_ids = inputs["input_ids"]
-        token_embeddings = ep["token_embeddings"].module().forward(input=input_ids)
+        token_embeddings = ep["token_embedding"].module().forward(input=input_ids)
 
         if "input_features" in inputs:
             audio_embeddings = (
@@ -96,7 +96,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Prefill prompt embeddings
         logits = (
-            ep["decoder"]
+            ep["text_decoder"]
             .module()
             .forward(
                 inputs_embeds=token_embeddings,
@@ -113,9 +113,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         max_generation_len = 64
         while pos < input_ids.shape[-1] + max_generation_len:
-            token_embedding = ep["token_embeddings"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
+            token_embedding = ep["token_embedding"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
             logits = (
-                ep["decoder"]
+                ep["text_decoder"]
                 .module()
                 .forward(
                     inputs_embeds=token_embedding,
@@ -191,10 +191,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # 1. Prefill start metadata tokens.
         cache_pos = 0
         start_metadata_tokens = input_ids[:, 0:3]  # Starts with [1, 3, 25].
-        start_metadata_embeddings = ep["token_embeddings"].module().forward(input=start_metadata_tokens)
+        start_metadata_embeddings = ep["token_embedding"].module().forward(input=start_metadata_tokens)
         start_metadata_len = start_metadata_tokens.shape[1]
         logits = (
-            ep["decoder"]
+            ep["text_decoder"]
             .module()
             .forward(
                 inputs_embeds=start_metadata_embeddings,
@@ -214,7 +214,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
         audio_embeddings_len = audio_embeddings.shape[1]
         logits = (
-            ep["decoder"]
+            ep["text_decoder"]
             .module()
             .forward(
                 inputs_embeds=audio_embeddings,
@@ -226,10 +226,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # 3. Prefill text prompt embeddings
         prompt_start_index = start_metadata_len + audio_embeddings_len
         prompt_tokens = input_ids[:, prompt_start_index:]
-        prompt_tokens_embeddings = ep["token_embeddings"].module().forward(input=prompt_tokens)
+        prompt_tokens_embeddings = ep["token_embedding"].module().forward(input=prompt_tokens)
         prompt_tokens_len = prompt_tokens.shape[1]
         logits = (
-            ep["decoder"]
+            ep["text_decoder"]
             .module()
             .forward(
                 inputs_embeds=prompt_tokens_embeddings,
@@ -248,9 +248,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         max_generation_len = 64
         while pos < input_ids.shape[-1] + max_generation_len:
-            token_embedding = ep["token_embeddings"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
+            token_embedding = ep["token_embedding"].module().forward(input=token.unsqueeze(0).unsqueeze(0))
             logits = (
-                ep["decoder"]
+                ep["text_decoder"]
                 .module()
                 .forward(
                     inputs_embeds=token_embedding,
