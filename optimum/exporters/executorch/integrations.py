@@ -395,7 +395,7 @@ class CausalLMExportableModule(torch.nn.Module):
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(
             self.model,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=self.metadata.get("get_max_seq_len"),
         )
         self._register_custom_attention(exportable_module)
