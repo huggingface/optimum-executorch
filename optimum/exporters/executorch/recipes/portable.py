@@ -28,13 +28,14 @@ from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
     Seq2SeqLMExportableModule,
+    VisionEncoderExportableModule,
 )
 from ..recipe_registry import register_recipe
 
 
 @register_recipe("portable")
 def export_to_executorch_with_portable(
-    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule],
+    model: Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, VisionEncoderExportableModule],
     **kwargs,
 ):
     """
@@ -43,7 +44,7 @@ def export_to_executorch_with_portable(
     This function also write metadata required by the ExecuTorch runtime to the model.
 
     Args:
-        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule]):
+        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, VisionEncoderExportableModule]):
             The PyTorch model to be exported to ExecuTorch.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.

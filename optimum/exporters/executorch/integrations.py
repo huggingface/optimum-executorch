@@ -447,8 +447,6 @@ class VisionEncoderExportableModule(torch.nn.Module):
         self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
     def forward(self, pixel_values):
-        print(f"DEBUG: pixel_values: {pixel_values.shape}")
-        print(f"DEBUG: forward: {self.model.method_meta('forward')}")
         return self.model(pixel_values=pixel_values)
 
     def export(self, pixel_values=None) -> Dict[str, ExportedProgram]:

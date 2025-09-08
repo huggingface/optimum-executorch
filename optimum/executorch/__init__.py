@@ -20,6 +20,7 @@ from transformers.utils import _LazyModule
 _import_structure = {
     "modeling": [
         "ExecuTorchModelForCausalLM",
+        "ExecuTorchModelForDepthEstimation",
         "ExecuTorchModelForImageClassification",
         "ExecuTorchModelForMaskedLM",
         "ExecuTorchModelForSeq2SeqLM",
@@ -31,6 +32,7 @@ _import_structure = {
 if TYPE_CHECKING:
     from .modeling import (
         ExecuTorchModelForCausalLM,
+        ExecuTorchModelForDepthEstimation,
         ExecuTorchModelForImageClassification,
         ExecuTorchModelForMaskedLM,
         ExecuTorchModelForMultiModalToText,

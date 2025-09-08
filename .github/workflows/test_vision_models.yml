@@ -1,0 +1,130 @@
+name: Vision Models Test Suite
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'optimum/exporters/executorch/tasks/depth_estimation.py'
+      - 'optimum/exporters/executorch/tasks/image_classification.py'
+      - 'optimum/exporters/executorch/integrations.py'
+      - 'optimum/executorch/modeling.py'
+      - 'tests/models/test_modeling_depth_*.py'
+      - 'tests/models/test_modeling_cvt.py'
+      - 'tests/models/test_modeling_deit.py'
+      - 'tests/models/test_modeling_dit.py'
+      - 'tests/models/test_modeling_efficientnet.py'
+      - 'tests/models/test_modeling_focalnet.py'
+      - 'tests/models/test_modeling_mobilevit*.py'
+      - 'tests/models/test_modeling_pvt.py'
+      - 'tests/models/test_modeling_swin.py'
+      - '.github/workflows/test_vision_models.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'optimum/exporters/executorch/tasks/depth_estimation.py'
+      - 'optimum/exporters/executorch/tasks/image_classification.py'
+      - 'optimum/exporters/executorch/integrations.py'
+      - 'optimum/executorch/modeling.py'
+      - 'tests/models/test_modeling_depth_*.py'
+      - 'tests/models/test_modeling_cvt.py'
+      - 'tests/models/test_modeling_deit.py'
+      - 'tests/models/test_modeling_dit.py'
+      - 'tests/models/test_modeling_efficientnet.py'
+      - 'tests/models/test_modeling_focalnet.py'
+      - 'tests/models/test_modeling_mobilevit*.py'
+      - 'tests/models/test_modeling_pvt.py'
+      - 'tests/models/test_modeling_swin.py'
+      - '.github/workflows/test_vision_models.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test-depth-estimation:
+    name: Depth Estimation Models
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        recipe: ['xnnpack', 'portable']
+        python-version: ['3.11']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          pip install '.[tests]'
+          pip install executorch==0.7.0
+          pip install git+https://github.com/pytorch-labs/tokenizers
+          pip list
+      
+      - name: Run Depth-Anything tests with ${{ matrix.recipe }}
+        run: |
+          # Run only the tests that match the recipe
+          if [ "${{ matrix.recipe }}" == "portable" ]; then
+            pytest tests/models/test_modeling_depth_anything.py::ExecuTorchModelIntegrationTest::test_depth_anything_portable_export -s -vvvv
+          else
+            pytest tests/models/test_modeling_depth_anything.py::ExecuTorchModelIntegrationTest::test_depth_anything_export_to_executorch -s -vvvv
+          fi
+        env:
+          RUN_SLOW: 1
+  
+  test-image-classification:
+    name: Image Classification Models
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        model: ['cvt', 'deit', 'dit', 'efficientnet', 'focalnet', 'mobilevit', 'pvt', 'swin']
+        python-version: ['3.11']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          pip install '.[tests]'
+          pip install executorch==0.7.0
+          pip install git+https://github.com/pytorch-labs/tokenizers
+          pip list
+      
+      - name: Run ${{ matrix.model }} tests
+        run: |
+          pytest tests/models/test_modeling_${{ matrix.model }}.py -s -vvvv --durations=0
+        env:
+          RUN_SLOW: 1
+  
+  test-quantization:
+    name: Vision Models with Quantization
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install '.[tests]'
+          pip install executorch==0.7.0
+          pip install git+https://github.com/pytorch-labs/tokenizers
+          pip list
+      
+      - name: Run quantization tests for Depth-Anything
+        run: |
+          pytest tests/models/test_modeling_depth_anything.py::ExecuTorchModelIntegrationTest::test_depth_anything_with_quantization -s -vvvv
+        env:
+          RUN_SLOW: 1

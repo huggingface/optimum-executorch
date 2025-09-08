@@ -29,6 +29,7 @@ from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noq
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
+    AutoModelForDepthEstimation,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
@@ -1139,6 +1140,49 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         self.stats.on_inference_end()
         self.stats.print_report()
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+
+class ExecuTorchModelForDepthEstimation(ExecuTorchModelBase):
+    """
+    ExecuTorch model with a depth estimation head for inference using the ExecuTorch Runtime.
+
+    This class provides an interface for loading, running, and generating depth maps from a vision transformer model
+    optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models
+    compatible with ExecuTorch runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForDepthEstimation`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+    """
+
+    auto_model_class = AutoModelForDepthEstimation
+
+    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+        super().__init__(models, config)
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+        metadata = self.model.method_names()
+        logging.debug(f"Load all static methods: {metadata}")
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the model.
+
+        Args:
+            pixel_values (`torch.Tensor`): Tensor representing an image input to the model.
+
+        Returns:
+            torch.Tensor: Depth map predictions from the model.
+        """
+        return self.model.forward((pixel_values,))[0]
+
+    def generate(self):
+        raise NotImplementedError
 
 
 class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):

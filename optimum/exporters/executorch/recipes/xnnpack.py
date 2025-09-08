@@ -34,6 +34,7 @@ from ..integrations import (
     MaskedLMExportableModule,
     MultiModalTextToTextExportableModule,
     Seq2SeqLMExportableModule,
+    VisionEncoderExportableModule,
 )
 from ..recipe_registry import register_recipe
 
@@ -45,6 +46,7 @@ def export_to_executorch_with_xnnpack(
         MaskedLMExportableModule,
         Seq2SeqLMExportableModule,
         MultiModalTextToTextExportableModule,
+        VisionEncoderExportableModule,
     ],
     **kwargs,
 ):
@@ -54,7 +56,7 @@ def export_to_executorch_with_xnnpack(
     This function also write metadata required by the ExecuTorch runtime to the model.
 
     Args:
-        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule]):
+        model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule, VisionEncoderExportableModule]):
             The PyTorch model to be exported to ExecuTorch.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.
@@ -62,7 +64,7 @@ def export_to_executorch_with_xnnpack(
     Returns:
         Dict[str, ExecutorchProgram]:
             A map of exported and optimized program for ExecuTorch.
-            For encoder-decoder models or multimodal models, it may generate multiple programs.
+            For encoder-decoder models, multimodal models, or vision models, it may generate multiple programs.
     """
 
     def _lower_to_executorch(
@@ -106,16 +108,18 @@ def export_to_executorch_with_xnnpack(
 
     exported_progs = model.export()
 
-    if (
-        model.config._attn_implementation == "custom_sdpa"
-        or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
-    ):
-        # Sanity check to make sure the exported program contains the custom sdpa operator.
-        if not any(
-            node.op == "call_function" and "custom_sdpa" in str(node.target)
-            for exported_program in exported_progs.values()
-            for node in exported_program.graph_module.graph.nodes
+    # Check for custom SDPA only for language models that have attention implementation
+    if hasattr(model, 'config') and hasattr(model.config, '_attn_implementation'):
+        if (
+            model.config._attn_implementation == "custom_sdpa"
+            or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
         ):
-            raise ValueError("'custom_sdpa' not found in the graph.")
+            # Sanity check to make sure the exported program contains the custom sdpa operator.
+            if not any(
+                node.op == "call_function" and "custom_sdpa" in str(node.target)
+                for exported_program in exported_progs.values()
+                for node in exported_program.graph_module.graph.nodes
+            ):
+                raise ValueError("'custom_sdpa' not found in the graph.")
 
     return _lower_to_executorch(exported_progs, model.metadata)
