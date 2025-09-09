@@ -79,12 +79,31 @@ def parse_args_executorch(parser):
         choices=["8da4w", "4w", "8w"],
         required=False,
         help=(
+            "Quantization config for decoder linear layers.\n\n"
+            "Options:\n"
+            "  8da4w - 8-bit dynamic activation, 4-bit weight with group_size = 32\n"
+            "  4w    - 4-bit weight only, per group with group_size = 32\n"
+            "  8w    - 8-bit weight only, per channel"
+        ),
+    )
+    required_group.add_argument(
+        "--qlinear_group_size", type=int, required=False, help="Group size for decoder linear quantization."
+    )
+    required_group.add_argument(
+        "--qlinear_encoder",
+        type=str,
+        choices=["8da4w", "4w", "8w"],
+        required=False,
+        help=(
             "Quantization config for linear layers.\n\n"
             "Options:\n"
             "  8da4w - 8-bit dynamic activation, 4-bit weight with group_size = 32\n"
             "  4w    - 4-bit weight only, per group with group_size = 32\n"
             "  8w    - 8-bit weight only, per channel"
         ),
+    )
+    required_group.add_argument(
+        "--qlinear_encoder_group_size", type=int, required=False, help="Group size for encoder linear quantization."
     )
     required_group.add_argument(
         "--qembedding",
@@ -97,6 +116,9 @@ def parse_args_executorch(parser):
             "  4w    - 4-bit weight only, per group with group_size = 32\n"
             "  8w    - 8-bit weight only, per channel"
         ),
+    )
+    required_group.add_argument(
+        "--qembedding_group_size", type=int, required=False, help="Group size for embedding quantization."
     )
 
 

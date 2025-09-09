@@ -176,6 +176,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         ),
     )
     decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
+    encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
+
     # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
     # config, it always comes from the generation_config.json file, not the `generation_config` override
     # from from_pretrained().
@@ -188,11 +190,47 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
             param.requires_grad = False
 
     qlinear_config = kwargs.get("qlinear", None)
+    qlinear_group_size = kwargs.get("qlinear_group_size", None)
+    qlinear_encoder_config = kwargs.get("qlinear_encoder", None)
+    qlinear_encoder_group_size = kwargs.get("qlinear_encoder_group_size", None)
     qembedding_config = kwargs.get("qembedding", None)
-    # Quantize all weights with the same qlinear_config (decoder, encoder, multimodal projector/connector).
-    quantize_model_(eager_model, qlinear_config=qlinear_config)
-    # Quantize decoder embeddings using dynamically detected decoder name.
-    quantize_model_(getattr(eager_model, decoder_name), qembedding_config=qembedding_config)
+    qembedding_group_size = kwargs.get("qembedding_group_size", None)
+
+    # Quantize decoder linear weights.
+    quantize_decoder_kwargs = {
+        "eager_model": getattr(eager_model, decoder_name),
+        "qlinear_config": qlinear_config,
+    }
+    if qlinear_group_size is not None:
+        quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
+    quantize_model_(**quantize_decoder_kwargs)
+
+    # Quantize encoder linear weights.
+    # If encoder quantization is not specified, borrow settings from decoder quantization.
+    if qlinear_encoder_config is None:
+        qlinear_encoder_config = qlinear_config
+        qlinear_encoder_group_size = qlinear_group_size
+
+    quantize_encoder_kwargs = {
+        "eager_model": getattr(eager_model, encoder_name),
+        "qlinear_config": qlinear_encoder_config,
+    }
+    if qlinear_encoder_group_size is not None:
+        quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
+        quantize_model_(**quantize_encoder_kwargs)
+
+    # TODO: quantize other parts of the model, e.g. MultimodalProjector?
+
+    # Quantize decoder embeddings.
+    quantize_decoder_embedding_kwargs = {
+        "eager_model": getattr(eager_model, decoder_name),
+        "qembedding_config": qembedding_config,
+    }
+    if qembedding_group_size is not None:
+        quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
+    quantize_model_(**quantize_decoder_embedding_kwargs)
+
+    # TODO: quantize encoder embeddings.
 
     return MultiModalTextToTextExportableModule(
         model=eager_model,
