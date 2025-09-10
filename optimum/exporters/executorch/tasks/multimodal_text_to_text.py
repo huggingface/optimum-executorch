@@ -171,15 +171,6 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         torch_dtype=dtype,
         config=config,
         attn_implementation=attn_implementation,
-        # generation_config=GenerationConfig(
-        #     use_cache=True,
-        #     cache_implementation=cache_implementation,
-        #     max_length=max_length,
-        #     cache_config={
-        #         "batch_size": batch_size,
-        #         "max_cache_len": max_length,
-        #     },
-        # ),
     )
     eager_model.generation_config = GenerationConfig(
         use_cache=True,

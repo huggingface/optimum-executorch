@@ -73,9 +73,9 @@ def save_config_to_constant_methods(
 
 def apply_chat_template_with_fallback(processor, conversation, **kwargs):
     """
-    Apply chat template with fallback for duck-typed processors.
+    Apply chat template with fallback for external processors.
 
-    For duck-typed processors that aren't defined in Transformers, e.g.
+    For duck-typed external processors that aren't defined in Transformers, e.g.
     Voxtral's processor which is defined in mistral-common.
     These processors aren't guaranteed to have some of the other kwargs such as
     "add_generation_prompt".
@@ -91,7 +91,7 @@ def apply_chat_template_with_fallback(processor, conversation, **kwargs):
     try:
         return processor.apply_chat_template(conversation, **kwargs)
     except ValueError:
-        # Fallback for duck-typed processors - just pass the conversation
+        # Fallback for external processors - just pass the conversation
         return processor.apply_chat_template(conversation)
 
 

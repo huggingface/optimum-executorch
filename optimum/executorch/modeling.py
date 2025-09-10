@@ -1168,7 +1168,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
     """
 
     # Using `AutoModel` since there is no auto model class that captures both audio and image.
-    # This is not too important anyway since it's just used for automatically inferring the
+    # This is not too important since it's just used for automatically inferring the
     # task type. For MultiModal, we should always be specifying the task type anyways.
     auto_model_class = AutoModel
 
