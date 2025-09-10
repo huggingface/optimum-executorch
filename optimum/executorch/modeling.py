@@ -45,7 +45,7 @@ from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
-from ..exporters.executorch.utils import verify_eos_tokens_in_pretrained_tokenizer
+from ..exporters.executorch.utils import apply_chat_template_with_fallback, verify_eos_tokens_in_pretrained_tokenizer
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import find_files_matching_pattern
 from .stats import Stats
@@ -1329,20 +1329,14 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.reset()
         self.stats.on_inference_start()
 
-        try:
-            inputs = processor.apply_chat_template(
-                input_conversation,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-            )
-        except ValueError:
-            # For duck-typed processors that aren't defined in Transformers, e.g.
-            # Voxtral's processor whic is defined in mistral-common.
-            # These processors aren't guranteed to have some of the other kwargs such as
-            # "add_generation_prompt".
-            inputs = processor.apply_chat_template(input_conversation)
+        inputs = apply_chat_template_with_fallback(
+            processor,
+            input_conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
 
         self.stats.on_token_encode_end()
         self.stats.set_num_prompt_tokens(len(inputs["input_ids"][0]))

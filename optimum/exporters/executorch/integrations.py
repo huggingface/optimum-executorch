@@ -33,7 +33,7 @@ from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 
-from .utils import save_config_to_constant_methods
+from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
 
 
 class VisionExportableModule(torch.nn.Module):
@@ -99,20 +99,14 @@ class AudioExportableModule(torch.nn.Module):
                 ],
             }
         ]
-        try:
-            processed_inputs = processor.apply_chat_template(
-                sample_conversation_with_audio,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-            )
-        except ValueError:
-            # For duck-typed processors that aren't defined in Transformers, e.g.
-            # Voxtral's processor whic is defined in mistral-common.
-            # These processors aren't guranteed to have some of the other kwargs such as
-            # "add_generation_prompt".
-            processed_inputs = processor.apply_chat_template(sample_conversation_with_audio)
+        processed_inputs = apply_chat_template_with_fallback(
+            processor,
+            sample_conversation_with_audio,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
         if "input_features" not in processed_inputs:
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"

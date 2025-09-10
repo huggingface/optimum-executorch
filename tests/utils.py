@@ -20,6 +20,8 @@ from typing import Any, List
 import torch
 from transformers import AutoModelForCausalLM, AutoModelForPreTraining, AutoProcessor
 
+from optimum.exporters.executorch.utils import apply_chat_template_with_fallback
+
 
 def check_causal_lm_output_quality(
     model_id: str, generated_tokens: torch.Tensor, max_perplexity_threshold: float = 100.0
@@ -94,20 +96,14 @@ def check_multimodal_output_quality(
     )
 
     # Process the conversation to get inputs
-    try:
-        inputs = processor.apply_chat_template(
-            conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-    except ValueError:
-        # For duck-typed processors that aren't defined in Transformers, e.g.
-        # Voxtral's processor whic is defined in mistral-common.
-        # These processors aren't guranteed to have some of the other kwargs such as
-        # "add_generation_prompt".
-        inputs = processor.apply_chat_template(conversation)
+    inputs = apply_chat_template_with_fallback(
+        processor,
+        conversation,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    )
     inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
     generated_tokens = generated_tokens.to(model.device)
 
