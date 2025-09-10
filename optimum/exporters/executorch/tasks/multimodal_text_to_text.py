@@ -212,7 +212,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     }
     if qlinear_encoder_group_size is not None:
         quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
-        quantize_model_(**quantize_encoder_kwargs)
+    quantize_model_(**quantize_encoder_kwargs)
 
     # TODO: quantize other parts of the model, e.g. MultimodalProjector?
 
