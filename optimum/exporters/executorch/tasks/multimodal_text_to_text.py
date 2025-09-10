@@ -206,11 +206,6 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     quantize_model_(**quantize_decoder_kwargs)
 
     # Quantize encoder linear weights.
-    # If encoder quantization is not specified, borrow settings from decoder quantization.
-    if qlinear_encoder_config is None:
-        qlinear_encoder_config = qlinear_config
-        qlinear_encoder_group_size = qlinear_group_size
-
     quantize_encoder_kwargs = {
         "eager_model": getattr(eager_model, encoder_name),
         "qlinear_config": qlinear_encoder_config,
