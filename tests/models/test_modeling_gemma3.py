@@ -23,12 +23,12 @@ import unittest
 
 import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers import AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer, Gemma3ForConditionalGeneration
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultiModalToText
 
-from ..utils import check_causal_lm_output_quality
+from ..utils import check_causal_lm_output_quality, check_multimodal_output_quality
 
 
 is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
@@ -278,3 +278,129 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    def test_gemma3_decoder(self):
+        model_id = "google/gemma-3-4b-it"
+        processor = AutoProcessor.from_pretrained(model_id)
+        conversation = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "What are the things I should be cautious about when I visit here?",
+                    },
+                ],
+            },
+        ]
+        inputs = processor.apply_chat_template(
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
+        import torch
+        from transformers import GenerationConfig
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        model = Gemma3ForConditionalGeneration.from_pretrained(model_id)
+        model.generation_config = GenerationConfig(
+            use_cache=True,
+            cache_implementation="static",
+            max_length=2048,
+            cache_config={
+                "batch_size": 1,
+                "max_cache_len": 2048,
+            },
+        )
+        model.language_model.generation_config = model.generation_config
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        seq_length = 3
+        example_inputs_embeds = torch.zeros((1, seq_length, model.config.text_config.hidden_size), dtype=torch.float)
+        example_cache_position = torch.arange(seq_length, dtype=torch.long)
+
+        max_seq_len = 2048
+        sliding_window = model.config.text_config.sliding_window
+        max_dim = min(max_seq_len, sliding_window) - 1
+
+        seq_len_dim = torch.export.Dim("seq_length_dim", max=max_dim)
+        dynamic_shapes = {
+            "inputs_embeds": {1: seq_len_dim},
+            "cache_position": {0: seq_len_dim},
+        }
+        exported_program = exportable_module.export(
+            inputs_embeds=example_inputs_embeds,
+            cache_position=example_cache_position,
+            dynamic_shapes=dynamic_shapes,
+            strict=True,
+        )
+        inputs_embeds = model.get_input_embeddings()(inputs["input_ids"])
+        cache_position = torch.arange(inputs["input_ids"].shape[1], dtype=torch.long)
+        breakpoint()
+        eager_outputs = model(inputs_embeds=inputs_embeds, cache_position=cache_position)
+        outputs = exported_program.module()(inputs_embeds=inputs_embeds, cache_position=cache_position)
+        breakpoint()
+        print(outputs)
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    def test_gemma3_image_vision_with_custom_sdpa_kv_cache_8da4w_8we(self):
+        model_id = "google/gemma-3-4b-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        processor = AutoProcessor.from_pretrained(model_id)
+        image_url = "https://llava-vl.github.io/static/images/view.jpg"
+        conversation = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image_url},
+                    {
+                        "type": "text",
+                        "text": "What are the things I should be cautious about when I visit here?",
+                    },
+                ],
+            },
+        ]
+
+        model = ExecuTorchModelForMultiModalToText.from_pretrained(
+            # model_id,
+            "/home/jackzhxng/models/gemma3/gemma3_1",
+            recipe="xnnpack",
+            task="multimodal-text-to-text",
+            use_custom_sdpa=True,
+            use_custom_kv_cache=True,
+            qlinear="8da4w",
+            qlinear_group_size=32,
+            qlinear_encoder="8da4w",
+            qlienar_encoder_group_size=16,
+            qembedding_config="8w",
+        )
+
+        # Generate
+        generated_text = model.text_generation(
+            processor=processor,
+            tokenizer=tokenizer,
+            input_conversation=conversation,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        del model
+        del tokenizer
+        gc.collect()
+
+        # Should be something like: 'Okay, let's analyze this image and discuss potential
+        # cautions for visiting this location. Based on the picture, we're looking at a
+        # serene lake scene with mountains in the background, a wooden pier extending into
+        # the water, and a generally calm atmosphere.'
+        self.assertTrue("lake" in generated_text)
+        self.assertTrue(check_multimodal_output_quality(model_id, generated_tokens, conversation))
