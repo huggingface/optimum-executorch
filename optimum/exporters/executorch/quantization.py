@@ -36,11 +36,17 @@ def quantize_model_(
     )
     from torchao.utils import unwrap_tensor_subclass
 
-    if qembedding_group_size == 0:
-        embedding_weight_granularity = PerAxis(0)
-    else:
-        embedding_weight_granularity = PerGroup(qembedding_group_size)
     if qembedding_config:
+        if qlinear_config == "8w":
+            assert (
+                qembedding_group_size == 0
+            ), "8-bit embedding quantization only supports per-channel at the moment, please use qembedding_group_size = 0."
+        if qembedding_group_size == 0:
+            embedding_weight_granularity = PerAxis(0)
+        else:
+            assert qembedding_group_size % 2 == 0, "Embedding quantization group size must be a multiple of 2."
+            embedding_weight_granularity = PerGroup(qembedding_group_size)
+
         logging.info("Quantizing embedding layers.")
         embedding_config = {
             "4w": IntxWeightOnlyConfig(
@@ -60,11 +66,13 @@ def quantize_model_(
             lambda m, fqn: isinstance(m, torch.nn.Embedding),
         )
 
-    if qlinear_group_size == 0:
-        linear_weight_granularity = PerAxis(0)
-    else:
-        linear_weight_granularity = PerGroup(qlinear_group_size)
     if qlinear_config:
+        if qlinear_group_size == 0:
+            linear_weight_granularity = PerAxis(0)
+        else:
+            assert qlinear_group_size % 2 == 0, "Linear quantization group size must be a multiple of 2."
+            linear_weight_granularity = PerGroup(qlinear_group_size)
+
         logging.info("Quantizing linear layers.")
         linear_config = {
             "8da4w": Int8DynamicActivationIntxWeightConfig(
