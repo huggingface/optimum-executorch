@@ -290,6 +290,9 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             logging.info(
                 f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}"
             )
+            # Move inputs to the same device as the model
+            inputs_embeds = inputs_embeds.to(self.model.device)
+            cache_position = cache_position.to(self.model.device)
             exported_program = exportable_module.export(
                 inputs_embeds=inputs_embeds,
                 cache_position=cache_position,
@@ -319,7 +322,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             logging.info(
                 f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}"
             )
-
+            # Move inputs to the same device as the model
+            input_ids = input_ids.to(self.model.device)
             token_embedding_exported_program = torch.export.export(
                 self.model.get_input_embeddings(),
                 args=(input_ids,),
@@ -347,6 +351,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 f"Exporting {self.modality} encoder using input_features({input_features.shape}), dynamic_shapes={dynamic_shapes}"
             )
 
+            # Move inputs to the same device as the model
+            input_features = input_features.to(self.model.device)
             encoder_exported_program = torch.export.export(
                 encoder,
                 args=(),
