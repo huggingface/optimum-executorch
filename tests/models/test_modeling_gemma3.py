@@ -309,8 +309,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_kv_cache=True,
             qlinear="8da4w",
             qlinear_group_size=32,
-            qlinear_encoder="8da4w",
-            qlienar_encoder_group_size=16,
+            # Can't quantize the encoder a the moment, hidden dim of 4304 doesn't fit ExecuTorch's
+            # XNNPack 32-group size quantized kernels. See https://github.com/pytorch/executorch/issues/14221.
             qembedding_config="8w",
         )
 
