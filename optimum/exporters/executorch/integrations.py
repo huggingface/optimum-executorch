@@ -267,7 +267,6 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
             # 1. Export text decoder.
             exportable_module = TorchExportableModuleForDecoderOnlyLM(
-                # getattr(self.model, self.decoder_name),
                 self.model,
             )
             exported_programs = {}
@@ -322,7 +321,6 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             )
 
             token_embedding_exported_program = torch.export.export(
-                # getattr(self.model, self.decoder_name).get_input_embeddings(),
                 self.model.get_input_embeddings(),
                 args=(input_ids,),
                 kwargs={},

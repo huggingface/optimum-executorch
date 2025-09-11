@@ -302,8 +302,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         ]
 
         model = ExecuTorchModelForMultiModalToText.from_pretrained(
-            # model_id,
-            "/home/jackzhxng/models/gemma3/gemma3_1",
+            model_id,
             recipe="xnnpack",
             task="multimodal-text-to-text",
             use_custom_sdpa=True,
