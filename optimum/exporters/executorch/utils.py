@@ -71,6 +71,30 @@ def save_config_to_constant_methods(
     return {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
 
 
+def apply_chat_template_with_fallback(processor, conversation, **kwargs):
+    """
+    Apply chat template with fallback for external processors.
+
+    For duck-typed external processors that aren't defined in Transformers, e.g.
+    Voxtral's processor which is defined in mistral-common.
+    These processors aren't guaranteed to have some of the other kwargs such as
+    "add_generation_prompt".
+
+    Args:
+        processor: The processor instance
+        conversation: The conversation to process
+        **kwargs: Additional keyword arguments to pass to apply_chat_template
+
+    Returns:
+        The processed inputs from apply_chat_template
+    """
+    try:
+        return processor.apply_chat_template(conversation, **kwargs)
+    except ValueError:
+        # Fallback for external processors - just pass the conversation
+        return processor.apply_chat_template(conversation)
+
+
 def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenizer: PreTrainedTokenizer) -> bool:
     """
     Verifies that the model's EOS token IDs are present in the tokenizer's

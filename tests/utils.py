@@ -18,7 +18,9 @@ import math
 from typing import Any, List
 
 import torch
-from transformers import AutoModel, AutoModelForCausalLM, AutoProcessor
+from transformers import AutoModelForCausalLM, AutoModelForPreTraining, AutoProcessor
+
+from optimum.exporters.executorch.utils import apply_chat_template_with_fallback
 
 
 def check_causal_lm_output_quality(
@@ -86,14 +88,22 @@ def check_multimodal_output_quality(
 
     # Load model and processor
     processor = AutoProcessor.from_pretrained(model_id)
-    model = AutoModel.from_pretrained(
+    # See note around https://github.com/huggingface/optimum-executorch/blob/main/optimum/exporters/executorch/tasks/multimodal_text_to_text.py#L162 about why AutoModelForPreTraining is used.
+    model = AutoModelForPreTraining.from_pretrained(
         model_id,
         low_cpu_mem_usage=True,
         torch_dtype=torch.bfloat16,
     )
 
     # Process the conversation to get inputs
-    inputs = processor.apply_chat_template(conversation)
+    inputs = apply_chat_template_with_fallback(
+        processor,
+        conversation,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    )
     inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
     generated_tokens = generated_tokens.to(model.device)
 
@@ -109,6 +119,8 @@ def check_multimodal_output_quality(
             forward_inputs = {}
             if "input_features" in inputs:
                 forward_inputs["input_features"] = inputs["input_features"]
+            if "pixel_values" in inputs:
+                forward_inputs["pixel_values"] = inputs["pixel_values"]
             forward_inputs["input_ids"] = full_sequence
             forward_inputs["labels"] = labels
             outputs = model(**forward_inputs)

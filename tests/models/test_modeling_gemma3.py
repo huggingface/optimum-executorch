@@ -23,12 +23,12 @@ import unittest
 
 import pytest
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers import AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultiModalToText
 
-from ..utils import check_causal_lm_output_quality
+from ..utils import check_causal_lm_output_quality, check_multimodal_output_quality
 
 
 is_linux_ci = sys.platform.startswith("linux") and os.environ.get("GITHUB_ACTIONS") == "true"
@@ -278,3 +278,62 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         gc.collect()
 
         self.assertTrue(check_causal_lm_output_quality(model_id, generated_tokens))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    def test_gemma3_image_vision_with_custom_sdpa_kv_cache_8da4w_8we(self):
+        model_id = "google/gemma-3-4b-it"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        processor = AutoProcessor.from_pretrained(model_id)
+        image_url = "https://llava-vl.github.io/static/images/view.jpg"
+        conversation = [
+            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": image_url},
+                    {
+                        "type": "text",
+                        "text": "What are the things I should be cautious about when I visit here?",
+                    },
+                ],
+            },
+        ]
+
+        model = ExecuTorchModelForMultiModalToText.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            task="multimodal-text-to-text",
+            use_custom_sdpa=True,
+            use_custom_kv_cache=True,
+            qlinear="8da4w",
+            qlinear_group_size=32,
+            # Can't quantize the encoder a the moment, hidden dim of 4304 doesn't fit ExecuTorch's
+            # XNNPack 32-group size quantized kernels. See https://github.com/pytorch/executorch/issues/14221.
+            qembedding_config="8w",
+        )
+
+        # Generate
+        generated_text = model.text_generation(
+            processor=processor,
+            tokenizer=tokenizer,
+            input_conversation=conversation,
+            max_seq_len=64,
+        )
+        logging.info(f"\nGenerated text:\n\t{generated_text}")
+        generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
+
+        del model
+        del tokenizer
+        gc.collect()
+
+        # Should be something like: 'Okay, let's analyze this image and discuss potential
+        # cautions for visiting this location. Based on the picture, we're looking at a
+        # serene lake scene with mountains in the background, a wooden pier extending into
+        # the water, and a generally calm atmosphere.'
+        self.assertTrue("serene" in generated_text)
+        self.assertTrue("lake" in generated_text)
+        self.assertTrue(
+            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
+        )
