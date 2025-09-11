@@ -333,5 +333,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # cautions for visiting this location. Based on the picture, we're looking at a
         # serene lake scene with mountains in the background, a wooden pier extending into
         # the water, and a generally calm atmosphere.'
+        self.assertTrue("serene" in generated_text)
         self.assertTrue("lake" in generated_text)
-        self.assertTrue(check_multimodal_output_quality(model_id, generated_tokens, conversation))
+        self.assertTrue(
+            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
+        )
