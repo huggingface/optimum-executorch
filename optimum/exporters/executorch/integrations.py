@@ -308,7 +308,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_program = torch.export.export(
                 mutated_gm,
                 args=(),
-                kwargs={"cache_position": cache_position, "inputs_embeds": inputs_embeds},
+                # For the ET runner, it's important to have cache position as the 2nd arg.
+                kwargs={"inputs_embeds": inputs_embeds, "cache_position": cache_position},
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )

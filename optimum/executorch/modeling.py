@@ -1222,8 +1222,8 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         output = self.model.run_method(
             "text_decoder",
             (
-                cache_position,
                 token_embeddings,
+                cache_position,
             ),
         )[0]
         return output
