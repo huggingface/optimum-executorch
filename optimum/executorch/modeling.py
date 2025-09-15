@@ -45,7 +45,7 @@ from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
-from ..exporters.executorch.utils import verify_eos_tokens_in_pretrained_tokenizer
+from ..exporters.executorch.utils import apply_chat_template_with_fallback, verify_eos_tokens_in_pretrained_tokenizer
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import find_files_matching_pattern
 from .stats import Stats
@@ -1167,8 +1167,9 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             Size of the model vocabulary.
     """
 
-    # Using general `AutoModel` since it usually routes to the correct model variant and there is no
-    # auto model class that captures both audio and image.
+    # Using `AutoModel` since there is no auto model class that captures both audio and image.
+    # This is not too important since it's just used for automatically inferring the
+    # task type. For MultiModal, we should always be specifying the task type anyways.
     auto_model_class = AutoModel
 
     def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
@@ -1180,6 +1181,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
                     f"Exported .pte file needs to contain the following required methods: {required_methods}"
                 )
 
+        # Multimodal-related metadata.
         self.encoder_name = None
         for method_name in self.model.method_names():
             if method_name == "audio_encoder":
@@ -1192,46 +1194,36 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             raise ValueError(
                 'Exported .pte file needs to contain either an an "audio_encoder" or a "vision_encoder" in its methods.'
             )
+        self.modality = self.model.run_method("modality")[0]
 
+        # Decoder-related metadata.
         metadata = self.model.method_names()
-        if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
             self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
-        if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
-        if "get_dtype" in metadata:
-            self.dtype = self.model.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
             self.bos_token_id = self.model.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
             self.eos_token_id = self.model.run_method("get_eos_id")[0]
-        if "get_vocab_size" in metadata:
-            self.vocab_size = self.model.run_method("get_vocab_size")[0]
-        if "max_hidden_seq_length" in metadata:
-            self.max_hidden_seq_length = self.model.run_method("max_hidden_seq_length")[0]
-        if "decoder_start_token_id" in metadata:
-            self.decoder_start_token_id = self.model.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
         input_ids: torch.Tensor,
         cache_position: torch.Tensor,
-        input_features: Optional[torch.Tensor] = None,
+        multimodal_features: Optional[torch.Tensor] = None,
     ):
         token_embeddings = self.model.run_method("token_embedding", (input_ids,))[0]
-        if input_features is not None:
+        if multimodal_features is not None:
             encoder_embeddings = self.model.run_method(
                 self.encoder_name,
-                (input_features,),
+                (multimodal_features,),
             )[0]
             encoder_token_mask = input_ids == self.encoder_token_id
             token_embeddings[encoder_token_mask] = encoder_embeddings
         output = self.model.run_method(
             "text_decoder",
             (
-                cache_position,
                 token_embeddings,
+                cache_position,
             ),
         )[0]
         return output
@@ -1242,7 +1234,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         echo: bool = False,
         pos_base: int = 0,
         max_seq_len: Optional[int] = None,
-        input_features: Optional[torch.Tensor] = None,
+        multimodal_features: Optional[torch.Tensor] = None,
     ) -> List[int]:
         self.device = torch.device("cpu")
         if max_seq_len is None:
@@ -1259,7 +1251,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         logits = self.forward(
             input_ids=prompt_tokens,
             cache_position=torch.arange(prompt_tokens.size(1), dtype=torch.long, device=self.device),
-            input_features=input_features,
+            multimodal_features=multimodal_features,
         )
         self.stats.on_sampling_end()
         self.stats.on_prompt_eval_end()
@@ -1279,7 +1271,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
                     dtype=torch.long,
                     device=self.device,
                 ),
-                input_features=None,
+                multimodal_features=None,
             )
             self.stats.on_sampling_end()
             if not first_token_generated:
@@ -1337,13 +1329,26 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.reset()
         self.stats.on_inference_start()
 
-        inputs = processor.apply_chat_template(input_conversation)
+        inputs = apply_chat_template_with_fallback(
+            processor,
+            input_conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
         self.stats.on_token_encode_end()
         self.stats.set_num_prompt_tokens(len(inputs["input_ids"][0]))
 
+        multimodal_features = None
+        if self.modality == "vision":
+            multimodal_features = inputs.get("pixel_values", None)
+        elif self.modality == "audio":
+            multimodal_features = inputs.get("input_features", None)
         generated_tokens = self.generate(
             prompt_tokens=inputs["input_ids"],
-            input_features=inputs["input_features"],
+            multimodal_features=multimodal_features,
             echo=echo,
             max_seq_len=len(inputs["input_ids"][0]) + max_seq_len,
         )

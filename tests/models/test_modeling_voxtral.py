@@ -57,7 +57,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
             qlinear="8da4w",
+            qlinear_encoder="8da4w",
             qembedding="4w",
+            qembedding_group_size=32,
         )
 
         ep = module.export()
@@ -184,7 +186,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_sdpa=True,
             use_custom_kv_cache=True,
             qlinear="8da4w",
+            qlinear_encoder="8da4w",
             qembedding="4w",
+            qembedding_group_size=32,
         )
         ep = module.export()
 
@@ -290,7 +294,13 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
-            **{"qlinear": "8da4w", "qembedding": "4w", "task": "multimodal-text-to-text"},
+            **{
+                "qlinear": "8da4w",
+                "qlinear_encoder": "8da4w",
+                "qembedding": "4w",
+                "qembedding_group_size": 32,
+                "task": "multimodal-text-to-text",
+            },
         )
         self.assertIsInstance(model, ExecuTorchModelForMultiModalToText)
         self.assertIsInstance(model.model, ExecuTorchModule)
@@ -303,12 +313,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
         generated_tokens = tokenizer(generated_text, return_tensors="pt").input_ids
-        # Should be something like: 'The audio is a humorous conversation between two people,
-        # likely friends or acquaintances, who are discussing tattoos.'
 
         del model
         del tokenizer
         gc.collect()
 
+        # Should be something like: 'The audio is a humorous conversation between two people,
+        # likely friends or acquaintances, who are discussing tattoos.'
         self.assertTrue("tattoo" in generated_text)
-        self.assertTrue(check_multimodal_output_quality(model_id, generated_tokens, conversation))
+        self.assertTrue(
+            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
+        )

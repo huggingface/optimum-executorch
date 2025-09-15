@@ -17,7 +17,7 @@ import json
 import os.path
 
 import torchao
-from transformers import AutoConfig, AutoModel, GenerationConfig
+from transformers import AutoConfig, AutoModelForPreTraining, GenerationConfig
 
 from ..integrations import MultiModalTextToTextExportableModule
 from ..quantization import quantize_model_
@@ -159,23 +159,31 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True
 
-    eager_model = AutoModel.from_pretrained(
+    # Using `AutoModelForPreTraining` since it usually routes to the correct model variant and there is no
+    # auto model class that captures both audio and image.
+    # The correct model variant we are looking for is <Model>ForConditionalGeneration, since it is the top-level
+    # model and thus will always contain the necessary model components. As an example of why this is needed,
+    # if you just use Gemma3Model instead of Gemma3ForConditionalGeneration, Gemma3Model (which is the decoder part)
+    # will not contain the LM head, which is only applied in the latter.
+    eager_model = AutoModelForPreTraining.from_pretrained(
         model_name_or_path,
         device_map=device,
         torch_dtype=dtype,
         config=config,
         attn_implementation=attn_implementation,
-        generation_config=GenerationConfig(
-            use_cache=True,
-            cache_implementation=cache_implementation,
-            max_length=max_length,
-            cache_config={
-                "batch_size": batch_size,
-                "max_cache_len": max_length,
-            },
-        ),
+    )
+    eager_model.generation_config = GenerationConfig(
+        use_cache=True,
+        cache_implementation=cache_implementation,
+        max_length=max_length,
+        cache_config={
+            "batch_size": batch_size,
+            "max_cache_len": max_length,
+        },
     )
     decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
+    encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
+
     # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
     # config, it always comes from the generation_config.json file, not the `generation_config` override
     # from from_pretrained().
@@ -188,11 +196,42 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
             param.requires_grad = False
 
     qlinear_config = kwargs.get("qlinear", None)
+    qlinear_group_size = kwargs.get("qlinear_group_size", None)
+    qlinear_encoder_config = kwargs.get("qlinear_encoder", None)
+    qlinear_encoder_group_size = kwargs.get("qlinear_encoder_group_size", None)
     qembedding_config = kwargs.get("qembedding", None)
-    # Quantize all weights with the same qlinear_config (decoder, encoder, multimodal projector/connector).
-    quantize_model_(eager_model, qlinear_config=qlinear_config)
-    # Quantize decoder embeddings using dynamically detected decoder name.
-    quantize_model_(getattr(eager_model, decoder_name), qembedding_config=qembedding_config)
+    qembedding_group_size = kwargs.get("qembedding_group_size", None)
+
+    # Quantize decoder linear weights.
+    quantize_decoder_kwargs = {
+        "eager_model": getattr(eager_model, decoder_name),
+        "qlinear_config": qlinear_config,
+    }
+    if qlinear_group_size is not None:
+        quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
+    quantize_model_(**quantize_decoder_kwargs)
+
+    # Quantize encoder linear weights.
+    quantize_encoder_kwargs = {
+        "eager_model": getattr(eager_model, encoder_name),
+        "qlinear_config": qlinear_encoder_config,
+    }
+    if qlinear_encoder_group_size is not None:
+        quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
+    quantize_model_(**quantize_encoder_kwargs)
+
+    # TODO: quantize other parts of the model, e.g. MultimodalProjector?
+
+    # Quantize decoder embeddings.
+    quantize_decoder_embedding_kwargs = {
+        "eager_model": getattr(eager_model, decoder_name),
+        "qembedding_config": qembedding_config,
+    }
+    if qembedding_group_size is not None:
+        quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
+    quantize_model_(**quantize_decoder_embedding_kwargs)
+
+    # TODO: quantize encoder embeddings.
 
     return MultiModalTextToTextExportableModule(
         model=eager_model,
