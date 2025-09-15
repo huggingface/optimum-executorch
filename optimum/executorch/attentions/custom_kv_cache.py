@@ -364,8 +364,6 @@ def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dt
 
     # Check if module has cache (TorchExportableModuleWithHybridCache)
     elif hasattr(module, "cache"):
-        assert isinstance(module.cache, HybridCache), f"Expected HybridCache, got {type(module.cache)}"
-
         # Replace with ETCustomHybridCache
         if getattr(module, "replace_cache", None) is not None:
             hybrid_cache = ETCustomHybridCache(
