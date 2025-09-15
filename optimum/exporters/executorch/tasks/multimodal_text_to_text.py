@@ -236,8 +236,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     return MultiModalTextToTextExportableModule(
         model=eager_model,
         modality="audio" if audio_encoder_name else "vision",
-        decoder_name=decoder_name,
         encoder_name=audio_encoder_name if audio_encoder_name else vision_encoder_name,
+        max_seq_len=max_length,
         processor_config=processor_config,
         use_custom_kv_cache=use_custom_kv_cache,
         use_custom_sdpa=use_custom_sdpa,

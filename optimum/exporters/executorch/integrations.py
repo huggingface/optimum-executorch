@@ -156,8 +156,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self,
         model: torch.nn.Module,
         modality: str,
-        decoder_name: str,
         encoder_name: str,
+        max_seq_len: int,
         processor_config: dict = None,
         use_custom_kv_cache: bool = False,
         use_custom_sdpa: bool = False,
@@ -166,15 +166,12 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         if modality not in encoder_name:
             raise ValueError(f'encoder_name "{encoder_name}" does not match specified modality "{modality}".')
-        if not hasattr(model, decoder_name):
-            raise ValueError(f'Model does not contain decoder "{decoder_name}".')
         if not hasattr(model, encoder_name):
             raise ValueError(f'Model does not contain encoder "{encoder_name}".')
 
         self.model = model
         self.config = model.config
         self.modality = modality
-        self.decoder_name = decoder_name
         self.encoder_name = encoder_name
         self.processor_config = processor_config
         self.use_custom_kv_cache = use_custom_kv_cache
@@ -185,7 +182,11 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         elif modality == "vision":
             additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "image_token_id")
         self.metadata = save_config_to_constant_methods(
-            model.config.text_config, model.generation_config, processor_config, **additional_metadata_kwargs
+            config=model.config.text_config,
+            generation_config=model.generation_config,
+            processor_config=processor_config,
+            get_max_seq_len=max_seq_len,
+            **additional_metadata_kwargs,
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 

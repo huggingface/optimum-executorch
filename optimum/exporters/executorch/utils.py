@@ -54,7 +54,8 @@ def save_config_to_constant_methods(
         metadata.update(processor_config)
 
     # Combine/override with any additional kwargs and filter out None values
-    return {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
+    combined_metadata = {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
+    return combined_metadata
 
 
 def apply_chat_template_with_fallback(processor, conversation, **kwargs):
