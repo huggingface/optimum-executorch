@@ -156,8 +156,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self,
         model: torch.nn.Module,
         modality: str,
-        decoder_name: str,
         encoder_name: str,
+        max_seq_len: int,
         processor_config: dict = None,
         use_custom_kv_cache: bool = False,
         use_custom_sdpa: bool = False,
@@ -166,15 +166,12 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         if modality not in encoder_name:
             raise ValueError(f'encoder_name "{encoder_name}" does not match specified modality "{modality}".')
-        if not hasattr(model, decoder_name):
-            raise ValueError(f'Model does not contain decoder "{decoder_name}".')
         if not hasattr(model, encoder_name):
             raise ValueError(f'Model does not contain encoder "{encoder_name}".')
 
         self.model = model
         self.config = model.config
         self.modality = modality
-        self.decoder_name = decoder_name
         self.encoder_name = encoder_name
         self.processor_config = processor_config
         self.use_custom_kv_cache = use_custom_kv_cache
@@ -185,7 +182,11 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         elif modality == "vision":
             additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "image_token_id")
         self.metadata = save_config_to_constant_methods(
-            model.config.text_config, model.generation_config, processor_config, **additional_metadata_kwargs
+            config=model.config.text_config,
+            generation_config=model.generation_config,
+            processor_config=processor_config,
+            get_max_seq_len=max_seq_len,
+            **additional_metadata_kwargs,
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
@@ -368,14 +369,18 @@ class CausalLMExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False):
+    def __init__(
+        self, model, max_seq_len=2048, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False
+    ):
         super().__init__()
         self.model = model
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         self.disable_dynamic_shapes = disable_dynamic_shapes
-        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(
+            model.config, model.generation_config, get_max_seq_len=max_seq_len
+        )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
     def _prepare_export_inputs(self):
@@ -445,8 +450,6 @@ class CausalLMExportableModule(torch.nn.Module):
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(
             self.model,
-            max_batch_size=1,
-            max_cache_len=self.metadata.get("get_max_seq_len"),
         )
         self._register_custom_attention(exportable_module)
 
@@ -463,7 +466,9 @@ class CausalLMExportableModule(torch.nn.Module):
             )
 
         with torch.no_grad():
-            exported_program = exportable_module.export(input_ids, cache_position, dynamic_shapes, strict)
+            exported_program = exportable_module.export(
+                input_ids=input_ids, cache_position=cache_position, dynamic_shapes=dynamic_shapes, strict=strict
+            )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
             # e.g. output of update_cache is transposed and
@@ -475,8 +480,11 @@ class CausalLMExportableModule(torch.nn.Module):
             mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
             exported_program = torch.export.export(
                 mutated_gm,
-                args=(input_ids, cache_position),
-                kwargs={},
+                args=(),
+                kwargs={
+                    "input_ids": input_ids,
+                    "cache_position": cache_position,
+                },
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
             )

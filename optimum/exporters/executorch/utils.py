@@ -33,7 +33,6 @@ def save_config_to_constant_methods(
         and isinstance(config.num_attention_heads, int)
     ):
         head_dim = config.hidden_size / config.num_attention_heads
-
     metadata = {
         "get_dtype": 5 if config.torch_dtype == torch.float16 else 6,
         "get_bos_id": getattr(config, "bos_token_id", None),
@@ -50,25 +49,13 @@ def save_config_to_constant_methods(
         "use_sdpa_with_kv_cache": "custom_sdpa" in config._attn_implementation,
     }
 
-    # Safely access fields from generation_config if it exists
-    if generation_config is not None:
-        # Check for cache_config and its attributes
-        cache_config = getattr(generation_config, "cache_config", None)
-        if cache_config is not None:
-            max_batch_size = cache_config.get("batch_size")
-            max_seq_len = cache_config.get("max_cache_len")
-
-            if max_batch_size is not None:
-                metadata["get_max_batch_size"] = max_batch_size
-            if max_seq_len is not None:
-                metadata["get_max_seq_len"] = max_seq_len
-
     # Include processor_config keys in metadata if provided
     if processor_config is not None:
         metadata.update(processor_config)
 
-    # Combine with any additional kwargs and filter out None values
-    return {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
+    # Combine/override with any additional kwargs and filter out None values
+    combined_metadata = {k: v for k, v in {**metadata, **kwargs}.items() if v is not None}
+    return combined_metadata
 
 
 def apply_chat_template_with_fallback(processor, conversation, **kwargs):
