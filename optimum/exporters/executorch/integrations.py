@@ -543,7 +543,7 @@ class VisionEncoderExportableModule(torch.nn.Module):
                     self.model,
                     args=(),
                     kwargs={"pixel_values": pixel_values},
-                    strict=True,
+                    strict=False,
                 )
             }
 
@@ -643,15 +643,6 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             dtype=torch.float32,
         )
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
-
-        # Register cache buffers to make them exportable
-        # for i in range(len(self.static_cache.layers)):
-        #     self.register_buffer(
-        #         f"key_cache_{i}", self.static_cache.layers[i].keys, persistent=False
-        #     )
-        #     self.register_buffer(
-        #         f"value_cache_{i}", self.static_cache.layers[i].values, persistent=False
-        #     )
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Get outputs from decoder
