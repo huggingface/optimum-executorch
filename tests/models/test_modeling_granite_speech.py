@@ -58,8 +58,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         ]
 
         model = ExecuTorchModelForMultiModalToText.from_pretrained(
-            # model_id,
-            "/home/jackzhxng/models/granite/granite_1",
+            model_id,
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,
