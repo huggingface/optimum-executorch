@@ -14,6 +14,8 @@
 
 """ExecuTorchModelForXXX classes, allowing to run ExecuTorch Models with ExecuTorch Runtime using the same API as Transformers."""
 
+import copy
+import io
 import logging
 import os
 import shutil
@@ -23,16 +25,19 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
 
 import torch
+import transformers
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
+    AutoConfig,
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
+    AutoProcessor,
     PreTrainedTokenizer,
     add_start_docstrings,
 )
@@ -88,7 +93,12 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
 
     auto_model_class = None
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
         super().__init__(model=None, config=config)
 
         if self.__class__.auto_model_class is None:
@@ -105,6 +115,8 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 setattr(self, key, value)
 
         self.stats = Stats()
+        self.config = config
+        self.processor = processor
 
         # Initialize cleanup tracking
         self._temp_dir = None
@@ -319,10 +331,23 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         local_files_only: bool = False,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
         config: Optional[PretrainedConfig] = None,
+        processor: Optional[ProcessorMixin] = None,
         **kwargs,
     ) -> "ExecuTorchModelBase":
         if isinstance(model_id, Path):
             model_id = model_id.as_posix()
+
+        # Load config if not provided
+        if config is None:
+            config = AutoConfig.from_pretrained(model_id)
+
+        # Load processor if not provided
+        if processor is None:
+            try:
+                processor = AutoProcessor.from_pretrained(model_id)
+            except Exception:
+                # Processor might not be available for this model
+                processor = None
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: setting `local_files_only=True`")
@@ -402,7 +427,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                     )
                 )
 
-        model_instance = cls(models_dict, config)
+        model_instance = cls(models_dict, config, processor)
 
         # Store the TemporaryDirectory reference to prevent GC
         if temp_dir is not None:
@@ -444,8 +469,13 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForSeq2SeqLM
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
-        super().__init__(models=models, config=config)
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
+        super().__init__(models=models, config=config, processor=processor)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
         if not hasattr(self, "text_decoder"):
@@ -640,8 +670,13 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForCausalLM
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
-        super().__init__(models, config)
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
+        super().__init__(models, config, processor)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
@@ -862,8 +897,13 @@ class ExecuTorchModelForMaskedLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForMaskedLM
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
-        super().__init__(models, config)
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
+        super().__init__(models, config, processor)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
@@ -934,8 +974,13 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForImageClassification
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
-        super().__init__(models, config)
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
+        super().__init__(models, config, processor)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
@@ -993,8 +1038,13 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForSpeechSeq2Seq
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
-        super().__init__(models=models, config=config)
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
+        super().__init__(models=models, config=config, processor=processor)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
         if not hasattr(self, "text_decoder"):
@@ -1172,8 +1222,13 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
     # task type. For MultiModal, we should always be specifying the task type anyways.
     auto_model_class = AutoModel
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
-        super().__init__(models=models, config=config)
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+        processor: Optional[ProcessorMixin] = None,
+    ):
+        super().__init__(models=models, config=config, processor=processor)
         required_methods = ["text_decoder", "token_embedding"]
         for required_method in required_methods:
             if required_method not in self.model.method_names():
@@ -1329,14 +1384,36 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.reset()
         self.stats.on_inference_start()
 
-        inputs = apply_chat_template_with_fallback(
-            processor,
-            input_conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
+        if isinstance(processor, transformers.models.granite_speech.processing_granite_speech.GraniteSpeechProcessor):
+            import requests
+            import torchaudio
+
+            conversation = copy.deepcopy(input_conversation)
+            for i, item in enumerate(conversation):
+                if "type" in item and item["type"] == "audio":
+                    audio_path = item["content"]
+                    # Remove the audio content from the input conversation since it
+                    # is handled outside for Granite.
+                    conversation.pop(i)
+
+            resp = requests.get(audio_path)
+            resp.raise_for_status()
+            buf = io.BytesIO(resp.content)
+
+            wav, sampling_rate = torchaudio.load(buf, normalize=True)
+            assert wav.shape[0] == 1 and sampling_rate == 16000  # mono, 16khz
+
+            prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+            inputs = processor(prompt, wav, return_tensors="pt")
+        else:
+            inputs = apply_chat_template_with_fallback(
+                processor,
+                input_conversation,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
 
         self.stats.on_token_encode_end()
         self.stats.set_num_prompt_tokens(len(inputs["input_ids"][0]))

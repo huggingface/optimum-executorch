@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import gc
+import io
 import logging
 import math
 from typing import Any, List
 
 import torch
-from transformers import AutoModelForCausalLM, AutoModelForPreTraining, AutoProcessor
+import transformers
+from transformers import AutoModelForCausalLM, AutoModelForPreTraining, AutoProcessor, AutoTokenizer
 
 from optimum.exporters.executorch.utils import apply_chat_template_with_fallback
 
@@ -88,6 +91,7 @@ def check_multimodal_output_quality(
 
     # Load model and processor
     processor = AutoProcessor.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
     # See note around https://github.com/huggingface/optimum-executorch/blob/main/optimum/exporters/executorch/tasks/multimodal_text_to_text.py#L162 about why AutoModelForPreTraining is used.
     model = AutoModelForPreTraining.from_pretrained(
         model_id,
@@ -95,15 +99,37 @@ def check_multimodal_output_quality(
         torch_dtype=torch.bfloat16,
     )
 
-    # Process the conversation to get inputs
-    inputs = apply_chat_template_with_fallback(
-        processor,
-        conversation,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-    )
+    if isinstance(processor, transformers.models.granite_speech.processing_granite_speech.GraniteSpeechProcessor):
+        import requests
+        import torchaudio
+
+        conversation = copy.deepcopy(conversation)
+        for i, item in enumerate(conversation):
+            if "type" in item and item["type"] == "audio":
+                audio_path = item["content"]
+                # Remove the audio content from the input conversation since it
+                # is handled outside for Granite.
+                conversation.pop(i)
+
+        resp = requests.get(audio_path)
+        resp.raise_for_status()
+        buf = io.BytesIO(resp.content)
+
+        wav, sampling_rate = torchaudio.load(buf, normalize=True)
+        assert wav.shape[0] == 1 and sampling_rate == 16000  # mono, 16khz
+
+        prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+        inputs = processor(prompt, wav, return_tensors="pt")
+    else:
+        # Process the conversation to get inputs
+        inputs = apply_chat_template_with_fallback(
+            processor,
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
     inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
     generated_tokens = generated_tokens.to(model.device)
 
