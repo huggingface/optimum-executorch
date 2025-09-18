@@ -89,7 +89,7 @@ class AudioExportableModule(torch.nn.Module):
         model_id = self.model.config.name_or_path
         processor = AutoProcessor.from_pretrained(model_id)
 
-        if model_id.startswith("ibm-granite/granite-speech"):
+        if model_id.startswith("ibm-granite/granite-speech-3.3"):
             import torchaudio
             from huggingface_hub import hf_hub_download
 

@@ -14,7 +14,8 @@
 
 import copy
 import io
-from typing import Dict, List, Optional, Set
+import logging
+from typing import Any, Dict, List, Optional, Set
 
 import torch
 import transformers
@@ -135,7 +136,7 @@ def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenize
 def process_conversation_inputs(
     processor: ProcessorMixin,
     tokenizer: PreTrainedTokenizer,
-    input_conversation: List[Dict],
+    input_conversation: List[Dict[str, Any]],
 ):
     """
     Process input conversation for multimodal models.
@@ -160,24 +161,31 @@ def process_conversation_inputs(
         audio_path = None
 
         # Extract audio content and remove from conversation
-        for i, item in enumerate(conversation):
-            if "type" in item and item["type"] == "audio":
-                audio_path = item["content"]
-                # Remove the audio content from the input conversation since it
-                # is handled outside for Granite.
-                conversation.pop(i)
-                break
-
-        if audio_path is None:
-            raise ValueError("No audio content found in conversation for GraniteSpeechProcessor")
+        audio_items = [(i, item) for i, item in enumerate(conversation) if item.get("type") == "audio"]
+        if audio_items:
+            idx, audio_item = audio_items[0]
+            audio_path = audio_item["content"]
+            # Remove the audio content from the input conversation since it
+            # is handled outside for Granite.
+            del conversation[idx]
+        else:
+            raise ValueError("No audio content found in conversation")
 
         # Download and process audio
-        resp = requests.get(audio_path)
-        resp.raise_for_status()
-        buf = io.BytesIO(resp.content)
+        try:
+            resp = requests.get(audio_path)
+            resp.raise_for_status()
+            buf = io.BytesIO(resp.content)
+        except requests.exceptions.RequestException:
+            print("Could not download input audio file.")
 
         wav, sampling_rate = torchaudio.load(buf, normalize=True)
-        assert wav.shape[0] == 1 and sampling_rate == 16000  # mono, 16khz
+        if wav.shape[0] != 1:
+            wav = wav.mean(dim=0, keepdim=True)  # Convert stereo to mono.
+            logging.warning("Resampled audio stereo to mono")
+        if sampling_rate != 16000:
+            wav = torchaudio.functional.resample(wav, sampling_rate, 16000)
+            logging.warning(f"Resampled audio from {sampling_rate}Hz to 16000Hz")
 
         # Generate text prompt and process with audio
         prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
