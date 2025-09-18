@@ -129,7 +129,7 @@ class AudioExportableModule(torch.nn.Module):
         self,
         input_features: torch.FloatTensor,
     ):
-        audio_embeds = self.model.get_audio_embeds(input_features)
+        audio_embeds = self.model.get_audio_features(input_features)
         return audio_embeds.unsqueeze(0)
 
 
