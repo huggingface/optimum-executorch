@@ -14,8 +14,6 @@
 
 """ExecuTorchModelForXXX classes, allowing to run ExecuTorch Models with ExecuTorch Runtime using the same API as Transformers."""
 
-import copy
-import io
 import logging
 import os
 import shutil
@@ -25,7 +23,6 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
 
 import torch
-import transformers
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
@@ -50,7 +47,10 @@ from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
-from ..exporters.executorch.utils import apply_chat_template_with_fallback, verify_eos_tokens_in_pretrained_tokenizer
+from ..exporters.executorch.utils import (
+    process_conversation_inputs,
+    verify_eos_tokens_in_pretrained_tokenizer,
+)
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import find_files_matching_pattern
 from .stats import Stats
@@ -1384,36 +1384,15 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.reset()
         self.stats.on_inference_start()
 
-        if isinstance(processor, transformers.models.granite_speech.processing_granite_speech.GraniteSpeechProcessor):
-            import requests
-            import torchaudio
-
-            conversation = copy.deepcopy(input_conversation)
-            for i, item in enumerate(conversation):
-                if "type" in item and item["type"] == "audio":
-                    audio_path = item["content"]
-                    # Remove the audio content from the input conversation since it
-                    # is handled outside for Granite.
-                    conversation.pop(i)
-
-            resp = requests.get(audio_path)
-            resp.raise_for_status()
-            buf = io.BytesIO(resp.content)
-
-            wav, sampling_rate = torchaudio.load(buf, normalize=True)
-            assert wav.shape[0] == 1 and sampling_rate == 16000  # mono, 16khz
-
-            prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
-            inputs = processor(prompt, wav, return_tensors="pt")
-        else:
-            inputs = apply_chat_template_with_fallback(
-                processor,
-                input_conversation,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-            )
+        inputs = process_conversation_inputs(
+            processor,
+            tokenizer,
+            input_conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
 
         self.stats.on_token_encode_end()
         self.stats.set_num_prompt_tokens(len(inputs["input_ids"][0]))
