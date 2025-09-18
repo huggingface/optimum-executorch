@@ -16,27 +16,27 @@ import logging
 from typing import Dict
 
 import torch
-
-from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
     AutoProcessor,
-    PreTrainedModel,
-    StaticCache,
     DynamicCache,
     EncoderDecoderCache,
+    PreTrainedModel,
+    StaticCache,
     T5ForConditionalGeneration,
     WhisperForConditionalGeneration,
 )
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.integrations.executorch import (
-    sdpa_mask_without_vmap,
     TorchExportableModuleForDecoderOnlyLM,
+    sdpa_mask_without_vmap,
 )
 from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
+
+from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
 
@@ -173,9 +173,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         super().__init__()
 
         if modality not in encoder_name:
-            raise ValueError(
-                f'encoder_name "{encoder_name}" does not match specified modality "{modality}".'
-            )
+            raise ValueError(f'encoder_name "{encoder_name}" does not match specified modality "{modality}".')
         if not hasattr(model, encoder_name):
             raise ValueError(f'Model does not contain encoder "{encoder_name}".')
 
@@ -188,13 +186,9 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self.use_custom_sdpa = use_custom_sdpa
         additional_metadata_kwargs = {"modality": modality}
         if modality == "audio":
-            additional_metadata_kwargs[f"{modality}_token_id"] = getattr(
-                self.config, "audio_token_id"
-            )
+            additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "audio_token_id")
         elif modality == "vision":
-            additional_metadata_kwargs[f"{modality}_token_id"] = getattr(
-                self.config, "image_token_id"
-            )
+            additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "image_token_id")
         self.metadata = save_config_to_constant_methods(
             config=model.config.text_config,
             generation_config=model.generation_config,
@@ -236,9 +230,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         # Prepare inputs with dynamic shapes
         seq_length = 3
-        example_inputs_embeds = torch.zeros(
-            (1, seq_length, self.config.text_config.hidden_size), dtype=torch.float
-        )
+        example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=torch.float)
         example_cache_position = torch.arange(seq_length, dtype=torch.long)
 
         seq_len_dim = torch.export.Dim("seq_length_dim", max=max_seq_len)
@@ -250,28 +242,18 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         return example_inputs_embeds, example_cache_position, dynamic_shapes
 
     def _register_custom_attention(self, exportable_module: torch.nn.Module):
-        _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(
-            exportable_module
-        )
+        _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
         if self.use_custom_sdpa:
             if self.use_custom_kv_cache:
-                AttentionInterface.register(
-                    "custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache
-                )
-                AttentionMaskInterface.register(
-                    "custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap
-                )
+                AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
-                exportable_module.model.model.config._attn_implementation = (
-                    "custom_sdpa_ring_kv_cache"
-                )
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
             else:
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
-                exportable_module.model.model.config._attn_implementation = (
-                    "custom_sdpa"
-                )
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
     def export(
         self,
@@ -313,9 +295,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                     self.model.dtype,
                 )
 
-            inputs_embeds, cache_position, dynamic_shapes = (
-                self._prepare_decoder_only_export_inputs(max_seq_len)
-            )
+            inputs_embeds, cache_position, dynamic_shapes = self._prepare_decoder_only_export_inputs(max_seq_len)
             logging.info(
                 f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}"
             )
@@ -348,9 +328,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_programs["text_decoder"] = exported_program
 
             # 2. Export token embeddings
-            input_ids, dynamic_shapes = self._prepare_text_embedding_export_inputs(
-                max_seq_len
-            )
+            input_ids, dynamic_shapes = self._prepare_text_embedding_export_inputs(max_seq_len)
             logging.info(
                 f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}"
             )
@@ -366,9 +344,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
             # 3. Export encoder.
             if self.use_custom_sdpa:
-                getattr(self.model, self.encoder_name).config._attn_implementation = (
-                    "custom_sdpa"
-                )
+                getattr(self.model, self.encoder_name).config._attn_implementation = "custom_sdpa"
 
             if self.modality == "audio":
                 encoder = AudioExportableModule(self.model)
@@ -445,10 +421,7 @@ class CausalLMExportableModule(torch.nn.Module):
             and not (self.use_custom_kv_cache and self.use_custom_sdpa)
         )
 
-        if (
-            not self.disable_dynamic_shapes
-            and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache
-        ):
+        if not self.disable_dynamic_shapes and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
             # Prepare inputs with dynamic shapes
             seq_length = 3  # Sequence length > 1 to avoid specialization issues
             example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
@@ -461,9 +434,7 @@ class CausalLMExportableModule(torch.nn.Module):
                 "input_ids": {1: seq_len_dim},
                 "cache_position": {0: seq_len_dim},
             }
-            strict = parse(torch.__version__) != parse(
-                "2.7.0"
-            )  # Workaround for PyTorch bug #150994
+            strict = parse(torch.__version__) != parse("2.7.0")  # Workaround for PyTorch bug #150994
 
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
@@ -474,33 +445,21 @@ class CausalLMExportableModule(torch.nn.Module):
 
         if self.use_custom_sdpa:
             if self.use_custom_kv_cache:
-                _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(
-                    exportable_module
-                )
-                AttentionInterface.register(
-                    "custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache
-                )
-                AttentionMaskInterface.register(
-                    "custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap
-                )
+                _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
+                AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
-                exportable_module.model.model.config._attn_implementation = (
-                    "custom_sdpa_ring_kv_cache"
-                )
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
             else:
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
-                exportable_module.model.model.config._attn_implementation = (
-                    "custom_sdpa"
-                )
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
     def export(
         self,
     ) -> Dict[str, ExportedProgram]:
-        input_ids, cache_position, dynamic_shapes, strict = (
-            self._prepare_export_inputs()
-        )
+        input_ids, cache_position, dynamic_shapes, strict = self._prepare_export_inputs()
         logging.info(
             f"Exporting using input_ids({input_ids.shape})={input_ids}, cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}, strict={strict}"
         )
@@ -563,9 +522,7 @@ class VisionEncoderExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(
-            model.config, model.generation_config
-        )
+        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
     def forward(self, pixel_values):
         print(f"DEBUG: pixel_values: {pixel_values.shape}")
@@ -602,17 +559,13 @@ class MaskedLMExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(
-            model.config, model.generation_config
-        )
+        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
 
     def forward(self, input_ids, attention_mask):
         return self.model(input_ids, attention_mask)
 
     def export(self, input_ids=None, attention_mask=None) -> Dict[str, ExportedProgram]:
-        max_position_embeddings = getattr(
-            self.model.config, "max_position_embeddings", 64
-        )
+        max_position_embeddings = getattr(self.model.config, "max_position_embeddings", 64)
         max_seq_length = max(max_position_embeddings - 1, 1)
         # Create dummy inputs with expected shapes
         batch_size = 1
@@ -626,9 +579,7 @@ class MaskedLMExportableModule(torch.nn.Module):
             else input_ids
         )
         dummy_attention_mask = (
-            torch.ones((batch_size, seq_length), dtype=torch.long)
-            if attention_mask is None
-            else attention_mask
+            torch.ones((batch_size, seq_length), dtype=torch.long) if attention_mask is None else attention_mask
         )
 
         # Define dynamic shapes with Dim objects, always use Auto
@@ -762,9 +713,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         self.exported_decoder = None
 
     def _export_encoder(self, encoder_input_ids):
-        wrapped_encoder = (
-            Seq2SeqLMEncoderExportableModule(self.encoder).to("cpu").eval()
-        )
+        wrapped_encoder = Seq2SeqLMEncoderExportableModule(self.encoder).to("cpu").eval()
 
         # Define dynamic sequence length for encoder
         if isinstance(self.full_model, WhisperForConditionalGeneration):
@@ -774,9 +723,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 For more infromation, please refer to the Whisper preprocessor config."""
             dynamic_shapes = None
         elif isinstance(self.full_model, T5ForConditionalGeneration):
-            encoder_seq_len_dim = torch.export.Dim(
-                "encoder_hidden_seq_length", max=self.max_hidden_seq_length
-            )
+            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
             dynamic_shapes = {"input_ids": {1: encoder_seq_len_dim}}
         else:
             raise ValueError(
@@ -797,9 +744,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         wrapped_decoder = (
             Seq2SeqLMDecoderExportableModuleWithStaticCache(
                 model=self.full_model,
-                max_static_cache_length=self.generation_config.cache_config.get(
-                    "max_cache_len"
-                ),
+                max_static_cache_length=self.generation_config.cache_config.get("max_cache_len"),
                 batch_size=self.generation_config.cache_config.get("batch_size"),
             )
             .to("cpu")
@@ -810,9 +755,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             dynamic_shapes = None
         elif isinstance(self.full_model, T5ForConditionalGeneration):
             # Define dynamic dimension for encoder output sequence length
-            encoder_seq_len_dim = torch.export.Dim(
-                "encoder_hidden_seq_length", max=self.max_hidden_seq_length
-            )
+            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
             dynamic_shapes = {
                 "decoder_input_ids": None,
                 "encoder_hidden_states": {1: encoder_seq_len_dim},
@@ -843,9 +786,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
     ) -> Dict[str, ExportedProgram]:
         if encoder_input_ids is None:
             if isinstance(self.full_model, WhisperForConditionalGeneration):
-                example_encoder_input_ids = torch.rand(
-                    self._expected_encoder_input_shape
-                )
+                example_encoder_input_ids = torch.rand(self._expected_encoder_input_shape)
             else:
                 example_encoder_input_ids = torch.ones((1, 10), dtype=torch.long)
         else:
@@ -854,22 +795,14 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         self.exported_encoder = self._export_encoder(example_encoder_input_ids)
 
         if not encoder_hidden_states:
-            example_encoder_hidden_states = self.exported_encoder.module()(
-                example_encoder_input_ids
-            )
+            example_encoder_hidden_states = self.exported_encoder.module()(example_encoder_input_ids)
         else:
             example_encoder_hidden_states = encoder_hidden_states
 
         example_decoder_input_ids = (
-            decoder_input_ids
-            if decoder_input_ids is not None
-            else torch.tensor([[0]], dtype=torch.long)
+            decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long)
         )
-        example_cache_position = (
-            cache_position
-            if cache_position is not None
-            else torch.tensor([0], dtype=torch.long)
-        )
+        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
         self.exported_decoder = self._export_decoder(
             example_decoder_input_ids,
