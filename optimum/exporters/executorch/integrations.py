@@ -323,7 +323,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 inputs_embeds=inputs_embeds,
                 cache_position=cache_position,
                 dynamic_shapes=dynamic_shapes,
-                strict=False,
+                strict=True,
             )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
@@ -343,7 +343,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                     "cache_position": cache_position,
                 },
                 dynamic_shapes=dynamic_shapes,
-                strict=False,
+                strict=True,
             )
             exported_programs["text_decoder"] = exported_program
 
@@ -360,7 +360,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 args=(input_ids,),
                 kwargs={},
                 dynamic_shapes=dynamic_shapes,
-                strict=False,
+                strict=True,
             )
             exported_programs["token_embedding"] = token_embedding_exported_program
 
@@ -391,7 +391,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                     "input_features": input_features,
                 },
                 dynamic_shapes=dynamic_shapes,
-                strict=False,
+                strict=True,
             )
             exported_programs[f"{self.modality}_encoder"] = encoder_exported_program
 
@@ -586,7 +586,7 @@ class VisionEncoderExportableModule(torch.nn.Module):
                     self.model,
                     args=(),
                     kwargs={"pixel_values": pixel_values},
-                    strict=False,
+                    strict=True,
                 )
             }
 
@@ -645,7 +645,7 @@ class MaskedLMExportableModule(torch.nn.Module):
                     args=(dummy_input_ids,),
                     kwargs={"attention_mask": dummy_attention_mask},
                     dynamic_shapes=dynamic_shapes,
-                    strict=False,
+                    strict=True,
                 )
             }
 
@@ -789,7 +789,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 wrapped_encoder,
                 (encoder_input_ids,),
                 dynamic_shapes=dynamic_shapes,
-                strict=False,
+                strict=True,
             )
         return exported_encoder
 
@@ -829,7 +829,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 wrapped_decoder,
                 (decoder_input_ids, encoder_hidden_states, cache_position),
                 dynamic_shapes=dynamic_shapes,
-                strict=False,
+                strict=True,
             )
 
         return exported_decoder
