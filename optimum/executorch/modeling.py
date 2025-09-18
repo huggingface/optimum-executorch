@@ -27,14 +27,12 @@ from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
-    AutoConfig,
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
-    AutoProcessor,
     PreTrainedTokenizer,
     add_start_docstrings,
 )
@@ -97,7 +95,6 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
         super().__init__(model=None, config=config)
 
@@ -115,8 +112,6 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                 setattr(self, key, value)
 
         self.stats = Stats()
-        self.config = config
-        self.processor = processor
 
         # Initialize cleanup tracking
         self._temp_dir = None
@@ -331,23 +326,10 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         local_files_only: bool = False,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
         config: Optional[PretrainedConfig] = None,
-        processor: Optional[ProcessorMixin] = None,
         **kwargs,
     ) -> "ExecuTorchModelBase":
         if isinstance(model_id, Path):
             model_id = model_id.as_posix()
-
-        # Load config if not provided
-        if config is None:
-            config = AutoConfig.from_pretrained(model_id)
-
-        # Load processor if not provided
-        if processor is None:
-            try:
-                processor = AutoProcessor.from_pretrained(model_id)
-            except Exception:
-                # Processor might not be available for this model
-                processor = None
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: setting `local_files_only=True`")
@@ -427,7 +409,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
                     )
                 )
 
-        model_instance = cls(models_dict, config, processor)
+        model_instance = cls(models_dict, config)
 
         # Store the TemporaryDirectory reference to prevent GC
         if temp_dir is not None:
@@ -473,9 +455,8 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
-        super().__init__(models=models, config=config, processor=processor)
+        super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
         if not hasattr(self, "text_decoder"):
@@ -674,9 +655,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
-        super().__init__(models, config, processor)
+        super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
@@ -901,9 +881,8 @@ class ExecuTorchModelForMaskedLM(ExecuTorchModelBase):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
-        super().__init__(models, config, processor)
+        super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
@@ -978,9 +957,8 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
-        super().__init__(models, config, processor)
+        super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
@@ -1042,9 +1020,8 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
-        super().__init__(models=models, config=config, processor=processor)
+        super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
         if not hasattr(self, "text_decoder"):
@@ -1226,9 +1203,8 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self,
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
-        processor: Optional[ProcessorMixin] = None,
     ):
-        super().__init__(models=models, config=config, processor=processor)
+        super().__init__(models=models, config=config)
         required_methods = ["text_decoder", "token_embedding"]
         for required_method in required_methods:
             if required_method not in self.model.method_names():
