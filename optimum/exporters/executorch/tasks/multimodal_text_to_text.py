@@ -39,7 +39,7 @@ def _validate_multimodal_components(model):
         "text_model",
     ]
     POTENTIAL_AUDIO_ENCODER_NAMES = [
-        "encoder",
+        "encoder",  # Here mainly for Granite Speech.
         "audio_tower",
         "audio_model",
     ]
@@ -147,7 +147,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         except (OSError, json.JSONDecodeError):
             processor_config = None
 
-    # Make sure config has text_config and vision_config:
+    # Make sure config has text_config.
     if not (hasattr(config, "text_config")):
         raise ValueError(f"The model {model_name_or_path} does not have a `text_config`.")
 

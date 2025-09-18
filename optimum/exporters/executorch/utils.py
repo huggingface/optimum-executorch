@@ -17,6 +17,7 @@ import io
 from typing import Dict, List, Optional, Set
 
 import torch
+import transformers
 from transformers import GenerationConfig, PretrainedConfig
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils import PreTrainedTokenizer
@@ -135,31 +136,22 @@ def process_conversation_inputs(
     processor: ProcessorMixin,
     tokenizer: PreTrainedTokenizer,
     input_conversation: List[Dict],
-    add_generation_prompt: bool = True,
-    tokenize: bool = True,
-    return_dict: bool = True,
-    return_tensors: str = "pt",
 ):
     """
-    Process input conversation for multimodal models, handling special cases like GraniteSpeechProcessor.
+    Process input conversation for multimodal models.
 
     This function handles the preprocessing of conversation inputs, with special handling for
-    GraniteSpeechProcessor which requires extracting and processing audio content from conversations.
+    GraniteSpeechProcessor which requires extracting and processing audio content from conversations
+    prior to feeding into the processor.
 
     Args:
         processor: The processor to use for input processing
         tokenizer: The tokenizer to use for text processing
         input_conversation: List of conversation messages, may contain audio content
-        add_generation_prompt: Whether to add generation prompt
-        tokenize: Whether to tokenize the output
-        return_dict: Whether to return dict format
-        return_tensors: Format for returned tensors ("pt" for PyTorch)
 
     Returns:
         Processed inputs ready for model consumption
     """
-    import transformers
-
     if isinstance(processor, transformers.models.granite_speech.processing_granite_speech.GraniteSpeechProcessor):
         import requests
         import torchaudio
@@ -188,19 +180,17 @@ def process_conversation_inputs(
         assert wav.shape[0] == 1 and sampling_rate == 16000  # mono, 16khz
 
         # Generate text prompt and process with audio
-        prompt = tokenizer.apply_chat_template(
-            conversation, tokenize=False, add_generation_prompt=add_generation_prompt
-        )
-        inputs = processor(prompt, wav, return_tensors=return_tensors)
+        prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+        inputs = processor(prompt, wav, return_tensors="pt")
     else:
         # Standard processing for other processors
         inputs = apply_chat_template_with_fallback(
             processor,
             input_conversation,
-            add_generation_prompt=add_generation_prompt,
-            tokenize=tokenize,
-            return_dict=return_dict,
-            return_tensors=return_tensors,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
         )
 
     return inputs

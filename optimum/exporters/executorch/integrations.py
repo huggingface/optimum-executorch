@@ -180,8 +180,6 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     ):
         super().__init__()
 
-        # if modality not in encoder_name:
-        #     raise ValueError(f'encoder_name "{encoder_name}" does not match specified modality "{modality}".')
         if not hasattr(model, encoder_name):
             raise ValueError(f'Model does not contain encoder "{encoder_name}".')
 
