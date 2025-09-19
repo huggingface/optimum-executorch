@@ -45,7 +45,10 @@ from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
-from ..exporters.executorch.utils import apply_chat_template_with_fallback, verify_eos_tokens_in_pretrained_tokenizer
+from ..exporters.executorch.utils import (
+    process_conversation_inputs,
+    verify_eos_tokens_in_pretrained_tokenizer,
+)
 from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import find_files_matching_pattern
 from .stats import Stats
@@ -88,7 +91,11 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
 
     auto_model_class = None
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(model=None, config=config)
 
         if self.__class__.auto_model_class is None:
@@ -444,7 +451,11 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForSeq2SeqLM
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
@@ -640,7 +651,11 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForCausalLM
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
@@ -862,7 +877,11 @@ class ExecuTorchModelForMaskedLM(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForMaskedLM
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
@@ -934,7 +953,11 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForImageClassification
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(models, config)
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
@@ -993,7 +1016,11 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
 
     auto_model_class = AutoModelForSpeechSeq2Seq
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
             raise AttributeError("Expected attribute 'encoder' not found in the instance.")
@@ -1172,7 +1199,11 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
     # task type. For MultiModal, we should always be specifying the task type anyways.
     auto_model_class = AutoModel
 
-    def __init__(self, models: Dict[str, "ExecuTorchModule"], config: "PretrainedConfig"):
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
         super().__init__(models=models, config=config)
         required_methods = ["text_decoder", "token_embedding"]
         for required_method in required_methods:
@@ -1329,13 +1360,10 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.reset()
         self.stats.on_inference_start()
 
-        inputs = apply_chat_template_with_fallback(
+        inputs = process_conversation_inputs(
             processor,
+            tokenizer,
             input_conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
         )
 
         self.stats.on_token_encode_end()

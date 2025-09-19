@@ -39,6 +39,7 @@ def _validate_multimodal_components(model):
         "text_model",
     ]
     POTENTIAL_AUDIO_ENCODER_NAMES = [
+        "encoder",  # Here mainly for Granite Speech.
         "audio_tower",
         "audio_model",
     ]
@@ -146,12 +147,9 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         except (OSError, json.JSONDecodeError):
             processor_config = None
 
-    # Make sure config has text_config and vision_config:
-    if not (hasattr(config, "text_config") and (hasattr(config, "vision_config") or hasattr(config, "audio_config"))):
-        raise ValueError(
-            f"The model {model_name_or_path} does not have a `text_config` or `vision_config`/`audio_config` attribute in its config. "
-            "This is required for multimodal text-to-text models."
-        )
+    # Make sure config has text_config.
+    if not (hasattr(config, "text_config")):
+        raise ValueError(f"The model {model_name_or_path} does not have a `text_config`.")
 
     if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
         # NOTE: Avoid hitting the data-dependent control flow in _longrope_frequency_update.

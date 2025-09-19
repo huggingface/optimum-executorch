@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Set
+import copy
+import io
+import logging
+from typing import Any, Dict, List, Optional, Set
 
 import torch
+import transformers
 from transformers import GenerationConfig, PretrainedConfig
+from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 
@@ -126,3 +131,74 @@ def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenize
     is_valid = any(model_id in candidate_eos_ids for model_id in model_eos_ids)
 
     return is_valid
+
+
+def process_conversation_inputs(
+    processor: ProcessorMixin,
+    tokenizer: PreTrainedTokenizer,
+    input_conversation: List[Dict[str, Any]],
+):
+    """
+    Process input conversation for multimodal models.
+
+    This function handles the preprocessing of conversation inputs, with special handling for
+    GraniteSpeechProcessor which requires extracting and processing audio content from conversations
+    prior to feeding into the processor.
+
+    Args:
+        processor: The processor to use for input processing
+        tokenizer: The tokenizer to use for text processing
+        input_conversation: List of conversation messages, may contain audio content
+
+    Returns:
+        Processed inputs ready for model consumption
+    """
+    if isinstance(processor, transformers.models.granite_speech.processing_granite_speech.GraniteSpeechProcessor):
+        import requests
+        import torchaudio
+
+        conversation = copy.deepcopy(input_conversation)
+        audio_path = None
+
+        # Extract audio content and remove from conversation
+        audio_items = [(i, item) for i, item in enumerate(conversation) if item.get("type") == "audio"]
+        if audio_items:
+            idx, audio_item = audio_items[0]
+            audio_path = audio_item["content"]
+            # Remove the audio content from the input conversation since it
+            # is handled outside for Granite.
+            del conversation[idx]
+        else:
+            raise ValueError("No audio content found in conversation")
+
+        # Download and process audio
+        try:
+            resp = requests.get(audio_path)
+            resp.raise_for_status()
+            buf = io.BytesIO(resp.content)
+        except requests.exceptions.RequestException:
+            print("Could not download input audio file.")
+
+        wav, sampling_rate = torchaudio.load(buf, normalize=True)
+        if wav.shape[0] != 1:
+            wav = wav.mean(dim=0, keepdim=True)  # Convert stereo to mono.
+            logging.warning("Resampled audio stereo to mono")
+        if sampling_rate != 16000:
+            wav = torchaudio.functional.resample(wav, sampling_rate, 16000)
+            logging.warning(f"Resampled audio from {sampling_rate}Hz to 16000Hz")
+
+        # Generate text prompt and process with audio
+        prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+        inputs = processor(prompt, wav, return_tensors="pt")
+    else:
+        # Standard processing for other processors
+        inputs = apply_chat_template_with_fallback(
+            processor,
+            input_conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
+    return inputs

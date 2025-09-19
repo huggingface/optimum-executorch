@@ -18,9 +18,9 @@ import math
 from typing import Any, List
 
 import torch
-from transformers import AutoModelForCausalLM, AutoModelForPreTraining, AutoProcessor
+from transformers import AutoModelForCausalLM, AutoModelForPreTraining, AutoProcessor, AutoTokenizer
 
-from optimum.exporters.executorch.utils import apply_chat_template_with_fallback
+from optimum.exporters.executorch.utils import process_conversation_inputs
 
 
 def check_causal_lm_output_quality(
@@ -88,6 +88,7 @@ def check_multimodal_output_quality(
 
     # Load model and processor
     processor = AutoProcessor.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
     # See note around https://github.com/huggingface/optimum-executorch/blob/main/optimum/exporters/executorch/tasks/multimodal_text_to_text.py#L162 about why AutoModelForPreTraining is used.
     model = AutoModelForPreTraining.from_pretrained(
         model_id,
@@ -95,14 +96,10 @@ def check_multimodal_output_quality(
         torch_dtype=torch.bfloat16,
     )
 
-    # Process the conversation to get inputs
-    inputs = apply_chat_template_with_fallback(
+    inputs = process_conversation_inputs(
         processor,
+        tokenizer,
         conversation,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
     )
     inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
     generated_tokens = generated_tokens.to(model.device)
