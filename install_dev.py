@@ -5,10 +5,10 @@ import sys
 
 def install_torch_nightly_deps():
     """Install torch related dependencies from pinned nightly"""
-    EXECUTORCH_NIGHTLY_VERSION = "dev20250906"
-    TORCHAO_NIGHTLY_VERSION = "dev20250906"
+    EXECUTORCH_NIGHTLY_VERSION = "dev20250905"
+    TORCHAO_NIGHTLY_VERSION = "dev20250905"
     # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/install_requirements.py#L74
-    TORCH_NIGHTLY_VERSION = "dev20250906"
+    TORCH_NIGHTLY_VERSION = "dev20250905"
     subprocess.check_call(
         [
             sys.executable,
