@@ -147,7 +147,11 @@ class AudioExportableModule(torch.nn.Module):
         self,
         input_features: torch.FloatTensor,
     ):
-        audio_embeds = self.model.get_audio_features(input_features)
+        # TODO: remove on next Transformers pin bump.
+        if hasattr(self.model, "get_audio_embeds"):
+            audio_embeds = self.model.get_audio_embeds(input_features)
+        else:
+            audio_embeds = self.model.get_audio_features(input_features)
         return audio_embeds.unsqueeze(0)
 
 
