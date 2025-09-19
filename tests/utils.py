@@ -100,10 +100,6 @@ def check_multimodal_output_quality(
         processor,
         tokenizer,
         conversation,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
     )
     inputs = {k: v.to(model.device) if hasattr(v, "to") else v for k, v in inputs.items()}
     generated_tokens = generated_tokens.to(model.device)

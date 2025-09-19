@@ -1364,10 +1364,6 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
             processor,
             tokenizer,
             input_conversation,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
         )
 
         self.stats.on_token_encode_end()
