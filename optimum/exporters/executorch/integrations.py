@@ -20,6 +20,7 @@ from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
+    AutoConfig,
     AutoProcessor,
     PreTrainedModel,
     StaticCache,
@@ -88,8 +89,9 @@ class AudioExportableModule(torch.nn.Module):
         # 1. Get export inputs
         model_id = self.model.config.name_or_path
         processor = AutoProcessor.from_pretrained(model_id)
+        config = AutoConfig.from_pretrained(model_id)
 
-        if model_id.startswith("ibm-granite/granite-speech-3.3"):
+        if config.model_type == "granite_speech":
             import torchaudio
             from huggingface_hub import hf_hub_download
 
