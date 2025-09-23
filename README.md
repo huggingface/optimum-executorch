@@ -119,24 +119,20 @@ print(generated_text)
 #### Step 3: Run inference on-device
 To perform on-device inference, you can use ExecuTorch’s sample runner or the example iOS/Android applications. For detailed instructions, refer to the [ExecuTorch Sample Runner guide](https://github.com/pytorch/executorch/blob/main/examples/models/qwen3/README.md#example-run).
 
-## ⚙️ Supported Optimizations
+## ⚙️ Optimizations
 
 ### Custom Operators
-Supported using [**custom SDPA**](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) with Hugging Face Transformers, boosting performance by **3x** compared to default SDPA, based on tests with `HuggingFaceTB/SmolLM2-135M`.
-
-Supported using **custom KV cache** that performs in-place cache update, boosting performance by **2.5x** compared to default static KV cache, based on tests with `HuggingFaceTB/SmolLM2-135M`.
+Optimum transformer models utilize:
+- A [**custom SDPA**](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) for CPU based on Flash Attention, boosting performance by around **3x** compared to default SDPA.
+- A **custom KV cache** that uses a custom op for efficient in-place cache update on CPU, boosting performance by **2.5x** compared to default static KV cache.
 
 ### Backends Delegation
-Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) with [custom SDPA](https://github.com/pytorch/executorch/blob/a4322c71c3a97e79e0454a8223db214b010f1193/extension/llm/README.md?plain=1#L40) for efficient execution on mobile CPUs.
+Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) for CPU and [CoreML Backend](https://docs.pytorch.org/executorch/stable/backends-coreml.html) for GPU on Apple devices.
 
 For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
 
 ### Quantization
-We currently support Post-Training Quantization (PTQ) for linear layers using int8 dynamic per-token activations and int4 grouped per-channel weights (aka `8da4w`), as well as int8 channelwise embedding quantization.
-
-### Batch Prefill
-
-Batch prefill is supported now, improving the time to first generated token 20x faster by allowing prompt tokens to be processed simultaneously.
+We currently support Post-Training Quantization (PTQ) for linear layers and embeddings using the [TorchAO](https://github.com/pytorch/ao) quantization library.
 
 
 ## 🤗 Supported Models
@@ -145,17 +141,12 @@ The following models have been successfully tested with Executorch. For details 
 
 ### Text Models
 We currently support a wide range of popular transformer models, including encoder-only, decoder-only, and encoder-decoder architectures, as well as models specialized for various tasks like text generation, translation, summarization, and mask prediction, etc. These models reflect the current trends and popularity across the Hugging Face community:
-#### Encoder-only models
-- [Albert](https://huggingface.co/albert/albert-base-v2): `albert-base-v2` and its variants
-- [Bert](https://huggingface.co/google-bert/bert-base-uncased): Google's `bert-base-uncased` and its variants
-- [Distilbert](https://huggingface.co/distilbert/distilbert-base-uncased): `distilbert-base-uncased` and its variants
-- [Eurobert](https://huggingface.co/EuroBERT/EuroBERT-210m): `EuroBERT-210m` and its variants
-- [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
-#### Decoder-only models
+#### LLMs (Large Language Models)
+##### Decoder-only
 - [Codegen](https://huggingface.co/Salesforce/codegen-350M-mono): Salesforce's `codegen-350M-mono` and its variants
 - [Gemma](https://huggingface.co/google/gemma-2b): `Gemma-2b` and its variants
 - [Gemma2](https://huggingface.co/google/gemma-2-2b): `Gemma-2-2b` and its variants
-- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants (270M, 1B)
+- [Gemma3](https://huggingface.co/google/gemma-3-1b-it): `Gemma-3-1b` and its variants (💡[**NEW**] 270M, 1B)
 - [Glm](https://huggingface.co/THUDM/glm-edge-1.5b-chat): `glm-edge-1.5b` and its variants
 - [Gpt2](https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m): `gpt-sw3-126m` and its variants
 - [GptJ](https://huggingface.co/Milos/slovak-gpt-j-405M): `gpt-j-405M` and its variants
@@ -173,11 +164,16 @@ We currently support a wide range of popular transformer models, including encod
 - [Smollm](https://huggingface.co/HuggingFaceTB/SmolLM2-135M): 🤗 `SmolLM2-135M` and its variants
 - [Smollm3](https://huggingface.co/HuggingFaceTB/SmolLM3-3B): 🤗 `SmolLM3-3B` and its variants
 - [Starcoder2](https://huggingface.co/bigcode/starcoder2-3b): `starcoder2-3b` and its variants
-#### Encoder-decoder models
+##### Encoder-decoder (Seq2Seq)
 - [T5](https://huggingface.co/google-t5/t5-small): Google's `T5` and its variants
+#### NLU (Natural Language Understanding)
+- [Albert](https://huggingface.co/albert/albert-base-v2): `albert-base-v2` and its variants
+- [Bert](https://huggingface.co/google-bert/bert-base-uncased): Google's `bert-base-uncased` and its variants
+- [Distilbert](https://huggingface.co/distilbert/distilbert-base-uncased): `distilbert-base-uncased` and its variants
+- [Eurobert](https://huggingface.co/EuroBERT/EuroBERT-210m): `EuroBERT-210m` and its variants
+- [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
 
 ### Vision Models
-#### Encoder-only models
 - [Cvt](https://huggingface.co/microsoft/cvt-13): Convolutional Vision Transformer
 - [Deit](https://huggingface.co/facebook/deit-base-distilled-patch16-224): Distilled Data-efficient Image Transformer (base-sized)
 - [Dit](https://huggingface.co/microsoft/dit-base-finetuned-rvlcdip): Document Image Transformer (base-sized)
@@ -189,14 +185,17 @@ We currently support a wide range of popular transformer models, including encod
 - [Swin](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224): Swin Transformer (tiny-sized)
 
 ### Audio Models
-#### Encoder-decoder models
+#### ASR (Automatic Speech Recognition)
 - [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
+
+#### Speech text-to-text (Automatic Speech Recognition)
+- 💡[**NEW**] [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507): Mistral's newest speech/text-to-text model
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
 
 ## 🚀 Benchmarks on Mobile Devices
 
-The following benchmarks show **decode performance** (tokens/sec) across Android and iOS devices for popular LLMs with compact size.
+The following benchmarks show example **decode performance** (tokens/sec) across Android and iOS devices for popular edge LLMs.
 
 | Model | Samsung Galaxy S22 5G<br/>(Android 13) | Samsung Galaxy S22 Ultra 5G<br/>(Android 14) | iPhone 15<br/>(iOS 18.0) | iPhone 15 Plus<br/>(iOS 17.4.1) | iPhone 15 Pro<br/>(iOS 18.4.1) |
 |-------|:---:|:---:|:---:|:---:|:---:|

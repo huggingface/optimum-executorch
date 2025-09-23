@@ -59,7 +59,8 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
     use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
-    max_length = kwargs.get("max_length", 2048)
+    max_seq_len = kwargs.get("max_seq_len", None)
+    max_length = max_seq_len if max_seq_len is not None else kwargs.get("max_length", 2048)
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
 
     if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -125,8 +126,9 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
                 max_length,
             )
 
+    # Must disable gradient when exporting a model with a prequantized checkpoint,
+    # e.g. "pytorch/Phi-4-mini-instruct-8da4w".
     for param in eager_model.parameters():
-        # Must disable gradient for quantized checkpoint
         if isinstance(param, torchao.utils.TorchAOBaseTensor):
             param.requires_grad = False
 
@@ -134,4 +136,6 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     qembedding_config = kwargs.get("qembedding", None)
     quantize_model_(eager_model, qlinear_config=qlinear_config, qembedding_config=qembedding_config)
 
-    return CausalLMExportableModule(eager_model, use_custom_kv_cache, use_custom_sdpa, disable_dynamic_shapes)
+    return CausalLMExportableModule(
+        eager_model, max_length, use_custom_kv_cache, use_custom_sdpa, disable_dynamic_shapes
+    )

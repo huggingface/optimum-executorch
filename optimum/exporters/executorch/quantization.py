@@ -19,7 +19,11 @@ import torch
 
 
 def quantize_model_(
-    eager_model: torch.nn.Module, qlinear_config: Optional[str], qembedding_config: Optional[str]
+    eager_model: torch.nn.Module,
+    qlinear_config: Optional[str] = None,
+    qlinear_group_size: Optional[int] = 32,
+    qembedding_config: Optional[str] = None,
+    qembedding_group_size: Optional[int] = 0,
 ) -> torch.nn.Module:
     if not (qlinear_config or qembedding_config):
         return
@@ -33,15 +37,25 @@ def quantize_model_(
     from torchao.utils import unwrap_tensor_subclass
 
     if qembedding_config:
+        if qlinear_config == "8w":
+            assert (
+                qembedding_group_size == 0
+            ), "8-bit embedding quantization only supports per-channel at the moment, please use qembedding_group_size = 0."
+        if qembedding_group_size == 0:
+            embedding_weight_granularity = PerAxis(0)
+        else:
+            assert qembedding_group_size % 2 == 0, "Embedding quantization group size must be a multiple of 2."
+            embedding_weight_granularity = PerGroup(qembedding_group_size)
+
         logging.info("Quantizing embedding layers.")
         embedding_config = {
             "4w": IntxWeightOnlyConfig(
                 weight_dtype=torch.int4,
-                granularity=PerGroup(32),
+                granularity=embedding_weight_granularity,
             ),
             "8w": IntxWeightOnlyConfig(
                 weight_dtype=torch.int8,
-                granularity=PerAxis(0),
+                granularity=embedding_weight_granularity,
             ),
         }[qembedding_config]
 
@@ -53,19 +67,25 @@ def quantize_model_(
         )
 
     if qlinear_config:
+        if qlinear_group_size == 0:
+            linear_weight_granularity = PerAxis(0)
+        else:
+            assert qlinear_group_size % 2 == 0, "Linear quantization group size must be a multiple of 2."
+            linear_weight_granularity = PerGroup(qlinear_group_size)
+
         logging.info("Quantizing linear layers.")
         linear_config = {
             "8da4w": Int8DynamicActivationIntxWeightConfig(
                 weight_dtype=torch.int4,
-                weight_granularity=PerGroup(32),
+                weight_granularity=linear_weight_granularity,
             ),
             "4w": IntxWeightOnlyConfig(
                 weight_dtype=torch.int4,
-                granularity=PerGroup(32),
+                granularity=linear_weight_granularity,
             ),
             "8w": IntxWeightOnlyConfig(
                 weight_dtype=torch.int8,
-                granularity=PerAxis(0),
+                granularity=linear_weight_granularity,
             ),
         }[qlinear_config]
         quantize_(

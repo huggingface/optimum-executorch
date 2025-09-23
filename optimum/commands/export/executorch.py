@@ -79,12 +79,31 @@ def parse_args_executorch(parser):
         choices=["8da4w", "4w", "8w"],
         required=False,
         help=(
+            "Quantization config for decoder linear layers.\n\n"
+            "Options:\n"
+            "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
+            "  4w    - 4-bit weight only\n"
+            "  8w    - 8-bit weight only"
+        ),
+    )
+    required_group.add_argument(
+        "--qlinear_group_size", type=int, required=False, help="Group size for decoder linear quantization."
+    )
+    required_group.add_argument(
+        "--qlinear_encoder",
+        type=str,
+        choices=["8da4w", "4w", "8w"],
+        required=False,
+        help=(
             "Quantization config for linear layers.\n\n"
             "Options:\n"
-            "  8da4w - 8-bit dynamic activation, 4-bit weight with group_size = 32\n"
-            "  4w    - 4-bit weight only, per group with group_size = 32\n"
-            "  8w    - 8-bit weight only, per channel"
+            "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
+            "  4w    - 4-bit weight only\n"
+            "  8w    - 8-bit weight only"
         ),
+    )
+    required_group.add_argument(
+        "--qlinear_encoder_group_size", type=int, required=False, help="Group size for encoder linear quantization."
     )
     required_group.add_argument(
         "--qembedding",
@@ -94,9 +113,18 @@ def parse_args_executorch(parser):
         help=(
             "Quantization config for embedding layer.\n\n"
             "Options:\n"
-            "  4w    - 4-bit weight only, per group with group_size = 32\n"
-            "  8w    - 8-bit weight only, per channel"
+            "  4w    - 4-bit weight only\n"
+            "  8w    - 8-bit weight only"
         ),
+    )
+    required_group.add_argument(
+        "--qembedding_group_size", type=int, required=False, help="Group size for embedding quantization."
+    )
+    required_group.add_argument(
+        "--max_seq_len",
+        type=int,
+        required=False,
+        help="Maximum sequence length for the model. If not specified, uses the model's default max_position_embeddings.",
     )
 
 
@@ -121,6 +149,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
+        if self.args.max_seq_len:
+            kwargs["max_seq_len"] = self.args.max_seq_len
 
         main_export(
             model_name_or_path=self.args.model,

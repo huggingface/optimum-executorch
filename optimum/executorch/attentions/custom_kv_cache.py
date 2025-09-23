@@ -37,7 +37,6 @@ class ETCustomStaticCache(StaticCache):
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ):
         super().__init__(
             config=config,
@@ -45,14 +44,16 @@ class ETCustomStaticCache(StaticCache):
             max_cache_len=max_cache_len,
             device=device,
             dtype=dtype,
-            layer_device_map=layer_device_map,
+        )
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.early_initialization(
+            batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        # make sure layer_device_map is none
-        assert layer_device_map is None
         assert device is None or device == "cpu", "Device must be None or 'cpu'"
 
-        # Create a list of CustomKVCache instances, one per layer
+        # Create a list of CustomKVCache instances derived from each layer of the original Transformers cache, one per layer.
         self.kv_cache = torch.nn.ModuleList()
         for layer in self.layers:
             layer_cache = CustomKVCache(
@@ -191,7 +192,6 @@ class ETCustomHybridCache(HybridCache):
         max_cache_len: Optional[int] = None,
         device: Union[torch.device, str, None] = None,
         dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ):
         super().__init__(
             config=config,
@@ -199,10 +199,13 @@ class ETCustomHybridCache(HybridCache):
             max_cache_len=max_cache_len,
             device=device,
             dtype=dtype,
-            layer_device_map=layer_device_map,
+        )
+        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.early_initialization(
+            batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert layer_device_map is None
         assert device is None or device == "cpu", "Device must be None or 'cpu'"
 
         self.cache_position = None
@@ -361,8 +364,6 @@ def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dt
 
     # Check if module has cache (TorchExportableModuleWithHybridCache)
     elif hasattr(module, "cache"):
-        assert isinstance(module.cache, HybridCache), f"Expected HybridCache, got {type(module.cache)}"
-
         # Replace with ETCustomHybridCache
         if getattr(module, "replace_cache", None) is not None:
             hybrid_cache = ETCustomHybridCache(
