@@ -17,7 +17,7 @@ def install_torch_nightly_deps():
             "install",
             f"executorch==0.8.0.{EXECUTORCH_NIGHTLY_VERSION}",
             f"torch==2.10.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchvision==0.24.0.{TORCH_NIGHTLY_VERSION}",
+            f"torchvision==0.25.0.{TORCH_NIGHTLY_VERSION}",
             f"torchaudio==2.8.0.{TORCH_NIGHTLY_VERSION}",
             f"torchao==0.14.0.{TORCHAO_NIGHTLY_VERSION}",
             "--extra-index-url",
