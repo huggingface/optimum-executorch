@@ -20,6 +20,7 @@ from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
+    AutoConfig,
     AutoProcessor,
     DynamicCache,
     EncoderDecoderCache,
@@ -96,30 +97,47 @@ class AudioExportableModule(torch.nn.Module):
         # 1. Get export inputs
         model_id = self.model.config.name_or_path
         processor = AutoProcessor.from_pretrained(model_id)
-        sample_conversation_with_audio = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
-                    },
-                ],
-            }
-        ]
-        processed_inputs = apply_chat_template_with_fallback(
-            processor,
-            sample_conversation_with_audio,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
+        config = AutoConfig.from_pretrained(model_id)
+
+        if config.model_type == "granite_speech":
+            import torchaudio
+            from huggingface_hub import hf_hub_download
+
+            audio_path = hf_hub_download(repo_id=model_id, filename="10226_10111_000000.wav")
+            wav, _sampling_rate = torchaudio.load(audio_path, normalize=True)
+            processed_inputs = processor(
+                "",  # No text needed.
+                wav,
+                return_tensors="pt",
+            )
+        else:
+            sample_conversation_with_audio = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "audio",
+                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                        },
+                    ],
+                }
+            ]
+            processed_inputs = apply_chat_template_with_fallback(
+                processor,
+                sample_conversation_with_audio,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
         if "input_features" not in processed_inputs:
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"
             )
         export_inputs = processed_inputs["input_features"]
+        # Make sure the export inputs has a batch size > 1 so that it doesn't 0/1 specialize.
+        if export_inputs.shape[0] == 1:
+            export_inputs = export_inputs.repeat(2, 1, 1)
 
         # 2. Get export dynamic shapes
         # For certain models like Voxtral, each 30 seconds represent one batch. So theoretically this caps
@@ -137,7 +155,11 @@ class AudioExportableModule(torch.nn.Module):
         self,
         input_features: torch.FloatTensor,
     ):
-        audio_embeds = self.model.get_audio_embeds(input_features)
+        # TODO: remove on next Transformers pin bump.
+        if hasattr(self.model, "get_audio_embeds"):
+            audio_embeds = self.model.get_audio_embeds(input_features)
+        else:
+            audio_embeds = self.model.get_audio_features(input_features)
         return audio_embeds.unsqueeze(0)
 
 
@@ -172,8 +194,6 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     ):
         super().__init__()
 
-        if modality not in encoder_name:
-            raise ValueError(f'encoder_name "{encoder_name}" does not match specified modality "{modality}".')
         if not hasattr(model, encoder_name):
             raise ValueError(f'Model does not contain encoder "{encoder_name}".')
 
