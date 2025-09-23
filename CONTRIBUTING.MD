@@ -74,4 +74,4 @@ To address this issue, we will need to upstream changes to the model's modeling 
 After doing this, it's a good idea to add a torch.export test to guard against future regressions (which tend to happen frequently since Transformers moves fast).
 [Here](https://github.com/huggingface/transformers/blob/87f38dbfcec48027d4bf2ea7ec8b8eecd5a7bc85/tests/models/smollm3/test_modeling_smollm3.py#L175) is an example.
 
-Once you have a PR up for adding the test to the repo, feel free to homeapge README to include the new model.
+Once you have a PR up for adding the test to the repo, feel free to edit the homepage README to include the new model.
