@@ -153,7 +153,6 @@ We currently support a wide range of popular transformer models, including encod
 - [GptNeoX](https://huggingface.co/EleutherAI/pythia-14m): EleutherAI's `pythia-14m` and its variants
 - [GptNeoXJapanese](https://huggingface.co/abeja/gpt-neox-japanese-2.7b): `gpt-neox-japanese-2.7b` and its variants
 - [Granite](https://huggingface.co/ibm-granite/granite-3.3-2b-instruct): `granite-3.3-2b-instruct` and its variants
-- 💡[NEW] [Granite Speech](https://huggingface.co/ibm-granite/granite-speech-3.3-2b): `granite-speech-3.3-2b` and its variants
 - [Llama](https://huggingface.co/meta-llama/Llama-3.2-1B): `Llama-3.2-1B` and its variants
 - [Mistral](https://huggingface.co/ministral/Ministral-3b-instruct): `Ministral-3b-instruct` and its variants
 - [Qwen2](https://huggingface.co/Qwen/Qwen2.5-0.5B): `Qwen2.5-0.5B` and its variants
@@ -189,6 +188,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
 
 #### Speech text-to-text (Automatic Speech Recognition)
+- 💡[**NEW**] [Granite Speech](https://huggingface.co/ibm-granite/granite-speech-3.3-2b): `granite-speech-3.3-2b` and its variants
 - 💡[**NEW**] [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507): Mistral's newest speech/text-to-text model
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*
