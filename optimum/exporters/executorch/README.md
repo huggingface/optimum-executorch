@@ -1,7 +1,7 @@
 # Exporting Transformers Models to ExecuTorch
 
 Optimum ExecuTorch enables exporting models from Transformers to ExecuTorch.
-The models supported by Optimum ExecuTorch are listed [here](../../../README.md?tab=readme-ov-file#-supported-models).
+The models supported by Optimum ExecuTorch are listed [here](../../../README.md#-supported-models).
 
 ### LLMs (Large Language Models)
 LLMs can be exported using the `text-generation` task like so:
