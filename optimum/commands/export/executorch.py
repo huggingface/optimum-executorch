@@ -147,8 +147,16 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["disable_dynamic_shapes"] = self.args.disable_dynamic_shapes
         if self.args.qlinear:
             kwargs["qlinear"] = self.args.qlinear
+        if self.args.qlinear_group_size:
+            kwargs["qlinear_group_size"] = self.args.qlinear
+        if self.args.qlinear_encoder:
+            kwargs["qlinear_encoder"] = self.args.qlinear
+        if self.args.qlinear_encoder_group_size:
+            kwargs["qlinear_encoder_group_size"] = self.args.qlinear
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
+        if self.args.qembedding_group_size:
+            kwargs["qembedding_group_size"] = self.args.qembedding
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
 
