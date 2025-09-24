@@ -88,9 +88,52 @@ def quantize_model_(
                 granularity=linear_weight_granularity,
             ),
         }[qlinear_config]
-        quantize_(
-            eager_model,
-            linear_config,
-        )
+
+        if qlinear_group_size > 0:
+            # First, quantize layers that are compatible with group quantization
+            def group_quantizable_filter(module, fqn):
+                if isinstance(module, torch.nn.Linear):
+                    # Check if hidden dimension is divisible by group size
+                    # For Linear layers, weight shape is [out_features, in_features]
+                    # Group quantization typically applies to the in_features dimension (dim=1)
+                    return module.weight.shape[1] % qlinear_group_size == 0
+                return False
+
+            quantize_(
+                eager_model,
+                linear_config,
+                filter_fn=group_quantizable_filter,
+            )
+
+            # Then, quantize incompatible layers with 8w per-channel quantization
+            per_channel_config = IntxWeightOnlyConfig(
+                weight_dtype=torch.int8,
+                granularity=PerAxis(0),
+            )
+
+            def per_channel_filter(module, fqn):
+                if isinstance(module, torch.nn.Linear):
+                    # Only quantize layers that are NOT compatible with group quantization
+                    # and haven't been quantized yet
+                    if hasattr(module.weight, "tensor_impl"):
+                        # Already quantized, skip
+                        return False
+                    return module.weight.shape[1] % qlinear_group_size != 0
+                return False
+
+            logging.info(
+                f"Applying per-channel quantization to linear layers incompatible with group size {qlinear_group_size}."
+            )
+            quantize_(
+                eager_model,
+                per_channel_config,
+                filter_fn=per_channel_filter,
+            )
+        else:
+            # qlinear_group_size == 0, use per-channel for all
+            quantize_(
+                eager_model,
+                linear_config,
+            )
 
     unwrap_tensor_subclass(eager_model)
