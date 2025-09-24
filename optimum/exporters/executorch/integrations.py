@@ -20,6 +20,7 @@ from packaging.version import parse
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
 from transformers import (
+    AutoConfig,
     AutoProcessor,
     PreTrainedModel,
     StaticCache,
@@ -88,30 +89,47 @@ class AudioExportableModule(torch.nn.Module):
         # 1. Get export inputs
         model_id = self.model.config.name_or_path
         processor = AutoProcessor.from_pretrained(model_id)
-        sample_conversation_with_audio = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "audio",
-                        "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
-                    },
-                ],
-            }
-        ]
-        processed_inputs = apply_chat_template_with_fallback(
-            processor,
-            sample_conversation_with_audio,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
+        config = AutoConfig.from_pretrained(model_id)
+
+        if config.model_type == "granite_speech":
+            import torchaudio
+            from huggingface_hub import hf_hub_download
+
+            audio_path = hf_hub_download(repo_id=model_id, filename="10226_10111_000000.wav")
+            wav, _sampling_rate = torchaudio.load(audio_path, normalize=True)
+            processed_inputs = processor(
+                "",  # No text needed.
+                wav,
+                return_tensors="pt",
+            )
+        else:
+            sample_conversation_with_audio = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "audio",
+                            "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/dude_where_is_my_car.wav",
+                        },
+                    ],
+                }
+            ]
+            processed_inputs = apply_chat_template_with_fallback(
+                processor,
+                sample_conversation_with_audio,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
         if "input_features" not in processed_inputs:
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"
             )
         export_inputs = processed_inputs["input_features"]
+        # Make sure the export inputs has a batch size > 1 so that it doesn't 0/1 specialize.
+        if export_inputs.shape[0] == 1:
+            export_inputs = export_inputs.repeat(2, 1, 1)
 
         # 2. Get export dynamic shapes
         # For certain models like Voxtral, each 30 seconds represent one batch. So theoretically this caps
@@ -129,7 +147,11 @@ class AudioExportableModule(torch.nn.Module):
         self,
         input_features: torch.FloatTensor,
     ):
-        audio_embeds = self.model.get_audio_embeds(input_features)
+        # TODO: remove on next Transformers pin bump.
+        if hasattr(self.model, "get_audio_embeds"):
+            audio_embeds = self.model.get_audio_embeds(input_features)
+        else:
+            audio_embeds = self.model.get_audio_features(input_features)
         return audio_embeds.unsqueeze(0)
 
 
@@ -156,25 +178,20 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self,
         model: torch.nn.Module,
         modality: str,
-        decoder_name: str,
         encoder_name: str,
+        max_seq_len: int,
         processor_config: dict = None,
         use_custom_kv_cache: bool = False,
         use_custom_sdpa: bool = False,
     ):
         super().__init__()
 
-        if modality not in encoder_name:
-            raise ValueError(f'encoder_name "{encoder_name}" does not match specified modality "{modality}".')
-        if not hasattr(model, decoder_name):
-            raise ValueError(f'Model does not contain decoder "{decoder_name}".')
         if not hasattr(model, encoder_name):
             raise ValueError(f'Model does not contain encoder "{encoder_name}".')
 
         self.model = model
         self.config = model.config
         self.modality = modality
-        self.decoder_name = decoder_name
         self.encoder_name = encoder_name
         self.processor_config = processor_config
         self.use_custom_kv_cache = use_custom_kv_cache
@@ -185,7 +202,11 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         elif modality == "vision":
             additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "image_token_id")
         self.metadata = save_config_to_constant_methods(
-            model.config.text_config, model.generation_config, processor_config, **additional_metadata_kwargs
+            config=model.config.text_config,
+            generation_config=model.generation_config,
+            processor_config=processor_config,
+            get_max_seq_len=max_seq_len,
+            **additional_metadata_kwargs,
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
@@ -311,7 +332,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             exported_program = torch.export.export(
                 mutated_gm,
                 args=(),
-                kwargs={"cache_position": cache_position, "inputs_embeds": inputs_embeds},
+                # For the ET runner, it's important to have cache position as the 2nd arg.
+                kwargs={"inputs_embeds": inputs_embeds, "cache_position": cache_position},
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
@@ -373,14 +395,18 @@ class CausalLMExportableModule(torch.nn.Module):
     This module ensures that the exported model is compatible with ExecuTorch.
     """
 
-    def __init__(self, model, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False):
+    def __init__(
+        self, model, max_seq_len=2048, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False
+    ):
         super().__init__()
         self.model = model
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         self.disable_dynamic_shapes = disable_dynamic_shapes
-        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(
+            model.config, model.generation_config, get_max_seq_len=max_seq_len
+        )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
     def _prepare_export_inputs(self):
@@ -450,8 +476,6 @@ class CausalLMExportableModule(torch.nn.Module):
 
         exportable_module = TorchExportableModuleForDecoderOnlyLM(
             self.model,
-            max_batch_size=1,
-            max_cache_len=self.metadata.get("get_max_seq_len"),
         )
         self._register_custom_attention(exportable_module)
 
@@ -468,7 +492,9 @@ class CausalLMExportableModule(torch.nn.Module):
             )
 
         with torch.no_grad():
-            exported_program = exportable_module.export(input_ids, cache_position, dynamic_shapes, strict)
+            exported_program = exportable_module.export(
+                input_ids=input_ids, cache_position=cache_position, dynamic_shapes=dynamic_shapes, strict=strict
+            )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
             # e.g. output of update_cache is transposed and
@@ -480,8 +506,11 @@ class CausalLMExportableModule(torch.nn.Module):
             mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
             exported_program = torch.export.export(
                 mutated_gm,
-                args=(input_ids, cache_position),
-                kwargs={},
+                args=(),
+                kwargs={
+                    "input_ids": input_ids,
+                    "cache_position": cache_position,
+                },
                 dynamic_shapes=dynamic_shapes,
                 strict=strict,
             )

@@ -120,6 +120,12 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qembedding_group_size", type=int, required=False, help="Group size for embedding quantization."
     )
+    required_group.add_argument(
+        "--max_seq_len",
+        type=int,
+        required=False,
+        help="Maximum sequence length for the model. If not specified, uses the model's default max_position_embeddings.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -143,6 +149,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
+        if self.args.max_seq_len:
+            kwargs["max_seq_len"] = self.args.max_seq_len
 
         main_export(
             model_name_or_path=self.args.model,
