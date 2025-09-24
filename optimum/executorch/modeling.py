@@ -23,17 +23,10 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
 
 import torch
-
-from executorch.extension.pybindings.portable_lib import (
-    _load_for_executorch,
-    ExecuTorchModule,
-)
-from executorch.kernels import quantized  # noqa
 from huggingface_hub import hf_hub_download
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
-    add_start_docstrings,
     AutoModel,
     AutoModelForCausalLM,
     AutoModelForImageClassification,
@@ -41,10 +34,17 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
     PreTrainedTokenizer,
+    add_start_docstrings,
 )
 from transformers.configuration_utils import PretrainedConfig
 from transformers.processing_utils import ProcessorMixin
 from transformers.utils import is_offline_mode
+
+from executorch.extension.pybindings.portable_lib import (
+    ExecuTorchModule,
+    _load_for_executorch,
+)
+from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
 from ..exporters.executorch import main_export
@@ -129,9 +129,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             try:
                 if hasattr(self._temp_dir, "cleanup"):
                     # It's a TemporaryDirectory object
-                    logging.info(
-                        f"Cleaning up temporary directory: {self._temp_dir.name}"
-                    )
+                    logging.info(f"Cleaning up temporary directory: {self._temp_dir.name}")
                     self._temp_dir.cleanup()
                     logging.info("Temporary directory cleanup completed")
                 elif isinstance(self._temp_dir, (str, Path)):
@@ -181,9 +179,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
 
         _PTE_SUFFIX = ".pte"
         if file_name and not file_name.endswith(_PTE_SUFFIX):
-            raise ValueError(
-                f"Invalid file name: {file_name}. Expected a '{_PTE_SUFFIX}' file."
-            )
+            raise ValueError(f"Invalid file name: {file_name}. Expected a '{_PTE_SUFFIX}' file.")
 
         default_file_name = file_name or "model.pte"
 
@@ -197,13 +193,9 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         )
 
         if len(pte_files) == 0:
-            raise FileNotFoundError(
-                f"Could not find any ExecuTorch model file in {model_id}"
-            )
+            raise FileNotFoundError(f"Could not find any ExecuTorch model file in {model_id}")
         if len(pte_files) == 1 and file_name and file_name != pte_files[0].name:
-            raise FileNotFoundError(
-                f"Trying to load {file_name} but only found {pte_files[0].name}"
-            )
+            raise FileNotFoundError(f"Trying to load {file_name} but only found {pte_files[0].name}")
 
         file_name = pte_files[0].name
         subfolder = pte_files[0].parent
@@ -287,11 +279,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         **kwargs,
     ) -> Dict[str, "ExecuTorchModule"]:
         task = kwargs.pop("task", None)
-        inferred_task = (
-            TasksManager.infer_task_from_model(cls.auto_model_class)
-            if not task
-            else task
-        )
+        inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class) if not task else task
         logging.info(f"Inferred task from model class: {inferred_task}")
 
         save_dir = TemporaryDirectory(prefix="executorch_export_")
@@ -316,11 +304,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
 
         models = {}
         for name, _ in executorch_progs.items():
-            models.update(
-                cls._from_pretrained(
-                    save_dir_path, file_name=f"{name}.pte", config=config
-                )
-            )
+            models.update(cls._from_pretrained(save_dir_path, file_name=f"{name}.pte", config=config))
 
         return models, save_dir
 
@@ -360,9 +344,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
             if local_files_only and not os.path.isdir(model_id):
                 object_id = model_id.replace("/", "--")
                 cached_model_dir = os.path.join(cache_dir, f"models--{object_id}")
-                refs_file = os.path.join(
-                    os.path.join(cached_model_dir, "refs"), revision or "main"
-                )
+                refs_file = os.path.join(os.path.join(cached_model_dir, "refs"), revision or "main")
                 with open(refs_file) as f:
                     _revision = f.read()
                 model_dir = os.path.join(cached_model_dir, "snapshots", _revision)
@@ -479,36 +461,28 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
     ):
         super().__init__(models=models, config=config)
         if not hasattr(self, "encoder"):
-            raise AttributeError(
-                "Expected attribute 'encoder' not found in the instance."
-            )
+            raise AttributeError("Expected attribute 'encoder' not found in the instance.")
         if not hasattr(self, "text_decoder"):
-            raise AttributeError(
-                "Expected attribute 'text_decoder' not found in the instance."
-            )
-        metadata = self.text_decoder.method_names()
+            raise AttributeError("Expected attribute 'text_decoder' not found in the instance.")
+        metadata = self.decoder.method_names()
         if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.text_decoder.run_method("use_kv_cache")[0]
+            self.use_kv_cache = self.decoder.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
-            self.max_cache_size = self.text_decoder.run_method("get_max_seq_len")[0]
+            self.max_cache_size = self.decoder.run_method("get_max_seq_len")[0]
         if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.text_decoder.run_method("get_max_batch_size")[0]
+            self.max_batch_size = self.decoder.run_method("get_max_batch_size")[0]
         if "get_dtype" in metadata:
-            self.dtype = self.text_decoder.run_method("get_dtype")[0]
+            self.dtype = self.decoder.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
-            self.bos_token_id = self.text_decoder.run_method("get_bos_id")[0]
+            self.bos_token_id = self.decoder.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
-            self.eos_token_id = self.text_decoder.run_method("get_eos_id")[0]
+            self.eos_token_id = self.decoder.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
-            self.vocab_size = self.text_decoder.run_method("get_vocab_size")[0]
+            self.vocab_size = self.decoder.run_method("get_vocab_size")[0]
         if "max_hidden_seq_length" in metadata:
-            self.max_hidden_seq_length = self.text_decoder.run_method(
-                "max_hidden_seq_length"
-            )[0]
+            self.max_hidden_seq_length = self.decoder.run_method("max_hidden_seq_length")[0]
         if "decoder_start_token_id" in metadata:
-            self.decoder_start_token_id = self.text_decoder.run_method(
-                "decoder_start_token_id"
-            )[0]
+            self.decoder_start_token_id = self.decoder.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
@@ -525,9 +499,7 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
             self.stats.on_prompt_eval_end()
 
         result = (
-            self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[
-                0
-            ],
+            self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0],
             encoder_outputs,
         )
         self.stats.on_model_execution_end()
@@ -573,12 +545,8 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
             max_seq_len = self.max_cache_size
 
         if not hasattr(self, "decoder_start_token_id"):
-            raise AttributeError(
-                "'decoder_start_token_id' is missing in the metadata of the PTE."
-            )
-        decoder_input_ids = torch.tensor(
-            [[self.decoder_start_token_id]], dtype=torch.long
-        )
+            raise AttributeError("'decoder_start_token_id' is missing in the metadata of the PTE.")
+        decoder_input_ids = torch.tensor([[self.decoder_start_token_id]], dtype=torch.long)
         encoder_input_ids = input_ids
         encoder_outputs = None
         generated_ids = [0]
@@ -601,9 +569,7 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
             # Get next token
             next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
             generated_ids.append(next_token)
-            self.stats.set_num_generated_tokens(
-                len(generated_ids) - 1
-            )  # Don't count decoder_start_token
+            self.stats.set_num_generated_tokens(len(generated_ids) - 1)  # Don't count decoder_start_token
 
             # Update input for next iteration
             decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long)
@@ -698,9 +664,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
     ):
         super().__init__(models, config)
         if not hasattr(self, "model"):
-            raise AttributeError(
-                "Expected attribute 'model' not found in the instance."
-            )
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
         logging.debug(f"Load all static methods: {metadata}")
         if "use_kv_cache" in metadata:
@@ -720,9 +684,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         if "get_vocab_size" in metadata:
             self.vocab_size = self.model.run_method("get_vocab_size")[0]
         if "use_sdpa_with_kv_cache" in metadata:
-            self.use_sdpa_with_kv_cache = self.model.run_method(
-                "use_sdpa_with_kv_cache"
-            )[0]
+            self.use_sdpa_with_kv_cache = self.model.run_method("use_sdpa_with_kv_cache")[0]
 
     def forward(
         self,
@@ -744,14 +706,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         try:
             logits = self.model.forward((input_ids, cache_position))[0]
         except Exception as e:
-            shapes = {
-                name: val.shape
-                for name, val in locals().items()
-                if hasattr(val, "shape")
-            }
-            print(
-                f"Exception: {e}.\n{self.model.method_meta('forward')}\narg shapes: {shapes}"
-            )
+            shapes = {name: val.shape for name, val in locals().items() if hasattr(val, "shape")}
+            print(f"Exception: {e}.\n{self.model.method_meta('forward')}\narg shapes: {shapes}")
             raise
 
         self.stats.on_model_execution_end()
@@ -802,12 +758,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             # The model is exported with dynamic shapes. Can support parallel prefill.
             self.stats.on_sampling_begin()
             logits = self.forward(
-                input_ids=torch.tensor(
-                    prompt_tokens, dtype=torch.long, device=self.device
-                ).unsqueeze(0),
-                cache_position=torch.arange(
-                    len(prompt_tokens), dtype=torch.long, device=self.device
-                ),
+                input_ids=torch.tensor(prompt_tokens, dtype=torch.long, device=self.device).unsqueeze(0),
+                cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
             )
             self.stats.on_sampling_end()
             next_token = torch.argmax(logits, dim=-1)[0, -1].item()
@@ -817,12 +769,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
             for i, prompt_token in enumerate(prompt_tokens):
                 self.stats.on_sampling_begin()
                 logits = self.forward(
-                    input_ids=torch.tensor(
-                        [prompt_token], dtype=torch.long, device=self.device
-                    ).unsqueeze(0),
-                    cache_position=torch.tensor(
-                        [i], dtype=torch.long, device=self.device
-                    ),
+                    input_ids=torch.tensor([prompt_token], dtype=torch.long, device=self.device).unsqueeze(0),
+                    cache_position=torch.tensor([i], dtype=torch.long, device=self.device),
                 )
                 self.stats.on_sampling_end()
             next_token = torch.argmax(logits, dim=-1).item()
@@ -834,9 +782,7 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         while len(generated_tokens) < max_seq_len:
             self.stats.on_sampling_begin()
             logits = self.forward(
-                input_ids=torch.tensor(
-                    [next_token], dtype=torch.long, device=self.device
-                ).unsqueeze(0),
+                input_ids=torch.tensor([next_token], dtype=torch.long, device=self.device).unsqueeze(0),
                 cache_position=torch.tensor(
                     [pos_base + len(generated_tokens) - 1],
                     dtype=torch.long,
@@ -883,16 +829,11 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
         self.tokenizer = tokenizer
 
         # Sanity check
-        if (
-            self.tokenizer.bos_token_id is not None
-            and self.tokenizer.bos_token_id != self.bos_token_id
-        ):
+        if self.tokenizer.bos_token_id is not None and self.tokenizer.bos_token_id != self.bos_token_id:
             raise ValueError(
                 f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
             )
-        if not verify_eos_tokens_in_pretrained_tokenizer(
-            self.eos_token_ids, self.tokenizer
-        ):
+        if not verify_eos_tokens_in_pretrained_tokenizer(self.eos_token_ids, self.tokenizer):
             raise ValueError(
                 f"The tokenizer's eos_token_id does not match with the model's eos_token_ids={self.eos_token_ids}."
             )
@@ -949,9 +890,7 @@ class ExecuTorchModelForMaskedLM(ExecuTorchModelBase):
     ):
         super().__init__(models, config)
         if not hasattr(self, "model"):
-            raise AttributeError(
-                "Expected attribute 'model' not found in the instance."
-            )
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
         logging.debug(f"Load all static methods: {metadata}")
         if "get_max_seq_len" in metadata:
@@ -1027,9 +966,7 @@ class ExecuTorchModelForImageClassification(ExecuTorchModelBase):
     ):
         super().__init__(models, config)
         if not hasattr(self, "model"):
-            raise AttributeError(
-                "Expected attribute 'model' not found in the instance."
-            )
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
         logging.debug(f"Load all static methods: {metadata}")
 
@@ -1091,37 +1028,27 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         config: "PretrainedConfig",
     ):
         super().__init__(models=models, config=config)
-        if not hasattr(self, "encoder"):
-            raise AttributeError(
-                "Expected attribute 'encoder' not found in the instance."
-            )
-        if not hasattr(self, "text_decoder"):
-            raise AttributeError(
-                "Expected attribute 'decoder' not found in the instance."
-            )
-        metadata = self.decoder.method_names()
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+        metadata = self.model.method_names()
         if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.decoder.run_method("use_kv_cache")[0]
+            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
-            self.max_cache_size = self.decoder.run_method("get_max_seq_len")[0]
+            self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
         if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.decoder.run_method("get_max_batch_size")[0]
+            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
         if "get_dtype" in metadata:
-            self.dtype = self.decoder.run_method("get_dtype")[0]
+            self.dtype = self.model.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
-            self.bos_token_id = self.decoder.run_method("get_bos_id")[0]
+            self.bos_token_id = self.model.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
-            self.eos_token_id = self.decoder.run_method("get_eos_id")[0]
+            self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
-            self.vocab_size = self.decoder.run_method("get_vocab_size")[0]
+            self.vocab_size = self.model.run_method("get_vocab_size")[0]
         if "max_hidden_seq_length" in metadata:
-            self.max_hidden_seq_length = self.decoder.run_method(
-                "max_hidden_seq_length"
-            )[0]
+            self.max_hidden_seq_length = self.model.run_method("max_hidden_seq_length")[0]
         if "decoder_start_token_id" in metadata:
-            self.decoder_start_token_id = self.decoder.run_method(
-                "decoder_start_token_id"
-            )[0]
+            self.decoder_start_token_id = self.model.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
@@ -1133,13 +1060,11 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         is_first_prediction = encoder_outputs is None
         self.stats.on_model_execution_start()
         if is_first_prediction:
-            encoder_outputs = self.encoder.forward((input_features,))[0]
+            encoder_outputs = self.model.run_method("encoder", (input_features,))[0]
             self.stats.on_prompt_eval_end()
 
         result = (
-            self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[
-                0
-            ],
+            self.model.run_method("text_decoder", (decoder_input_ids, encoder_outputs, cache_position))[0],
             encoder_outputs,
         )
         self.stats.on_model_execution_end()
@@ -1182,12 +1107,8 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
             max_seq_len = self.max_cache_size
 
         if not hasattr(self, "decoder_start_token_id"):
-            raise AttributeError(
-                "'decoder_start_token_id' is missing in the metadata of the PTE."
-            )
-        decoder_input_ids = torch.tensor(
-            [[self.decoder_start_token_id]], dtype=torch.long
-        )
+            raise AttributeError("'decoder_start_token_id' is missing in the metadata of the PTE.")
+        decoder_input_ids = torch.tensor([[self.decoder_start_token_id]], dtype=torch.long)
         log_mel = input_features
         encoder_outputs = None
         generated_ids = []
@@ -1198,9 +1119,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
             # Run decoder for next token prediction
             cache_position = torch.tensor([i], dtype=torch.long)
             self.stats.on_sampling_begin()
-            logits, encoder_outputs = self.forward(
-                log_mel, decoder_input_ids, cache_position, encoder_outputs
-            )
+            logits, encoder_outputs = self.forward(log_mel, decoder_input_ids, cache_position, encoder_outputs)
             self.stats.on_sampling_end()
             if not first_token_generated:
                 self.stats.on_first_token()
@@ -1208,9 +1127,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
             # Get next token
             next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
             generated_ids.append(next_token)
-            self.stats.set_num_generated_tokens(
-                len(generated_ids) - 1
-            )  # Don't count decoder_start_token
+            self.stats.set_num_generated_tokens(len(generated_ids) - 1)  # Don't count decoder_start_token
 
             # Update input for next iteration
             decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long)
@@ -1371,9 +1288,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.on_sampling_begin()
         logits = self.forward(
             input_ids=prompt_tokens,
-            cache_position=torch.arange(
-                prompt_tokens.size(1), dtype=torch.long, device=self.device
-            ),
+            cache_position=torch.arange(prompt_tokens.size(1), dtype=torch.long, device=self.device),
             multimodal_features=multimodal_features,
         )
         self.stats.on_sampling_end()
@@ -1388,9 +1303,7 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         while len(generated_tokens) + prompt_tokens.size(1) < max_seq_len:
             self.stats.on_sampling_begin()
             logits = self.forward(
-                input_ids=torch.tensor(
-                    [next_token], dtype=torch.long, device=self.device
-                ).unsqueeze(0),
+                input_ids=torch.tensor([next_token], dtype=torch.long, device=self.device).unsqueeze(0),
                 cache_position=torch.tensor(
                     [pos_base + len(generated_tokens) + prompt_tokens.size(1) - 1],
                     dtype=torch.long,
@@ -1439,16 +1352,11 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.tokenizer = tokenizer
 
         # Sanity check
-        if (
-            self.tokenizer.bos_token_id is not None
-            and self.tokenizer.bos_token_id != self.bos_token_id
-        ):
+        if self.tokenizer.bos_token_id is not None and self.tokenizer.bos_token_id != self.bos_token_id:
             raise ValueError(
                 f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
             )
-        if isinstance(
-            self.tokenizer, PreTrainedTokenizer
-        ) and not verify_eos_tokens_in_pretrained_tokenizer(
+        if isinstance(self.tokenizer, PreTrainedTokenizer) and not verify_eos_tokens_in_pretrained_tokenizer(
             self.eos_token_id, self.tokenizer
         ):
             raise ValueError(
