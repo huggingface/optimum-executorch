@@ -166,7 +166,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     eager_model = AutoModelForPreTraining.from_pretrained(
         model_name_or_path,
         device_map=device,
-        torch_dtype=dtype,
+        dtype=dtype,
         config=config,
         attn_implementation=attn_implementation,
     )
