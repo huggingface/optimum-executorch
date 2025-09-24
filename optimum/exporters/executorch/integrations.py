@@ -65,7 +65,7 @@ class VisionExportableModule(torch.nn.Module):
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'pixel_values' key: {processed_inputs}"
             )
-        export_inputs = processed_inputs["pixel_values"]
+        export_inputs = processed_inputs["pixel_values"].to(dtype=self.model.dtype)
 
         # 2. Get export dynamic shapes
         dynamic_shapes = None  # No batching for now.
@@ -126,7 +126,7 @@ class AudioExportableModule(torch.nn.Module):
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"
             )
-        export_inputs = processed_inputs["input_features"]
+        export_inputs = processed_inputs["input_features"].to(dtype=self.model.dtype)
         # Make sure the export inputs has a batch size > 1 so that it doesn't 0/1 specialize.
         if export_inputs.shape[0] == 1:
             export_inputs = export_inputs.repeat(2, 1, 1)
@@ -242,7 +242,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         # Prepare inputs with dynamic shapes
         seq_length = 3
-        example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=torch.float)
+        example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=self.model.dtype)
         example_cache_position = torch.arange(seq_length, dtype=torch.long)
 
         seq_len_dim = torch.export.Dim("seq_length_dim", max=max_seq_len)
