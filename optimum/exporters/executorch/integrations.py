@@ -77,7 +77,12 @@ class VisionExportableModule(torch.nn.Module):
         input_features: torch.FloatTensor,
     ):
         image_embeds = self.model.get_image_features(input_features)
-        return image_embeds.unsqueeze(0)
+        # Hack, assuming the text decoder will take a 3D tensor (batch_size, seq_len, hidden_size)
+        if "llava" in self.model.config.name_or_path:
+            # Llava returns a list of 2D tensors (seq_len, hidden_size)
+            return image_embeds[0].unsqueeze(0)
+        else:
+            return image_embeds
 
 
 class AudioExportableModule(torch.nn.Module):
