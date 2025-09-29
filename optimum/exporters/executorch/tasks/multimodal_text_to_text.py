@@ -115,7 +115,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         MultiModalTextToTextExportableModule:
             An instance of `MultiModalTextToTextExportableModule` for exporting and lowering to ExecuTorch.
     """
-    device = "cpu"
+    device = kwargs.get("device", "cpu")
     batch_size = 1
     dtype = kwargs.get("dtype", "float32")
     use_custom_sdpa = kwargs.get("use_custom_sdpa", False)
@@ -166,7 +166,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     eager_model = AutoModelForPreTraining.from_pretrained(
         model_name_or_path,
         device_map=device,
-        torch_dtype=dtype,
+        dtype=dtype,
         config=config,
         attn_implementation=attn_implementation,
     )
@@ -177,6 +177,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         cache_config={
             "batch_size": batch_size,
             "max_cache_len": max_length,
+            "device": device,
         },
     )
     decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
