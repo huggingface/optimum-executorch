@@ -242,7 +242,9 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         # Prepare inputs with dynamic shapes
         seq_length = 3
-        example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=self.model.dtype)
+        example_inputs_embeds = torch.zeros(
+            (1, seq_length, self.config.text_config.hidden_size), dtype=self.model.dtype
+        )
         example_cache_position = torch.arange(seq_length, dtype=torch.long)
 
         seq_len_dim = torch.export.Dim("seq_length_dim", max=max_seq_len)

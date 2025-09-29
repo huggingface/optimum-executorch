@@ -51,7 +51,11 @@ class ETCustomStaticCache(StaticCache):
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert device is None or device in ["cpu", "cuda", "mps"], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
+        assert device is None or device in [
+            "cpu",
+            "cuda",
+            "mps",
+        ], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
 
         # Create a list of CustomKVCache instances derived from each layer of the original Transformers cache, one per layer.
         self.kv_cache = torch.nn.ModuleList()
@@ -208,7 +212,11 @@ class ETCustomHybridCache(HybridCache):
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert device is None or device in ["cpu", "cuda", "mps"], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
+        assert device is None or device in [
+            "cpu",
+            "cuda",
+            "mps",
+        ], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
 
         self.cache_position = None
         # Create a list of cache instances, one per layer.
