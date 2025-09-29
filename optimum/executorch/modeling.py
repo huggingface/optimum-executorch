@@ -169,6 +169,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         local_files_only: bool = False,
         cache_dir: str = HUGGINGFACE_HUB_CACHE,
         file_name: Optional[str] = None,
+        device_map="cpu",
         **kwargs,
     ) -> Dict[str, "ExecuTorchModule"]:
         if isinstance(model_id, Path):
