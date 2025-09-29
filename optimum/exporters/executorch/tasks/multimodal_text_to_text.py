@@ -218,19 +218,23 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
     quantize_model_(**quantize_encoder_kwargs)
 
-    # TODO: quantize other parts of the model, e.g. MultimodalProjector?
-
     # Quantize decoder embeddings.
     quantize_decoder_embedding_kwargs = {
-        "eager_model": getattr(eager_model, decoder_name),
+        "eager_model": eager_model,
         "qembedding_config": qembedding_config,
     }
     if qembedding_group_size is not None:
         quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
     quantize_model_(**quantize_decoder_embedding_kwargs)
 
-    # TODO: quantize encoder embeddings.
-
+    # Quantize lm_head
+    if hasattr(eager_model, "lm_head") and qlinear_config is not None:
+        quantize_model_(
+            eager_model=eager_model.lm_head,
+            qlinear_config=qlinear_config,
+            qlinear_group_size=qlinear_group_size if qlinear_group_size is not None else 0,
+        )
+    print(eager_model)
     return MultiModalTextToTextExportableModule(
         model=eager_model,
         modality="audio" if audio_encoder_name else "vision",
