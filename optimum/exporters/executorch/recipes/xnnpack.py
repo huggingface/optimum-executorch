@@ -36,7 +36,7 @@ from ..integrations import (
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
-
+from torchao.utils import unwrap_tensor_subclass
 
 @register_recipe("xnnpack")
 def export_to_executorch_with_xnnpack(
@@ -104,6 +104,8 @@ def export_to_executorch_with_xnnpack(
             )
         return {pte_name: et_prog}
 
+    model = unwrap_tensor_subclass(model)
+    print("Unwrapped model: ", model)
     exported_progs = model.export()
 
     if (
