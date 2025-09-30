@@ -22,11 +22,11 @@ import unittest
 import pytest
 import torchao
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+
+from optimum.executorch import ExecuTorchModelForMaskedLM
 from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
-
-from optimum.executorch import ExecuTorchModelForMaskedLM
 
 
 @pytest.mark.skipif(
@@ -70,7 +70,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # Test fetching and lowering the model to ExecuTorch
-        model = ExecuTorchModelForMaskedLM.from_pretrained(model_id=model_id, recipe=recipe)
+        model = ExecuTorchModelForMaskedLM.from_pretrained(
+            model_id=model_id, recipe=recipe
+        )
         self.assertIsInstance(model, ExecuTorchModelForMaskedLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
@@ -85,9 +87,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # Test inference using ExecuTorch model
         exported_outputs = model.forward(inputs["input_ids"], inputs["attention_mask"])
         predicted_masks = tokenizer.decode(exported_outputs[0, 4].topk(5).indices)
-        logging.info(f"\nInput text:\n\t{input_text}\nPredicted masks:\n\t{predicted_masks}")
+        logging.info(
+            f"\nInput text:\n\t{input_text}\nPredicted masks:\n\t{predicted_masks}"
+        )
         self.assertTrue(
-            any(word in predicted_masks for word in ["capital", "center", "heart", "birthplace"]),
+            any(
+                word in predicted_masks
+                for word in ["capital", "center", "heart", "birthplace"]
+            ),
             f"Exported model predictions {predicted_masks} don't contain any of the most common expected words",
         )
 
@@ -101,3 +108,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.portable
     def test_bert_fill_mask_portable(self):
         self._helper_bert_fill_mask("portable")
+
+    @pytest.mark.run_slow
+    def test_bert_fill_mask_qnn(self):
+        self._helper_bert_fill_mask(recipe="qnn_fp16_SM8650")
