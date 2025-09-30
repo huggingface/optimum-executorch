@@ -17,6 +17,7 @@ from typing import Dict, Union
 
 from tabulate import tabulate
 from torch.export import ExportedProgram
+from torchao.utils import unwrap_tensor_subclass
 
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
@@ -104,6 +105,7 @@ def export_to_executorch_with_xnnpack(
             )
         return {pte_name: et_prog}
 
+    model = unwrap_tensor_subclass(model)
     exported_progs = model.export()
 
     if (
