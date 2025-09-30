@@ -21,10 +21,10 @@ import unittest
 import pytest
 import torch
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers import AutoConfig, AutoModelForImageClassification
-from transformers.testing_utils import slow
 
 from optimum.executorch import ExecuTorchModelForImageClassification
+from transformers import AutoConfig, AutoModelForImageClassification
+from transformers.testing_utils import slow
 
 from ..utils import check_close_recursively
 
@@ -58,11 +58,15 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.rand(batch_size, num_channels, height, width)
 
         # Test fetching and lowering the model to ExecuTorch
-        et_model = ExecuTorchModelForImageClassification.from_pretrained(model_id=model_id, recipe=recipe)
+        et_model = ExecuTorchModelForImageClassification.from_pretrained(
+            model_id=model_id, recipe=recipe
+        )
         self.assertIsInstance(et_model, ExecuTorchModelForImageClassification)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
 
-        eager_model = AutoModelForImageClassification.from_pretrained(model_id).eval().to("cpu")
+        eager_model = (
+            AutoModelForImageClassification.from_pretrained(model_id).eval().to("cpu")
+        )
         with torch.no_grad():
             eager_output = eager_model(pixel_values)
             et_output = et_model.forward(pixel_values)
@@ -75,8 +79,12 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_dit_image_classification(self):
         self._helper_dit_image_classification(recipe="xnnpack")
 
-    @slow
+    # @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
     def test_dit_image_classification_portable(self):
         self._helper_dit_image_classification(recipe="portable")
+
+    @pytest.mark.run_slow
+    def test_dit_image_classification_qnn(self):
+        self._helper_dit_image_classification(recipe="qnn_fp16_SM8650")
