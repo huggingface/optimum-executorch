@@ -126,6 +126,20 @@ def parse_args_executorch(parser):
         required=False,
         help="Maximum sequence length for the model. If not specified, uses the model's default max_position_embeddings.",
     )
+    required_group.add_argument(
+        "--dtype",
+        type=str,
+        choices=["float32", "float16", "bfloat16"],
+        required=False,
+        help="Data type for model weights. Options: float32, float16, bfloat16. Default: float32. For quantization (int8/int4), use the --qlinear arguments.",
+    )
+    required_group.add_argument(
+        "--device",
+        type=str,
+        choices=["cpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"],
+        required=False,
+        help="Device to run the model on. Options: cpu, cuda. Default: cpu.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -159,6 +173,10 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qembedding_group_size"] = self.args.qembedding
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
+        if hasattr(self.args, 'dtype') and self.args.dtype:
+            kwargs["dtype"] = self.args.dtype
+        if hasattr(self.args, 'device') and self.args.device:
+            kwargs["device"] = self.args.device
 
         main_export(
             model_name_or_path=self.args.model,
