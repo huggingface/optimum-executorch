@@ -18,11 +18,8 @@ from typing import Dict, Union
 
 from tabulate import tabulate
 from torch.export import ExportedProgram
-from torch._inductor.decomposition import conv1d_to_conv2d
 from torch.nn.attention import SDPBackend
 
-from executorch.backends.cuda.cuda_backend import CudaBackend
-from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
     EdgeCompileConfig,
@@ -64,6 +61,11 @@ def export_to_executorch_with_cuda(
             A map of exported and optimized program for ExecuTorch.
             For encoder-decoder models or multimodal models, it may generate multiple programs.
     """
+    # Import here to avoid version conflicts.
+    from torch._inductor.decomposition import conv1d_to_conv2d
+
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
@@ -93,6 +95,7 @@ def export_to_executorch_with_cuda(
               constant_methods=metadata,
               transform_passes=[RemovePaddingIdxEmbeddingPass()],
           )
+        print(et_prog.exported_program("text_decoder").graph_module.graph)
         et_prog = et_prog.to_executorch()
         pte_name = "model"
         for method in et_prog.methods:
