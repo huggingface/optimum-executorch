@@ -76,12 +76,14 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qlinear",
         type=str,
-        choices=["8da4w", "4w", "8w"],
+        choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w"],
         required=False,
         help=(
             "Quantization config for decoder linear layers.\n\n"
             "Options:\n"
             "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
+            "  8da8w - 8-bit dynamic activation, 8-bit weight\n"
+            "  8da4w,8da8w - 8-bit dynamic activation, 4-bit weight and 8-bit weight\n"
             "  4w    - 4-bit weight only\n"
             "  8w    - 8-bit weight only"
         ),
@@ -92,12 +94,14 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qlinear_encoder",
         type=str,
-        choices=["8da4w", "4w", "8w"],
+        choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w"],
         required=False,
         help=(
             "Quantization config for linear layers.\n\n"
             "Options:\n"
             "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
+            "  8da8w - 8-bit dynamic activation, 8-bit weight\n"
+            "  8da4w,8da8w - 8-bit dynamic activation, 4-bit weight and 8-bit weight\n"
             "  4w    - 4-bit weight only\n"
             "  8w    - 8-bit weight only"
         ),
@@ -148,15 +152,15 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
         if self.args.qlinear:
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qlinear_group_size:
-            kwargs["qlinear_group_size"] = self.args.qlinear
+            kwargs["qlinear_group_size"] = self.args.qlinear_group_size
         if self.args.qlinear_encoder:
-            kwargs["qlinear_encoder"] = self.args.qlinear
+            kwargs["qlinear_encoder"] = self.args.qlinear_encoder
         if self.args.qlinear_encoder_group_size:
-            kwargs["qlinear_encoder_group_size"] = self.args.qlinear
+            kwargs["qlinear_encoder_group_size"] = self.args.qlinear_encoder_group_size
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
         if self.args.qembedding_group_size:
-            kwargs["qembedding_group_size"] = self.args.qembedding
+            kwargs["qembedding_group_size"] = self.args.qembedding_group_size
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
 
