@@ -77,7 +77,9 @@ class VisionExportableModule(torch.nn.Module):
         input_features: torch.FloatTensor,
     ):
         image_embeds = self.model.get_image_features(input_features)
-        return image_embeds.unsqueeze(0)
+        if isinstance(image_embeds, list):
+            image_embeds = torch.stack(image_embeds)
+        return image_embeds
 
 
 class AudioExportableModule(torch.nn.Module):
