@@ -173,9 +173,9 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qembedding_group_size"] = self.args.qembedding
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
-        if hasattr(self.args, 'dtype') and self.args.dtype:
+        if hasattr(self.args, "dtype") and self.args.dtype:
             kwargs["dtype"] = self.args.dtype
-        if hasattr(self.args, 'device') and self.args.device:
+        if hasattr(self.args, "device") and self.args.device:
             kwargs["device"] = self.args.device
 
         main_export(

@@ -35,6 +35,7 @@ from ..integrations import (
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
+
 aten = torch.ops.aten
 
 
@@ -78,24 +79,28 @@ def export_to_executorch_with_cuda(
             exported_programs = {"forward": next(iter(exported_programs.values()))}
 
         # CUDA backend compile spec with method name.
-        partitioners = {key: [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(key)])] for key in exported_programs.keys()}
+        partitioners = {
+            key: [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(key)])]
+            for key in exported_programs.keys()
+        }
         # Add decompositions for triton to generate kernels.
         for key, ep in exported_programs.items():
-            exported_programs[key] = ep.run_decompositions({
-              aten.conv1d.default: conv1d_to_conv2d,
-            })
+            exported_programs[key] = ep.run_decompositions(
+                {
+                    aten.conv1d.default: conv1d_to_conv2d,
+                }
+            )
         with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]):
-          et_prog = to_edge_transform_and_lower(
-              exported_programs,
-              partitioner=partitioners,
-              compile_config=EdgeCompileConfig(
-                  _check_ir_validity=False,
-                  _skip_dim_order=True,
-              ),
-              constant_methods=metadata,
-              transform_passes=[RemovePaddingIdxEmbeddingPass()],
-          )
-        print(et_prog.exported_program("text_decoder").graph_module.graph)
+            et_prog = to_edge_transform_and_lower(
+                exported_programs,
+                partitioner=partitioners,
+                compile_config=EdgeCompileConfig(
+                    _check_ir_validity=False,
+                    _skip_dim_order=True,
+                ),
+                constant_methods=metadata,
+                transform_passes=[RemovePaddingIdxEmbeddingPass()],
+            )
         et_prog = et_prog.to_executorch()
         pte_name = "model"
         for method in et_prog.methods:
@@ -116,12 +121,8 @@ def export_to_executorch_with_cuda(
         model.config._attn_implementation == "custom_sdpa"
         or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
     ):
-        # Sanity check to make sure the exported program contains the custom sdpa operator.
-        if not any(
-            node.op == "call_function" and "custom_sdpa" in str(node.target)
-            for exported_program in exported_progs.values()
-            for node in exported_program.graph_module.graph.nodes
-        ):
-            raise ValueError("'custom_sdpa' not found in the graph.")
+        raise NotImplementedError(
+            "Custom SDPA implementation is not supported for CUDA yet. Please use 'flash_attention' instead."
+        )
 
     return _lower_to_executorch(exported_progs, model.metadata)
