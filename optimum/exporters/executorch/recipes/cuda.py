@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import logging
-import torch
 from typing import Dict, Union
 
+import torch
 from tabulate import tabulate
 from torch.export import ExportedProgram
 from torch.nn.attention import SDPBackend
@@ -35,6 +35,7 @@ from ..integrations import (
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
+
 
 aten = torch.ops.aten
 
