@@ -18,15 +18,14 @@ from typing import Dict, Union
 from tabulate import tabulate
 from torch.export import ExportedProgram
 
+from executorch.backends.apple.metal.metal_backend import MetalBackend
 from executorch.backends.apple.metal.metal_partitioner import MetalPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
     EdgeCompileConfig,
-    ExecutorchBackendConfig,
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
-from executorch.exir.passes import MemoryPlanningPass
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
 from ..integrations import (
@@ -75,9 +74,14 @@ def export_to_executorch_with_metal(
         if len(exported_programs) == 1:
             exported_programs = {"forward": next(iter(exported_programs.values()))}
 
+        partitioners = {
+            key: [MetalPartitioner([MetalBackend.generate_method_name_compile_spec(key)])]
+            for key in exported_programs.keys()
+        }
+
         et_prog = to_edge_transform_and_lower(
             exported_programs,
-            partitioner=[MetalPartitioner([])],
+            partitioner=partitioners,
             compile_config=EdgeCompileConfig(
                 _check_ir_validity=False,
                 _skip_dim_order=True,
@@ -103,12 +107,8 @@ def export_to_executorch_with_metal(
         model.config._attn_implementation == "custom_sdpa"
         or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
     ):
-        # Sanity check to make sure the exported program contains the custom sdpa operator.
-        if not any(
-            node.op == "call_function" and "custom_sdpa" in str(node.target)
-            for exported_program in exported_progs.values()
-            for node in exported_program.graph_module.graph.nodes
-        ):
-            raise ValueError("'custom_sdpa' not found in the graph.")
+        raise NotImplementedError(
+            "Custom SDPA implementation is not supported for Metal."
+        )
 
     return _lower_to_executorch(exported_progs, model.metadata)
