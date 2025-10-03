@@ -15,7 +15,7 @@ def install_torch_nightly_deps():
             "-m",
             "pip",
             "install",
-            f"executorch==1.0.0.{EXECUTORCH_NIGHTLY_VERSION}",
+            f"executorch==1.1.0.{EXECUTORCH_NIGHTLY_VERSION}",
             f"torch==2.10.0.{TORCH_NIGHTLY_VERSION}",
             f"torchvision==0.25.0.{TORCH_NIGHTLY_VERSION}",
             f"torchaudio==2.8.0.{TORCH_NIGHTLY_VERSION}",
