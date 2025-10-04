@@ -22,13 +22,18 @@ from torch.nn.attention import SDPBackend
 from transformers import (
     AutoConfig,
     AutoProcessor,
+    DynamicCache,
+    EncoderDecoderCache,
     PreTrainedModel,
     StaticCache,
     T5ForConditionalGeneration,
     WhisperForConditionalGeneration,
 )
 from transformers.generation.configuration_utils import GenerationConfig
-from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM, sdpa_mask_without_vmap
+from transformers.integrations.executorch import (
+    TorchExportableModuleForDecoderOnlyLM,
+    sdpa_mask_without_vmap,
+)
 from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
@@ -50,7 +55,10 @@ class VisionExportableModule(torch.nn.Module):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://llava-vl.github.io/static/images/view.jpg",
+                    },
                 ],
             },
         ]
@@ -337,7 +345,10 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 mutated_gm,
                 args=(),
                 # For the ET runner, it's important to have cache position as the 2nd arg.
-                kwargs={"inputs_embeds": inputs_embeds, "cache_position": cache_position},
+                kwargs={
+                    "inputs_embeds": inputs_embeds,
+                    "cache_position": cache_position,
+                },
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
@@ -400,7 +411,12 @@ class CausalLMExportableModule(torch.nn.Module):
     """
 
     def __init__(
-        self, model, max_seq_len=2048, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False
+        self,
+        model,
+        max_seq_len=2048,
+        use_custom_kv_cache=False,
+        use_custom_sdpa=False,
+        disable_dynamic_shapes=False,
     ):
         super().__init__()
         self.model = model
@@ -497,7 +513,10 @@ class CausalLMExportableModule(torch.nn.Module):
 
         with torch.no_grad():
             exported_program = exportable_module.export(
-                input_ids=input_ids, cache_position=cache_position, dynamic_shapes=dynamic_shapes, strict=strict
+                input_ids=input_ids,
+                cache_position=cache_position,
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
             )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
@@ -653,18 +672,14 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             device="cpu",
             dtype=torch.float32,
         )
-
-        # Register cache buffers to make them exportable
-        for i in range(len(self.static_cache.key_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
+        self.cache = EncoderDecoderCache(self.static_cache, DynamicCache())
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Get outputs from decoder
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=self.static_cache,
+            past_key_values=self.cache,
             use_cache=True,
             cache_position=cache_position,
         )
