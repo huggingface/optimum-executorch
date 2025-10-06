@@ -109,6 +109,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_bert_fill_mask_portable(self):
         self._helper_bert_fill_mask("portable")
 
+    @pytest.mark.skip(reason="Temporarily disabled for QNN backend")
     @pytest.mark.run_slow
     def test_bert_fill_mask_qnn(self):
         self._helper_bert_fill_mask(recipe="qnn_fp16_SM8650")

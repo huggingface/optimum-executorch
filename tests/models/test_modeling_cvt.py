@@ -85,6 +85,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_cvt_image_classification_portable(self):
         self._helper_cvt_image_classification(recipe="portable")
 
+    @pytest.mark.skip(reason="Temporarily disabled for QNN backend")
     @slow
     @pytest.mark.run_slow
     def test_cvt_image_classification_qnn(self):

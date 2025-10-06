@@ -45,7 +45,6 @@ def register_recipe(recipe_name):
     """
 
     def decorator(func):
-        print("recipe_name: ", recipe_name)
         recipe_registry[recipe_name] = func
         return func
 
