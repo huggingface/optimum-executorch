@@ -60,6 +60,25 @@ jobs:
             pip install git+https://github.com/pytorch-labs/tokenizers
           fi
           pip list
+      - name: Check pre-clean disk usage
+        run: df -h
+      - name: Turn off swap
+        run: |
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          df -h
+      - name: Clean packages
+        run: |
+          sudo apt clean
+          df -h
+      - name: Docker clean
+        run: |
+          docker system prune -af
+          df -h
+      - name: Clean /tmp
+        run: |
+          sudo rm -rf /tmp/*
+          df -h
       - name: Run tests
         run: |
           RUN_SLOW=1 pytest tests/models/test_modeling_${{ matrix.test-modeling }}.py -s -vvvv --durations=0 --log-cli-level=INFO
