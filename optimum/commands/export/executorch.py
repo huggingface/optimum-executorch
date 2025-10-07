@@ -101,7 +101,7 @@ def parse_args_executorch(parser):
             "Options:\n"
             "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
             "  8da8w - 8-bit dynamic activation, 8-bit weight\n"
-            "  8da4w,8da8w - 8-bit dynamic activation, 4-bit weight and 8-bit weight\n"
+            "  8da4w,8da8w - 8-bit dynamic activation, 4-bit weight; fallback on 8-bit dynamic activation, 8-bit weight per-channel where group size doesn't divide block size cleanly \n"
             "  4w    - 4-bit weight only\n"
             "  8w    - 8-bit weight only"
         ),

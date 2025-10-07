@@ -14,6 +14,7 @@
 
 
 import json
+import logging
 import os.path
 
 import torchao
@@ -201,15 +202,24 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
 
     # Quantize decoder linear weights.
+    if qlinear_config:
+        logging.info("Quantizing decoder linears...")
     quantize_decoder_kwargs = {
         "eager_model": getattr(eager_model, decoder_name),
+        "qlinear_config": qlinear_config,
+    }
+    quantize_lm_head_kwargs = {
+        "eager_model": eager_model.lm_head,
         "qlinear_config": qlinear_config,
     }
     if qlinear_group_size is not None:
         quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
     quantize_model_(**quantize_decoder_kwargs)
+    quantize_model_(**quantize_lm_head_kwargs)
 
     # Quantize encoder linear weights.
+    if qlinear_encoder_config:
+        logging.info("Quantizing encoder linears...")
     quantize_encoder_kwargs = {
         "eager_model": getattr(eager_model, encoder_name),
         "qlinear_config": qlinear_encoder_config,
@@ -219,6 +229,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     quantize_model_(**quantize_encoder_kwargs)
 
     # Quantize decoder embeddings.
+    if qembedding_config:
+        logging.info("Quantizing decoder embeddings...")
     quantize_decoder_embedding_kwargs = {
         "eager_model": eager_model,
         "qembedding_config": qembedding_config,
@@ -227,14 +239,6 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
     quantize_model_(**quantize_decoder_embedding_kwargs)
 
-    # Quantize lm_head
-    if hasattr(eager_model, "lm_head") and qlinear_config is not None:
-        quantize_model_(
-            eager_model=eager_model.lm_head,
-            qlinear_config=qlinear_config,
-            qlinear_group_size=qlinear_group_size if qlinear_group_size is not None else 0,
-        )
-    print(eager_model)
     return MultiModalTextToTextExportableModule(
         model=eager_model,
         modality="audio" if audio_encoder_name else "vision",
