@@ -139,16 +139,12 @@ def process_conversation_inputs(
     input_conversation: List[Dict[str, Any]],
 ):
     """
-    Process input conversation for multimodal models.
-
-    This function handles the preprocessing of conversation inputs, with special handling for
-    GraniteSpeechProcessor which requires extracting and processing audio content from conversations
-    prior to feeding into the processor.
+    Process an input conversation into tensor inputs for multimodal models.
 
     Args:
         processor: The processor to use for input processing
         tokenizer: The tokenizer to use for text processing
-        input_conversation: List of conversation messages, may contain audio content
+        input_conversation: List of conversation messages
 
     Returns:
         Processed inputs ready for model consumption
@@ -190,6 +186,34 @@ def process_conversation_inputs(
         # Generate text prompt and process with audio
         prompt = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
         inputs = processor(prompt, wav, return_tensors="pt")
+    elif isinstance(processor, transformers.SmolVLMProcessor):
+        from transformers.image_utils import load_image
+
+        conversation = copy.deepcopy(input_conversation)
+        images = []
+
+        # Extract image URLs from conversation
+        for message in conversation:
+            if isinstance(message.get("content"), list):
+                # Filter out image entries and collect URLs
+                image_urls = [item["url"] for item in message["content"] if item.get("type") == "image"]
+                images.extend([load_image(url) for url in image_urls])
+
+                # Remove image entries from content
+                message["content"] = [item for item in message["content"] if item.get("type") != "image"]
+
+        # Apply chat template to get text prompt
+        prompt = apply_chat_template_with_fallback(
+            processor,
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+
+        # Process with text and images
+        inputs = processor(text=prompt, images=images, return_tensors="pt")
     else:
         # Standard processing for other processors
         inputs = apply_chat_template_with_fallback(

@@ -22,6 +22,7 @@ from torch.nn.attention import SDPBackend
 from transformers import (
     AutoConfig,
     AutoProcessor,
+    AutoTokenizer,
     PreTrainedModel,
     StaticCache,
     T5ForConditionalGeneration,
@@ -34,7 +35,7 @@ from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 
-from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
+from .utils import apply_chat_template_with_fallback, process_conversation_inputs, save_config_to_constant_methods
 
 
 class VisionExportableModule(torch.nn.Module):
@@ -46,6 +47,7 @@ class VisionExportableModule(torch.nn.Module):
         # 1. Get export inputs
         model_id = self.model.config.name_or_path
         processor = AutoProcessor.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         sample_conversation_with_image = [
             {
                 "role": "user",
@@ -54,13 +56,18 @@ class VisionExportableModule(torch.nn.Module):
                 ],
             },
         ]
-        processed_inputs = processor.apply_chat_template(
+        processed_inputs = process_conversation_inputs(
+            processor,
+            tokenizer,
             sample_conversation_with_image,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
         )
+        # processed_inputs = processor.apply_chat_template(
+        #     sample_conversation_with_image,
+        #     add_generation_prompt=True,
+        #     tokenize=True,
+        #     return_dict=True,
+        #     return_tensors="pt",
+        # )
         if "pixel_values" not in processed_inputs:
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'pixel_values' key: {processed_inputs}"
