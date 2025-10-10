@@ -180,8 +180,19 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
             "device": device,
         },
     )
-    decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
-    encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
+
+    # Most <Model>ForConditionalGeneration> will have the text_model and encoder models as attributes, however
+    # some have `self.model = <Model>` (the base version not for conditional generation), and this `self.model`
+    # contains the text_model and encoder model attributes.
+    if hasattr(eager_model, "model"):
+        decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model.model)
+        # Set these as top level attributes.
+        setattr(eager_model, decoder_name, getattr(eager_model.model, decoder_name))
+        encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
+        setattr(eager_model, encoder_name, getattr(eager_model.model, encoder_name))
+    else:
+        decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
+        encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
 
     # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
     # config, it always comes from the generation_config.json file, not the `generation_config` override

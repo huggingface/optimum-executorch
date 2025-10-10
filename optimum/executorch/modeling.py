@@ -1346,8 +1346,8 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
 
         # Sanity check
         if self.tokenizer.bos_token_id is not None and self.tokenizer.bos_token_id != self.bos_token_id:
-            raise ValueError(
-                f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
+            logging.warning(
+                f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} is not the same as the model's bos_token_id={self.bos_token_id}."
             )
         if isinstance(self.tokenizer, PreTrainedTokenizer) and not verify_eos_tokens_in_pretrained_tokenizer(
             self.eos_token_id, self.tokenizer
