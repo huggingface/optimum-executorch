@@ -37,11 +37,55 @@ from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_k
 
 from .utils import apply_chat_template_with_fallback, process_conversation_inputs, save_config_to_constant_methods
 
+def _patch_idefics3_vision_embeddings_for_export(vision_model):
+    """
+    Patch Idefics3VisionEmbeddings to make it export-friendly by removing data-dependent operations.
+    This assumes batch_size=1 and a full attention mask (all 1s).
+    """
+    import types
+
+    def export_friendly_forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
+        batch_size, _, max_im_h, max_im_w = pixel_values.shape
+
+        patch_embeds = self.patch_embedding(pixel_values)
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        nb_patches_h = max_im_h // self.patch_size
+        nb_patches_w = max_im_w // self.patch_size
+        N = self.num_patches_per_side
+
+        # For export, we assume full attention mask and compute position IDs statically.
+        # This avoids the data-dependent loop over batch dimension.
+        h_indices = torch.arange(nb_patches_h, device=pixel_values.device, dtype=torch.long)
+        w_indices = torch.arange(nb_patches_w, device=pixel_values.device, dtype=torch.long)
+
+        # This replaces bucketize(x, boundaries=[1/N, 2/N, ...], right=True) ≈ floor(x * N), which
+        # we don't have a kernel for at the moment.
+        bucket_coords_h = (h_indices * N) // nb_patches_h
+        bucket_coords_w = (w_indices * N) // nb_patches_w
+
+        bucket_coords_h = torch.clamp(bucket_coords_h, max=N - 1)
+        bucket_coords_w = torch.clamp(bucket_coords_w, max=N - 1)
+
+        pos_ids = (bucket_coords_h[:, None] * N + bucket_coords_w[None, :]).reshape(-1)
+        position_ids = pos_ids.unsqueeze(0).expand(batch_size, -1)
+        embeddings = embeddings + self.position_embedding(position_ids)
+        return embeddings
+
+    # Patch the forward method.
+    vision_model.embeddings.forward = types.MethodType(export_friendly_forward, vision_model.embeddings)
+
 
 class VisionExportableModule(torch.nn.Module):
     def __init__(self, model: torch.nn.Module):
         super().__init__()
         self.model = model
+
+        # Patch Idefics3 vision embeddings if needed
+        if hasattr(model, 'model') and hasattr(model.model, 'vision_model'):
+            model_type = getattr(model.config, 'model_type', '')
+            if 'idefics3' in model_type.lower():
+                _patch_idefics3_vision_embeddings_for_export(model.model.vision_model)
 
     def prepare_export_inputs(self):
         # 1. Get export inputs
@@ -61,13 +105,6 @@ class VisionExportableModule(torch.nn.Module):
             tokenizer,
             sample_conversation_with_image,
         )
-        # processed_inputs = processor.apply_chat_template(
-        #     sample_conversation_with_image,
-        #     add_generation_prompt=True,
-        #     tokenize=True,
-        #     return_dict=True,
-        #     return_tensors="pt",
-        # )
         if "pixel_values" not in processed_inputs:
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'pixel_values' key: {processed_inputs}"
@@ -83,7 +120,9 @@ class VisionExportableModule(torch.nn.Module):
         self,
         input_features: torch.FloatTensor,
     ):
-        image_embeds = self.model.get_image_features(input_features)
+        # Pass pixel_attention_mask=None to avoid data-dependent operations during export.
+        # The model will create a mask full of 1s internally if None is passed.
+        image_embeds = self.model.get_image_features(input_features, pixel_attention_mask=None)
         if isinstance(image_embeds, list):
             image_embeds = torch.stack(image_embeds)
         return image_embeds
