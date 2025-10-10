@@ -30,6 +30,7 @@ def quantize_model_(
 
     from torchao.quantization.granularity import PerAxis, PerGroup
     from torchao.quantization.quant_api import (
+        Int4WeightOnlyConfig,
         Int8DynamicActivationIntxWeightConfig,
         IntxWeightOnlyConfig,
         quantize_,
@@ -82,6 +83,11 @@ def quantize_model_(
             "4w": IntxWeightOnlyConfig(
                 weight_dtype=torch.int4,
                 granularity=linear_weight_granularity,
+            ),
+            "4w_hqq": Int4WeightOnlyConfig(
+                group_size=qlinear_group_size,
+                int4_packing_format="tile_packed_to_4d",
+                int4_choose_qparams_algorithm="hqq",
             ),
             "8w": IntxWeightOnlyConfig(
                 weight_dtype=torch.int8,
