@@ -351,3 +351,4 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             )
             subprocess.run(cmd, shell=True, check=True)
             self.assertTrue(os.path.exists(os.path.join(output_dir, "model.pte")))
+            self.assertTrue(os.path.exists(os.path.join(output_dir, "aoti_cuda_blob.ptd")))
