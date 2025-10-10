@@ -76,14 +76,15 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qlinear",
         type=str,
-        choices=["8da4w", "4w", "8w"],
+        choices=["8da4w", "4w", "4w_hqq", "8w"],
         required=False,
         help=(
             "Quantization config for decoder linear layers.\n\n"
             "Options:\n"
-            "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
-            "  4w    - 4-bit weight only\n"
-            "  8w    - 8-bit weight only"
+            "  8da4w       - 8-bit dynamic activation, 4-bit weight\n"
+            "  4w          - 4-bit weight only\n"
+            "  4w_hqq      - 4-bit weight and hqq qparams algorithm\n"
+            "  8w          - 8-bit weight only"
         ),
     )
     required_group.add_argument(
@@ -92,14 +93,15 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qlinear_encoder",
         type=str,
-        choices=["8da4w", "4w", "8w"],
+        choices=["8da4w", "4w", "4w_hqq", "8w"],
         required=False,
         help=(
             "Quantization config for linear layers.\n\n"
             "Options:\n"
-            "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
-            "  4w    - 4-bit weight only\n"
-            "  8w    - 8-bit weight only"
+            "  8da4w       - 8-bit dynamic activation, 4-bit weight\n"
+            "  4w          - 4-bit weight only\n"
+            "  4w_hqq      - 4-bit weight and hqq qparams algorithm\n"
+            "  8w          - 8-bit weight only"
         ),
     )
     required_group.add_argument(
