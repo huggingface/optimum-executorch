@@ -223,7 +223,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
 
     # Quantize decoder embeddings.
     quantize_decoder_embedding_kwargs = {
-        "eager_model": getattr(eager_model, decoder_name),
+        "eager_model": eager_model,
         "qembedding_config": qembedding_config,
     }
     if qembedding_group_size is not None:
