@@ -95,7 +95,7 @@ def parse_args_executorch(parser):
         choices=["tile_packed_to_4d"],
         required=False,
         help=(
-            "Int4 packing format for encoder linear layers.\n"
+            "Packing format for decoder linear layers.\n"
             "Only applicable to certain backends such as CUDA and Metal\n\n"
             "Options:\n"
             "  tile_packed_to_4d  - int4 4d packing format"
@@ -123,7 +123,7 @@ def parse_args_executorch(parser):
         choices=["tile_packed_to_4d"],
         required=False,
         help=(
-            "Int4 packing format for encoder linear layers.\n"
+            "Packing format for encoder linear layers.\n"
             "Only applicable to certain backends such as CUDA and Metal\n\n"
             "Options:\n"
             "  tile_packed_to_4d  - int4 4d packing format"
