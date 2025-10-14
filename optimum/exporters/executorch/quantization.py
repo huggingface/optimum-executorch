@@ -22,7 +22,7 @@ def quantize_model_(
     eager_model: torch.nn.Module,
     qlinear_config: Optional[str] = None,
     qlinear_group_size: Optional[int] = 32,
-    qlinear_int4_packing_format: Optional[str] = None,
+    qlinear_packing_format: Optional[str] = None,
     qembedding_config: Optional[str] = None,
     qembedding_group_size: Optional[int] = 0,
 ) -> torch.nn.Module:
@@ -78,10 +78,10 @@ def quantize_model_(
         logging.info("Quantizing linear layers.")
 
         # Determine if we need to use Int4WeightOnlyConfig with int4_packing_format
-        if qlinear_config == "4w" and qlinear_int4_packing_format:
+        if qlinear_config == "4w" and qlinear_packing_format:
             linear_config = Int4WeightOnlyConfig(
                 group_size=qlinear_group_size,
-                int4_packing_format=qlinear_int4_packing_format,
+                int4_packing_format=qlinear_packing_format,
                 int4_choose_qparams_algorithm="hqq",
             )
         else:

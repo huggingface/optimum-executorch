@@ -196,10 +196,10 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
 
     qlinear_config = kwargs.get("qlinear", None)
     qlinear_group_size = kwargs.get("qlinear_group_size", None)
-    qlinear_int4_packing_format = kwargs.get("qlinear_int4_packing_format", None)
+    qlinear_packing_format = kwargs.get("qlinear_packing_format", None)
     qlinear_encoder_config = kwargs.get("qlinear_encoder", None)
     qlinear_encoder_group_size = kwargs.get("qlinear_encoder_group_size", None)
-    qlinear_encoder_int4_packing_format = kwargs.get("qlinear_encoder_int4_packing_format", None)
+    qlinear_encoder_packing_format = kwargs.get("qlinear_encoder_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
 
@@ -210,8 +210,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     }
     if qlinear_group_size is not None:
         quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
-    if qlinear_int4_packing_format is not None:
-        quantize_decoder_kwargs["qlinear_int4_packing_format"] = qlinear_int4_packing_format
+    if qlinear_packing_format is not None:
+        quantize_decoder_kwargs["qlinear_packing_format"] = qlinear_packing_format
     quantize_model_(**quantize_decoder_kwargs)
 
     # Quantize encoder linear weights.
@@ -221,8 +221,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     }
     if qlinear_encoder_group_size is not None:
         quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
-    if qlinear_encoder_int4_packing_format is not None:
-        quantize_encoder_kwargs["qlinear_int4_packing_format"] = qlinear_encoder_int4_packing_format
+    if qlinear_encoder_packing_format is not None:
+        quantize_encoder_kwargs["qlinear_packing_format"] = qlinear_encoder_packing_format
     quantize_model_(**quantize_encoder_kwargs)
 
     # TODO: quantize other parts of the model, e.g. MultimodalProjector?

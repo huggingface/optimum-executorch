@@ -90,7 +90,7 @@ def parse_args_executorch(parser):
         "--qlinear_group_size", type=int, required=False, help="Group size for decoder linear quantization."
     )
     required_group.add_argument(
-        "--qlinear_int4_packing_format",
+        "--qlinear_packing_format",
         type=str,
         choices=["tile_packed_to_4d"],
         required=False,
@@ -118,7 +118,7 @@ def parse_args_executorch(parser):
         "--qlinear_encoder_group_size", type=int, required=False, help="Group size for encoder linear quantization."
     )
     required_group.add_argument(
-        "--qlinear_encoder_int4_packing_format",
+        "--qlinear_encoder_packing_format",
         type=str,
         choices=["tile_packed_to_4d"],
         required=False,
@@ -178,25 +178,25 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
 
         # Validate int4 packing format can only be used with CUDA devices and 4w quantization
         device = getattr(self.args, "device", None)
-        qlinear_int4_packing_format = getattr(self.args, "qlinear_int4_packing_format", None)
-        if qlinear_int4_packing_format:
+        qlinear_packing_format = getattr(self.args, "qlinear_packing_format", None)
+        if qlinear_packing_format:
             if not device or not device.startswith("cuda"):
                 raise ValueError(
-                    "--qlinear_int4_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
+                    "--qlinear_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
                 )
             if not self.args.qlinear or self.args.qlinear != "4w":
                 raise ValueError(
-                    "--qlinear_int4_packing_format can only be used when --qlinear is set to '4w'"
+                    "--qlinear_packing_format can only be used when --qlinear is set to '4w'"
                 )
-        qlinear_encoder_int4_packing_format = getattr(self.args, "qlinear_encoder_int4_packing_format", None)
-        if qlinear_encoder_int4_packing_format:
+        qlinear_encoder_packing_format = getattr(self.args, "qlinear_encoder_packing_format", None)
+        if qlinear_encoder_packing_format:
             if not device or not device.startswith("cuda"):
                 raise ValueError(
-                    "--qlinear_encoder_int4_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
+                    "--qlinear_encoder_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
                 )
             if not self.args.qlinear_encoder or self.args.qlinear_encoder != "4w":
                 raise ValueError(
-                    "--qlinear_encoder_int4_packing_format can only be used when --qlinear_encoder is set to '4w'"
+                    "--qlinear_encoder_packing_format can only be used when --qlinear_encoder is set to '4w'"
                 )
 
         kwargs = {}
@@ -210,14 +210,14 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qlinear_group_size:
             kwargs["qlinear_group_size"] = self.args.qlinear_group_size
-        if qlinear_int4_packing_format:
-            kwargs["qlinear_int4_packing_format"] = qlinear_int4_packing_format
+        if qlinear_packing_format:
+            kwargs["qlinear_packing_format"] = qlinear_packing_format
         if self.args.qlinear_encoder:
             kwargs["qlinear_encoder"] = self.args.qlinear_encoder
         if self.args.qlinear_encoder_group_size:
             kwargs["qlinear_encoder_group_size"] = self.args.qlinear_encoder_group_size
-        if qlinear_encoder_int4_packing_format:
-            kwargs["qlinear_encoder_int4_packing_format"] = qlinear_encoder_int4_packing_format
+        if qlinear_encoder_packing_format:
+            kwargs["qlinear_encoder_packing_format"] = qlinear_encoder_packing_format
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
         if self.args.qembedding_group_size:
