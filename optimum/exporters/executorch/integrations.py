@@ -37,14 +37,19 @@ from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_k
 
 from .utils import apply_chat_template_with_fallback, process_conversation_inputs, save_config_to_constant_methods
 
+
 def _patch_idefics3_vision_embeddings_for_export(vision_model):
     """
-    Patch Idefics3VisionEmbeddings to make it export-friendly by removing data-dependent operations.
-    This assumes batch_size=1 and a full attention mask (all 1s).
+    Patch Idefics3VisionEmbeddings to make it:
+    - Export-friendly by removing data-dependent operations (forces assumption of image input
+      batch_size = 1, and thus a full attention mask).
+    - Not use aten.bucketize, which has no available decompositions or kernels in ExecuTorch.
     """
     import types
 
-    def export_friendly_forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
+    def export_friendly_forward(
+        self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor
+    ) -> torch.Tensor:
         batch_size, _, max_im_h, max_im_w = pixel_values.shape
 
         patch_embeds = self.patch_embedding(pixel_values)
@@ -81,10 +86,10 @@ class VisionExportableModule(torch.nn.Module):
         super().__init__()
         self.model = model
 
-        # Patch Idefics3 vision embeddings if needed
-        if hasattr(model, 'model') and hasattr(model.model, 'vision_model'):
-            model_type = getattr(model.config, 'model_type', '')
-            if 'idefics3' in model_type.lower():
+        # Patch Idefics3 vision embeddings to make it exportable.
+        if hasattr(model, "model") and hasattr(model.model, "vision_model"):
+            model_type = getattr(model.config, "model_type", "")
+            if "idefics3" in model_type.lower():
                 _patch_idefics3_vision_embeddings_for_export(model.model.vision_model)
 
     def prepare_export_inputs(self):
@@ -432,7 +437,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                     "input_features": input_features,
                 },
                 dynamic_shapes=dynamic_shapes,
-                strict=True,
+                strict=False,
             )
             exported_programs[f"{self.modality}_encoder"] = encoder_exported_program
 
