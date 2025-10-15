@@ -151,6 +151,13 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if not (hasattr(config, "text_config")):
         raise ValueError(f"The model {model_name_or_path} does not have a `text_config`.")
 
+    config.use_export_friendly = True
+    config.text_config.use_export_friendly = True
+    if hasattr(config, "audio_config"):
+        config.audio_config.use_export_friendly = True
+    if hasattr(config, "vision_config"):
+        config.vision_config.use_export_friendly = True
+
     if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
         # NOTE: Avoid hitting the data-dependent control flow in _longrope_frequency_update.
         config.rope_scaling["type"] = "default"
