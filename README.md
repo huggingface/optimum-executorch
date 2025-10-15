@@ -173,6 +173,8 @@ We currently support a wide range of popular transformer models, including encod
 - [Roberta](https://huggingface.co/FacebookAI/xlm-roberta-base): FacebookAI's `xlm-roberta-base` and its variants
 
 ### Vision Models
+- 💡[**NEW**] [SmolVLM](HuggingFaceTB/SmolVLM-Instruct): `SmolVLM`  and it's variants (256M, 500M, and 2B)
+- 💡[**NEW**] [Gemma3 4B](https://huggingface.co/google/gemma-3-4b-it): `gemma-3-4b-it` 
 - [Cvt](https://huggingface.co/microsoft/cvt-13): Convolutional Vision Transformer
 - [Deit](https://huggingface.co/facebook/deit-base-distilled-patch16-224): Distilled Data-efficient Image Transformer (base-sized)
 - [Dit](https://huggingface.co/microsoft/dit-base-finetuned-rvlcdip): Document Image Transformer (base-sized)
