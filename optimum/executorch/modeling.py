@@ -1248,8 +1248,19 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
                 self.encoder_name,
                 (multimodal_features,),
             )[0]
+            assert len(encoder_embeddings.shape) == 3
+
+            # Get mask for where placeholder image tokens are.
             encoder_token_mask = input_ids == self.encoder_token_id
+
+            # For encoders that break up one image into patches (e.g. SmolVLM), we are able to flatten them like this.
+            # However we are unable to do this for multi-image, which is not supported at the moment.
+            if encoder_embeddings.shape[0] != 1:
+                encoder_embeddings = encoder_embeddings.reshape(-1, encoder_embeddings.shape[-1])
+
+            # Merge in the encoder embeddings into the rest of the embeddings.
             token_embeddings[encoder_token_mask] = encoder_embeddings
+
         output = self.model.run_method(
             "text_decoder",
             (
@@ -1346,8 +1357,8 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
 
         # Sanity check
         if self.tokenizer.bos_token_id is not None and self.tokenizer.bos_token_id != self.bos_token_id:
-            raise ValueError(
-                f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} must be the same as the model's bos_token_id={self.bos_token_id}."
+            logging.warning(
+                f"The tokenizer's bos_token_id={self.tokenizer.bos_token_id} is not the same as the model's bos_token_id={self.bos_token_id}."
             )
         if isinstance(self.tokenizer, PreTrainedTokenizer) and not verify_eos_tokens_in_pretrained_tokenizer(
             self.eos_token_id, self.tokenizer
