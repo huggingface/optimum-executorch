@@ -120,6 +120,61 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         """Clean up temporary files when the model instance is destroyed."""
         self._cleanup_temp_resources()
 
+        print("df -dh:")
+        import psutil
+
+        for part in psutil.disk_partitions():
+            usage = psutil.disk_usage(part.mountpoint)
+            print(f"{part.device} mounted on {part.mountpoint}")
+            print(f"  Total: {usage.total / 2**30:.2f} GB")
+            print(f"  Used:  {usage.used / 2**30:.2f} GB")
+            print(f"  Free:  {usage.free / 2**30:.2f} GB")
+            print(f"  Percent Used: {usage.percent}%\n")
+        print()
+
+
+        print("Walking through all files:")
+        import os
+        from pathlib import Path
+
+        def get_dir_size(path):
+            total = 0
+            for dirpath, dirnames, filenames in os.walk(path, onerror=lambda e: None):
+                for f in filenames:
+                    try:
+                        fp = os.path.join(dirpath, f)
+                        total += os.path.getsize(fp)
+                    except (FileNotFoundError, PermissionError):
+                        continue
+            return total
+
+        # Compute top 40 largest directories under /
+        dirs = []
+        root = Path("/")
+
+        for p in root.iterdir():
+            try:
+                size = get_dir_size(p)
+                dirs.append((size, str(p)))
+            except PermissionError:
+                continue
+
+        # Sort and print largest 40
+        dirs.sort(reverse=True)
+        for size, path in dirs[:40]:
+            print(f"{size / 1e9:.2f} GB\t{path}")
+        print()
+
+        print("Memory used:")
+        import psutil
+
+        mem = psutil.virtual_memory()
+
+        print(f"Total:     {mem.total / (1024 ** 3):.2f} GB")
+        print(f"Available: {mem.available / (1024 ** 3):.2f} GB")
+        print(f"Used:      {mem.used / (1024 ** 3):.2f} GB")
+        print(f"Percent:   {mem.percent}%")
+
     def _cleanup_temp_resources(self):
         """Clean up temporary directory and files."""
         if hasattr(self, "_temp_dir") and self._temp_dir is not None:
