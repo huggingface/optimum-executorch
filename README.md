@@ -6,7 +6,7 @@
 
 **Optimize and deploy Hugging Face models with ExecuTorch**
 
-[Documentation](https://huggingface.co/docs/optimum/index) | [ExecuTorch](https://github.com/pytorch/executorch) | [Hugging Face](https://huggingface.co/)
+[Documentation](https://huggingface.co/docs/optimum-executorch/en/index) | [ExecuTorch](https://github.com/pytorch/executorch) | [Hugging Face](https://huggingface.co/)
 
 </div>
 
@@ -94,7 +94,8 @@ optimum-cli export executorch \
     --qembedding 8w \
     --output_dir="hf_smollm2"
 ```
-Explore the various export options by running the command: `optimum-cli export executorch --help`
+Explore the various export options by running the command: `optimum-cli export executorch --help`.
+To read more about how to export different types of models on Optimum ExecuTorch, please revert to the export [README](optimum/exporters/executorch/README.md).
 
 #### Step 2: Validate the Exported Model on Host Using the Python API
 Use the exported model for text generation:
@@ -187,6 +188,7 @@ We currently support a wide range of popular transformer models, including encod
 - [Whisper](https://huggingface.co/openai/whisper-tiny): OpenAI's `Whisper` and its variants
 
 #### Speech text-to-text (Automatic Speech Recognition)
+- 💡[**NEW**] [Granite Speech](https://huggingface.co/ibm-granite/granite-speech-3.3-2b): `granite-speech-3.3-2b` and its variants
 - 💡[**NEW**] [Voxtral](https://huggingface.co/mistralai/Voxtral-Mini-3B-2507): Mistral's newest speech/text-to-text model
 
 *📌 Note: This list is continuously expanding. As we continue to expand support, more models will be added.*

@@ -86,5 +86,6 @@ def export_to_executorch(
             logging.info(
                 f"Saved exported program to {full_path} ({os.path.getsize(full_path) / (1024 * 1024):.2f} MB)"
             )
+        prog.write_tensor_data_to_file(output_dir)
 
     return executorch_progs

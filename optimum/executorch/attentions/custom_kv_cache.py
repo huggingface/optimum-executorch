@@ -51,7 +51,11 @@ class ETCustomStaticCache(StaticCache):
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert device is None or device == "cpu", "Device must be None or 'cpu'"
+        assert device is None or device in [
+            "cpu",
+            "cuda",
+            "mps",
+        ], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
 
         # Create a list of CustomKVCache instances derived from each layer of the original Transformers cache, one per layer.
         self.kv_cache = torch.nn.ModuleList()
@@ -63,6 +67,8 @@ class ETCustomStaticCache(StaticCache):
                 head_dim=layer.head_dim,
                 dtype=dtype,
             )
+            layer_cache.k_cache = layer_cache.k_cache.to(device)
+            layer_cache.v_cache = layer_cache.v_cache.to(device)
             self.kv_cache.append(layer_cache)
 
     def update(
@@ -160,7 +166,7 @@ class ETCustomStaticCache(StaticCache):
         elif dtype is None and hasattr(legacy_cache.k_cache, "dtype"):
             dtype = legacy_cache.k_cache.dtype
 
-        assert device is None or device == "cpu"
+        # assert device is None or device == "cpu"
         assert dtype is None or dtype == torch.float32
 
         # Use the legacy cache's max_seq_len if max_cache_len is not specified
@@ -206,7 +212,11 @@ class ETCustomHybridCache(HybridCache):
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert device is None or device == "cpu", "Device must be None or 'cpu'"
+        assert device is None or device in [
+            "cpu",
+            "cuda",
+            "mps",
+        ], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
 
         self.cache_position = None
         # Create a list of cache instances, one per layer.
@@ -230,6 +240,8 @@ class ETCustomHybridCache(HybridCache):
                     head_dim=layer.head_dim,
                     dtype=dtype,
                 )
+                layer_cache.k_cache = layer_cache.k_cache.to(device)
+                layer_cache.v_cache = layer_cache.v_cache.to(device)
             self.kv_cache.append(layer_cache)
 
     def update(

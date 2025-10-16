@@ -15,19 +15,17 @@
 import logging
 from typing import Dict, Union
 
+import torch
 from tabulate import tabulate
 from torch.export import ExportedProgram
-from torchao.utils import unwrap_tensor_subclass
+from torch.nn.attention import SDPBackend
 
-from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
     EdgeCompileConfig,
-    ExecutorchBackendConfig,
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
-from executorch.exir.passes import MemoryPlanningPass
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
 from ..integrations import (
@@ -39,8 +37,11 @@ from ..integrations import (
 from ..recipe_registry import register_recipe
 
 
-@register_recipe("xnnpack")
-def export_to_executorch_with_xnnpack(
+aten = torch.ops.aten
+
+
+@register_recipe("cuda")
+def export_to_executorch_with_cuda(
     model: Union[
         CausalLMExportableModule,
         MaskedLMExportableModule,
@@ -50,50 +51,58 @@ def export_to_executorch_with_xnnpack(
     **kwargs,
 ):
     """
-    Export a PyTorch model to ExecuTorch w/ delegation to XNNPACK backend.
-
-    This function also write metadata required by the ExecuTorch runtime to the model.
-
+    Export a PyTorch model to ExecuTorch w/ delegation to CUDA backend.
+    This function also write metadata required by the ExecuTorch runtime to the .pte file.
     Args:
         model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule]):
             The PyTorch model to be exported to ExecuTorch.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.
-
     Returns:
         Dict[str, ExecutorchProgram]:
             A map of exported and optimized program for ExecuTorch.
             For encoder-decoder models or multimodal models, it may generate multiple programs.
     """
+    # Import here to avoid version conflicts.
+    from torch._inductor.decomposition import conv1d_to_conv2d
+
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
         metadata=None,
     ) -> Dict[str, ExecutorchProgram]:
-        backend_config_dict = {
-            "extract_delegate_segments": True,
-            "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
-        }
-        backend_config_dict["do_quant_fusion_and_const_prop"] = True
         logging.debug(f"\nExported program: {exported_programs}")
 
         # If just one exported program, the method name in the .pte for it should be "forward".
         if len(exported_programs) == 1:
             exported_programs = {"forward": next(iter(exported_programs.values()))}
 
-        et_prog = to_edge_transform_and_lower(
-            exported_programs,
-            partitioner=[XnnpackPartitioner()],
-            compile_config=EdgeCompileConfig(
-                _check_ir_validity=False,
-                _skip_dim_order=True,
-            ),
-            constant_methods=metadata,
-            transform_passes=[RemovePaddingIdxEmbeddingPass()],
-        )
-        et_prog = et_prog.to_executorch(
-            config=ExecutorchBackendConfig(**backend_config_dict),
-        )
+        # CUDA backend compile spec with method name.
+        partitioners = {
+            key: [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(key)])]
+            for key in exported_programs.keys()
+        }
+        # Add decompositions for triton to generate kernels.
+        for key, ep in exported_programs.items():
+            exported_programs[key] = ep.run_decompositions(
+                {
+                    aten.conv1d.default: conv1d_to_conv2d,
+                }
+            )
+        with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]):
+            et_prog = to_edge_transform_and_lower(
+                exported_programs,
+                partitioner=partitioners,
+                compile_config=EdgeCompileConfig(
+                    _check_ir_validity=False,
+                    _skip_dim_order=True,
+                ),
+                constant_methods=metadata,
+                transform_passes=[RemovePaddingIdxEmbeddingPass()],
+            )
+        et_prog = et_prog.to_executorch()
         pte_name = "model"
         for method in et_prog.methods:
             logging.debug(f"---------------------- Method: {method} ----------------------")
@@ -105,19 +114,16 @@ def export_to_executorch_with_xnnpack(
             )
         return {pte_name: et_prog}
 
-    model = unwrap_tensor_subclass(model)
-    exported_progs = model.export()
+    # Decomposes SDPA since we don't have a flash attention kernel for it yet.
+    with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
+        exported_progs = model.export()
 
     if (
         model.config._attn_implementation == "custom_sdpa"
         or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
     ):
-        # Sanity check to make sure the exported program contains the custom sdpa operator.
-        if not any(
-            node.op == "call_function" and "custom_sdpa" in str(node.target)
-            for exported_program in exported_progs.values()
-            for node in exported_program.graph_module.graph.nodes
-        ):
-            raise ValueError("'custom_sdpa' not found in the graph.")
+        raise NotImplementedError(
+            "Custom SDPA implementation is not supported for CUDA yet. Please use 'flash_attention' instead."
+        )
 
     return _lower_to_executorch(exported_progs, model.metadata)

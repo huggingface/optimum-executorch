@@ -73,7 +73,7 @@ class VisionExportableModule(torch.nn.Module):
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'pixel_values' key: {processed_inputs}"
             )
-        export_inputs = processed_inputs["pixel_values"]
+        export_inputs = processed_inputs["pixel_values"].to(dtype=self.model.dtype)
 
         # 2. Get export dynamic shapes
         dynamic_shapes = None  # No batching for now.
@@ -85,7 +85,9 @@ class VisionExportableModule(torch.nn.Module):
         input_features: torch.FloatTensor,
     ):
         image_embeds = self.model.get_image_features(input_features)
-        return image_embeds.unsqueeze(0)
+        if isinstance(image_embeds, list):
+            image_embeds = torch.stack(image_embeds)
+        return image_embeds
 
 
 class AudioExportableModule(torch.nn.Module):
@@ -134,7 +136,7 @@ class AudioExportableModule(torch.nn.Module):
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"
             )
-        export_inputs = processed_inputs["input_features"]
+        export_inputs = processed_inputs["input_features"].to(dtype=self.model.dtype)
         # Make sure the export inputs has a batch size > 1 so that it doesn't 0/1 specialize.
         if export_inputs.shape[0] == 1:
             export_inputs = export_inputs.repeat(2, 1, 1)
@@ -250,7 +252,9 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
         # Prepare inputs with dynamic shapes
         seq_length = 3
-        example_inputs_embeds = torch.zeros((1, seq_length, self.config.text_config.hidden_size), dtype=torch.float)
+        example_inputs_embeds = torch.zeros(
+            (1, seq_length, self.config.text_config.hidden_size), dtype=self.model.dtype
+        )
         example_cache_position = torch.arange(seq_length, dtype=torch.long)
 
         seq_len_dim = torch.export.Dim("seq_length_dim", max=max_seq_len)
@@ -319,6 +323,9 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             logging.info(
                 f"Exporting decoder using inputs_embeds({inputs_embeds.shape}), cache_position({cache_position.shape})={cache_position}, dynamic_shapes={dynamic_shapes}"
             )
+            # Move inputs to the same device as the model
+            inputs_embeds = inputs_embeds.to(self.model.device)
+            cache_position = cache_position.to(self.model.device)
             exported_program = exportable_module.export(
                 inputs_embeds=inputs_embeds,
                 cache_position=cache_position,
@@ -352,7 +359,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             logging.info(
                 f"Exporting token embeddings using input_ids({input_ids.shape}), dynamic_shapes={dynamic_shapes}"
             )
-
+            # Move inputs to the same device as the model
+            input_ids = input_ids.to(self.model.device)
             token_embedding_exported_program = torch.export.export(
                 self.model.get_input_embeddings(),
                 args=(input_ids,),
@@ -380,6 +388,8 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 f"Exporting {self.modality} encoder using input_features({input_features.shape}), dynamic_shapes={dynamic_shapes}"
             )
 
+            # Move inputs to the same device as the model
+            input_features = input_features.to(self.model.device)
             encoder_exported_program = torch.export.export(
                 encoder,
                 args=(),

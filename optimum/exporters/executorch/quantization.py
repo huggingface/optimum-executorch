@@ -22,6 +22,7 @@ def quantize_model_(
     eager_model: torch.nn.Module,
     qlinear_config: Optional[str] = None,
     qlinear_group_size: Optional[int] = 32,
+    qlinear_packing_format: Optional[str] = None,
     qembedding_config: Optional[str] = None,
     qembedding_group_size: Optional[int] = 0,
 ) -> torch.nn.Module:
@@ -30,6 +31,7 @@ def quantize_model_(
 
     from torchao.quantization.granularity import PerAxis, PerGroup
     from torchao.quantization.quant_api import (
+        Int4WeightOnlyConfig,
         Int8DynamicActivationIntxWeightConfig,
         IntxWeightOnlyConfig,
         quantize_,
@@ -74,20 +76,30 @@ def quantize_model_(
             linear_weight_granularity = PerGroup(qlinear_group_size)
 
         logging.info("Quantizing linear layers.")
-        linear_config = {
-            "8da4w": Int8DynamicActivationIntxWeightConfig(
-                weight_dtype=torch.int4,
-                weight_granularity=linear_weight_granularity,
-            ),
-            "4w": IntxWeightOnlyConfig(
-                weight_dtype=torch.int4,
-                granularity=linear_weight_granularity,
-            ),
-            "8w": IntxWeightOnlyConfig(
-                weight_dtype=torch.int8,
-                granularity=linear_weight_granularity,
-            ),
-        }[qlinear_config]
+
+        # Determine if we need to use Int4WeightOnlyConfig with int4_packing_format
+        if qlinear_config == "4w" and qlinear_packing_format:
+            linear_config = Int4WeightOnlyConfig(
+                group_size=qlinear_group_size,
+                int4_packing_format=qlinear_packing_format,
+                int4_choose_qparams_algorithm="hqq",
+            )
+        else:
+            linear_config = {
+                "8da4w": Int8DynamicActivationIntxWeightConfig(
+                    weight_dtype=torch.int4,
+                    weight_granularity=linear_weight_granularity,
+                ),
+                "4w": IntxWeightOnlyConfig(
+                    weight_dtype=torch.int4,
+                    granularity=linear_weight_granularity,
+                ),
+                "8w": IntxWeightOnlyConfig(
+                    weight_dtype=torch.int8,
+                    granularity=linear_weight_granularity,
+                ),
+            }[qlinear_config]
+
         quantize_(
             eager_model,
             linear_config,
