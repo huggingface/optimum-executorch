@@ -185,9 +185,7 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
                     "--qlinear_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
                 )
             if not self.args.qlinear or self.args.qlinear != "4w":
-                raise ValueError(
-                    "--qlinear_packing_format can only be used when --qlinear is set to '4w'"
-                )
+                raise ValueError("--qlinear_packing_format can only be used when --qlinear is set to '4w'")
         qlinear_encoder_packing_format = getattr(self.args, "qlinear_encoder_packing_format", None)
         if qlinear_encoder_packing_format:
             if not device or not device.startswith("cuda"):
