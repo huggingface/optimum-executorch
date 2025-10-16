@@ -350,8 +350,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.skipif(is_linux_ci, reason="OOM")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA backend required")
     def test_gemma3_export_to_executorch_in_cuda_recipe(self):
-        model_id = "unsloth/gemma-3-1b-it"
-        task = "text-generation"
+        model_id = "google/gemma-3-4b-it"
+        task = "multimodal-text-to-text"
         recipe = "cuda"
         output_subdir = "executorch"
 
