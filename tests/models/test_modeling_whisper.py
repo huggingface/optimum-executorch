@@ -49,8 +49,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 shell=True,
                 check=True,
             )
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/encoder.pte"))
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/decoder.pte"))
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
             model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(f"{tempdir}/executorch")
             self._test_whisper_transcription(model_id, model)
 
@@ -59,16 +58,17 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         self.assertIsInstance(model, ExecuTorchModelForSpeechSeq2Seq)
-        self.assertTrue(hasattr(model, "encoder"))
-        self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "text_decoder"))
-        self.assertIsInstance(model.decoder, ExecuTorchModule)
+        self.assertTrue(hasattr(model, "model"))
+        self.assertIsInstance(model.model, ExecuTorchModule)
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(
-            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+            sample["array"],
+            return_tensors="pt",
+            truncation=False,
+            sampling_rate=sample["sampling_rate"],
         ).input_features
         # Current implementation of the transcibe method accepts up to 30 seconds of audio, therefore I trim the audio here.
         input_features_trimmed = input_features[:, :, :3000].contiguous()
