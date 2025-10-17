@@ -46,13 +46,13 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
     """
     device = "cpu"
     batch_size = 1
-    max_hidden_seq_length = kwargs.get("max_hidden_seq_length", 4096)
-    max_cache_length = kwargs.get("max_cache_length", 1024)
+    max_hidden_seq_len = kwargs.get("max_hidden_seq_len", 4096)
+    max_seq_len = kwargs.get("max_seq_len", 1024)
 
     full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path).to(device).eval()
     return Seq2SeqLMExportableModule(
         full_model,
         batch_size=batch_size,
-        max_hidden_seq_length=max_hidden_seq_length,
-        max_cache_length=max_cache_length,
+        max_seq_len=max_seq_len,
+        max_hidden_seq_len=max_hidden_seq_len,
     )
