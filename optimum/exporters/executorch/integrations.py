@@ -424,7 +424,7 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_sdpa = use_custom_sdpa
         self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(
-            model.config, model.generation_config, get_max_seq_len=max_seq_len
+            model.config, model.generation_config, get_max_seq_len=max_seq_len, enable_dynamic_shape=not self.disable_dynamic_shapes
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 

@@ -527,9 +527,6 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         Returns:
             List[int]: List of generated token IDs.
 
-        Note:
-            Temporarily implemented this method in Python due to limited access to ExecuTorch's c++ LLM runner via pybind.
-            Expect improvements to the pybind interface in ExecuTorch version 0.4.1.
         """
         self.device = torch.device("cpu")
         if max_seq_len is None:
