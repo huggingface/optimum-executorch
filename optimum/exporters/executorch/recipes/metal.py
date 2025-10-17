@@ -101,14 +101,12 @@ def export_to_executorch_with_metal(
             )
         return {pte_name: et_prog}
 
-    exported_progs = model.export()
-
     if (
         model.config._attn_implementation == "custom_sdpa"
         or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
     ):
-        raise NotImplementedError(
-            "Custom SDPA implementation is not supported for Metal."
-        )
+        raise NotImplementedError("Custom SDPA implementation is not supported for Metal.")
+
+    exported_progs = model.export()
 
     return _lower_to_executorch(exported_progs, model.metadata)

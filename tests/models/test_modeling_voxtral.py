@@ -23,7 +23,9 @@ import unittest
 
 import pytest
 import torch
+from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoConfig, AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -356,6 +358,14 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @pytest.mark.run_slow
     @pytest.mark.skipif(is_linux_ci, reason="OOM")
     @pytest.mark.skipif(not torch.mps.is_available(), reason="Metal backend required")
+    @pytest.mark.skipif(
+        parse(torch.__version__) < parse("2.10.0.dev20251010"),
+        reason="Requires torch >= 2.10.0.dev20251010",
+    )
+    @pytest.mark.skipif(
+        parse(version.__version__) < parse("1.0.0.dev20251017"),
+        reason="Requires executorch >= 1.0.0.dev20251017",
+    )
     def test_voxtral_export_to_executorch_metal_recipe(self):
         output_subdir = "executorch"
 
