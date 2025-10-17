@@ -363,8 +363,8 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         reason="Requires torch >= 2.10.0.dev20251010",
     )
     @pytest.mark.skipif(
-        parse(version.__version__) < parse("1.0.0.dev20251017"),
-        reason="Requires executorch >= 1.0.0.dev20251017",
+        parse(version.__version__) < parse("1.1.0.dev20251017"),
+        reason="Requires executorch >= 1.1.0.dev20251017",
     )
     def test_voxtral_export_to_executorch_metal_recipe(self):
         output_subdir = "executorch"
