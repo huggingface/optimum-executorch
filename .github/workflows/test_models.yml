@@ -60,6 +60,9 @@ jobs:
             pip install git+https://github.com/pytorch-labs/tokenizers
           fi
           pip list
+      - name: Install optional audio deps
+        run: |
+          pip install torchcodec
       - name: Run tests
         run: |
           RUN_SLOW=1 pytest tests/models/test_modeling_${{ matrix.test-modeling }}.py -s -vvvv --durations=0 --log-cli-level=INFO
