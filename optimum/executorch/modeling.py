@@ -1124,6 +1124,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
             if not first_token_generated:
                 self.stats.on_first_token()
                 first_token_generated = True
+
             # Get next token
             next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
             generated_ids.append(next_token)

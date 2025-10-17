@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from typing import Dict, Union
 
 from torch.export import ExportedProgram
@@ -58,24 +57,22 @@ def export_to_executorch_with_portable(
         exported_programs: Dict[str, ExportedProgram],
         metadata=None,
     ) -> Dict[str, ExecutorchProgram]:
-        et_progs = {}
+        # If just one exported program, the method name in the .pte for it should be "forward".
+        if len(exported_programs) == 1:
+            exported_programs = {"forward": next(iter(exported_programs.values()))}
 
-        for pte_name, exported_program in exported_programs.items():
-            logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
-            et_progs[pte_name] = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=[],
-                compile_config=EdgeCompileConfig(
-                    _check_ir_validity=False,
-                    _skip_dim_order=True,
-                ),
-                constant_methods=metadata,
-                transform_passes=[RemovePaddingIdxEmbeddingPass()],
-            ).to_executorch()
-            logging.debug(
-                f"\nExecuTorch program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}"
-            )
-        return et_progs
+        et_prog = to_edge_transform_and_lower(
+            exported_programs,
+            partitioner=[],
+            compile_config=EdgeCompileConfig(
+                _check_ir_validity=False,
+                _skip_dim_order=True,
+            ),
+            constant_methods=metadata,
+            transform_passes=[RemovePaddingIdxEmbeddingPass()],
+        ).to_executorch()
+        pte_name = "model"
+        return {pte_name: et_prog}
 
     exported_progs = model.export()
 
