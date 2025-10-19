@@ -99,3 +99,36 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     )
     def test_whisper_transcription_portable(self):
         self._helper_whisper_transcription(recipe="portable")
+
+    @slow
+    @pytest.mark.run_slow
+    def test_whisper_large_v3_turbo_export_bfloat16(self):
+        """Test exporting whisper-large-v3-turbo with bfloat16 and check file size is ~1.6GB"""
+        model_id = "openai/whisper-large-v3-turbo"
+        task = "automatic-speech-recognition"
+        recipe = "xnnpack"
+        dtype = "bfloat16"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch --dtype {dtype}",
+                shell=True,
+                check=True,
+            )
+
+            # Check that model.pte exists
+            model_path = os.path.join(tempdir, "executorch", "model.pte")
+            self.assertTrue(os.path.exists(model_path), f"model.pte not found at {model_path}")
+
+            # Check file size is approximately 1.6GB (allow 10% tolerance)
+            file_size_bytes = os.path.getsize(model_path)
+            file_size_gb = file_size_bytes / (1024**3)
+            expected_size_gb = 1.6
+            tolerance = 0.1  # 10% tolerance
+
+            logging.info(f"model.pte size: {file_size_gb:.2f} GB")
+            self.assertAlmostEqual(
+                file_size_gb,
+                expected_size_gb,
+                delta=expected_size_gb * tolerance,
+                msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
+            )
