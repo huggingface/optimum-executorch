@@ -119,16 +119,16 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             model_path = os.path.join(tempdir, "executorch", "model.pte")
             self.assertTrue(os.path.exists(model_path), f"model.pte not found at {model_path}")
 
-        # Check file size is approximately 1.2GB (allow 10% tolerance)
-        file_size_bytes = os.path.getsize(model_path)
-        file_size_gb = file_size_bytes / (1024**3)
-        expected_size_gb = 1.2
-        tolerance = 0.1  # 10% tolerance
+            # Check file size is approximately 1.2GB (allow 10% tolerance)
+            file_size_bytes = os.path.getsize(model_path)
+            file_size_gb = file_size_bytes / (1024**3)
+            expected_size_gb = 1.2
+            tolerance = 0.1  # 10% tolerance
 
-        logging.info(f"model.pte size: {file_size_gb:.2f} GB")
-        self.assertAlmostEqual(
-            file_size_gb,
-            expected_size_gb,
-            delta=expected_size_gb * tolerance,
-            msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
-        )
+            logging.info(f"model.pte size: {file_size_gb:.2f} GB")
+            self.assertAlmostEqual(
+                file_size_gb,
+                expected_size_gb,
+                delta=expected_size_gb * tolerance,
+                msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
+            )
