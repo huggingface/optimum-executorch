@@ -50,7 +50,7 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
     max_seq_len = kwargs.get("max_seq_len", 1024)
     dtype = kwargs.get("dtype", "float32")
 
-    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path, dtype=dtype).to(device=device).eval()
+    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path, dtype=dtype, device_map=device).eval()
     return Seq2SeqLMExportableModule(
         full_model,
         batch_size=batch_size,
