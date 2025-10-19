@@ -44,12 +44,13 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
         Seq2SeqLMExportableModule:
             An instance of `Seq2SeqLMExportableModule` for exporting and lowering to ExecuTorch.
     """
-    device = "cpu"
+    device = kwargs.get("device", "cpu")
     batch_size = 1
     max_hidden_seq_len = kwargs.get("max_hidden_seq_len", 4096)
     max_seq_len = kwargs.get("max_seq_len", 1024)
+    dtype = kwargs.get("dtype", "float32")
 
-    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path).to(device).eval()
+    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path, dtype=dtype).to(device=device).eval()
     return Seq2SeqLMExportableModule(
         full_model,
         batch_size=batch_size,
