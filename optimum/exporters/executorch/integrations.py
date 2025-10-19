@@ -424,7 +424,10 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_sdpa = use_custom_sdpa
         self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(
-            model.config, model.generation_config, get_max_seq_len=max_seq_len, enable_dynamic_shape=not self.disable_dynamic_shapes
+            model.config,
+            model.generation_config,
+            get_max_seq_len=max_seq_len,
+            enable_dynamic_shape=not self.disable_dynamic_shapes,
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
@@ -808,7 +811,9 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
     ) -> Dict[str, ExportedProgram]:
         if encoder_input_ids is None:
             if isinstance(self.model, WhisperForConditionalGeneration):
-                example_encoder_input_ids = torch.rand(self._expected_encoder_input_shape, device=self.model.device, dtype=self.model.dtype)
+                example_encoder_input_ids = torch.rand(
+                    self._expected_encoder_input_shape, device=self.model.device, dtype=self.model.dtype
+                )
             else:
                 example_encoder_input_ids = torch.ones((1, 10), dtype=torch.long, device=self.model.device)
         else:
@@ -822,9 +827,15 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             example_encoder_hidden_states = encoder_hidden_states
 
         example_decoder_input_ids = (
-            decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long, device=self.model.device)
+            decoder_input_ids
+            if decoder_input_ids is not None
+            else torch.tensor([[0]], dtype=torch.long, device=self.model.device)
         )
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=self.model.device)
+        example_cache_position = (
+            cache_position
+            if cache_position is not None
+            else torch.tensor([0], dtype=torch.long, device=self.model.device)
+        )
 
         self.exported_decoder = self._export_decoder(
             example_decoder_input_ids,

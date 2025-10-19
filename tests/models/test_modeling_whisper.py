@@ -121,7 +121,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Check file size is approximately 1.2GB (allow 10% tolerance)
         file_size_bytes = os.path.getsize(model_path)
-        file_size_gb = file_size_bytes / (1024 ** 3)
+        file_size_gb = file_size_bytes / (1024**3)
         expected_size_gb = 1.2
         tolerance = 0.1  # 10% tolerance
 
@@ -130,5 +130,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             file_size_gb,
             expected_size_gb,
             delta=expected_size_gb * tolerance,
-            msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB"
+            msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
         )
