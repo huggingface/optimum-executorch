@@ -21,7 +21,6 @@ import unittest
 
 import pytest
 from executorch import version
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
@@ -45,19 +44,12 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 shell=True,
                 check=True,
             )
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/encoder.pte"))
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/decoder.pte"))
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
 
     def _helper_t5_translation(self, recipe: str):
         model_id = "google/flan-t5-small"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
-
-        self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
-        self.assertTrue(hasattr(model, "text_encoder"))
-        self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "text_decoder"))
-        self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         input_text = "translate English to German: How old are you?"
         generated_text = model.text_generation(
@@ -87,12 +79,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model_id = "google-t5/t5-small"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
-
-        self.assertIsInstance(model, ExecuTorchModelForSeq2SeqLM)
-        self.assertTrue(hasattr(model, "encoder"))
-        self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "text_decoder"))
-        self.assertIsInstance(model.decoder, ExecuTorchModule)
 
         article = (
             " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
