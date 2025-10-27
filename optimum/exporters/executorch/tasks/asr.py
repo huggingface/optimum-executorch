@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torchao
-
 from transformers import AutoModelForSpeechSeq2Seq
 
 from ..integrations import Seq2SeqLMExportableModule
