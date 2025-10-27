@@ -442,8 +442,8 @@ class CausalLMExportableModule(torch.nn.Module):
             strict (bool): Whether to use strict export mode.
         """
         # Default values for legacy or fallback cases
-        example_input_ids = torch.tensor([[1]], dtype=torch.long)
-        example_cache_position = torch.tensor([0], dtype=torch.long)
+        example_input_ids = torch.tensor([[1]], dtype=torch.long, device=self.model.device)
+        example_cache_position = torch.tensor([0], dtype=torch.long, device=self.model.device)
         dynamic_shapes = None
         strict = True
 
@@ -456,8 +456,8 @@ class CausalLMExportableModule(torch.nn.Module):
         if not self.disable_dynamic_shapes and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
             # Prepare inputs with dynamic shapes
             seq_length = 3  # Sequence length > 1 to avoid specialization issues
-            example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
-            example_cache_position = torch.arange(seq_length, dtype=torch.long)
+            example_input_ids = torch.zeros((1, seq_length), dtype=torch.long, device=self.model.device)
+            example_cache_position = torch.arange(seq_length, dtype=torch.long, device=self.model.device)
             max_seq_len = self.metadata.get("get_max_seq_len")
             sliding_window = self.metadata.get("sliding_window", float("inf"))
             max_dim = min(max_seq_len, sliding_window) - 1
@@ -567,7 +567,9 @@ class VisionEncoderExportableModule(torch.nn.Module):
             num_channels = self.config.num_channels
             height = self.config.image_size
             width = self.config.image_size
-            pixel_values = torch.rand(batch_size, num_channels, height, width)
+            pixel_values = torch.rand(
+                batch_size, num_channels, height, width, dtype=self.model.dtype, device=self.model.device
+            )
 
         with torch.no_grad():
             return {
@@ -606,12 +608,14 @@ class MaskedLMExportableModule(torch.nn.Module):
 
         # Create example inputs (no need for tokenizer)
         dummy_input_ids = (
-            torch.randint(0, vocab_size, (batch_size, seq_length), dtype=torch.long)
+            torch.randint(0, vocab_size, (batch_size, seq_length), dtype=torch.long, device=self.model.device)
             if input_ids is None
             else input_ids
         )
         dummy_attention_mask = (
-            torch.ones((batch_size, seq_length), dtype=torch.long) if attention_mask is None else attention_mask
+            torch.ones((batch_size, seq_length), dtype=torch.long, device=self.model.device)
+            if attention_mask is None
+            else attention_mask
         )
 
         # Define dynamic shapes with Dim objects, always use Auto
