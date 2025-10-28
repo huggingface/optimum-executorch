@@ -13,14 +13,14 @@ except Exception as error:
 
 INSTALL_REQUIRE = [
     "optimum~=1.24",
-    "executorch>=0.7.0",
+    "executorch>=1.0.0",
     "transformers==4.56.1",
 ]
 
 TESTS_REQUIRE = [
     "accelerate>=0.26.0",
     "coremltools>=8.2.0",
-    "datasets",
+    "datasets==3.6.0",  # Locked to 3.6.0 due to https://github.com/huggingface/datasets/issues/7707
     "parameterized",
     "pytest",
     "safetensors",
