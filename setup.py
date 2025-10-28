@@ -20,7 +20,7 @@ INSTALL_REQUIRE = [
 TESTS_REQUIRE = [
     "accelerate>=0.26.0",
     "coremltools>=8.2.0",
-    "datasets",
+    "datasets==3.6.0",  # Locked to 3.6.0 due to https://github.com/huggingface/datasets/issues/7707
     "parameterized",
     "pytest",
     "safetensors",
