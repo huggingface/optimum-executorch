@@ -27,6 +27,8 @@ dependencies = [
   "optimum~=1.24",
   "executorch>=1.0.0",
   "transformers==4.56.1",
+  "pytorch-tokenizers>=1.0.1",
+  "accelerate>=0.26.0",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +49,6 @@ quality = [
   "black~=23.1",
   "ruff==0.4.4",
 ]
-# You can't “reference” other extras here, so repeat the lists (ok to duplicate):
 dev = [
   "accelerate>=0.26.0",
   "coremltools>=8.2.0",
