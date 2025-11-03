@@ -55,9 +55,8 @@ jobs:
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
             python install_dev.py
           else
-            pip install '.[tests]'
+            pip install '.[dev]'
             pip install executorch==${{ matrix.executorch-version }}
-            pip install git+https://github.com/pytorch-labs/tokenizers
           fi
           pip list
       - name: Run tests
