@@ -7,7 +7,7 @@ def install_torch_nightly_deps():
     """Install torch related dependencies from pinned nightly"""
     EXECUTORCH_NIGHTLY_VERSION = "dev20250916"
     TORCHAO_NIGHTLY_VERSION = "dev20250916"
-    # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/install_requirements.py#L74
+    # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/torch_pin.py#L2
     TORCH_NIGHTLY_VERSION = "dev20250916"
     subprocess.check_call(
         [
@@ -43,7 +43,7 @@ def install_dep_from_source():
             "-m",
             "pip",
             "install",
-            "git+https://github.com/pytorch-labs/tokenizers@fc32028858020c4fcafe37aaaeaf5d1b480336a2#egg=pytorch-tokenizers",
+            "git+https://github.com/pytorch-labs/tokenizers@3aada3fe28c945d14d5ec62254eb56ccdf10eb11#egg=pytorch-tokenizers",
         ]
     )
 
