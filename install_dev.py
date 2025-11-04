@@ -5,21 +5,21 @@ import sys
 
 def install_torch_nightly_deps():
     """Install torch related dependencies from pinned nightly"""
-    EXECUTORCH_NIGHTLY_VERSION = "dev20251015"
-    TORCHAO_NIGHTLY_VERSION = "dev20251015"
+    EXECUTORCH_NIGHTLY_VERSION = "dev20250916"
+    TORCHAO_NIGHTLY_VERSION = "dev20250916"
     # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/torch_pin.py#L2
-    TORCH_NIGHTLY_VERSION = "dev20251015"
+    TORCH_NIGHTLY_VERSION = "dev20250916"
     subprocess.check_call(
         [
             sys.executable,
             "-m",
             "pip",
             "install",
-            f"executorch==1.1.0.{EXECUTORCH_NIGHTLY_VERSION}",
+            f"executorch==1.0.0.{EXECUTORCH_NIGHTLY_VERSION}",
             f"torch==2.10.0.{TORCH_NIGHTLY_VERSION}",
             f"torchvision==0.25.0.{TORCH_NIGHTLY_VERSION}",
             f"torchaudio==2.8.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchao==0.15.0.{TORCHAO_NIGHTLY_VERSION}",
+            f"torchao==0.14.0.{TORCHAO_NIGHTLY_VERSION}",
             "--extra-index-url",
             "https://download.pytorch.org/whl/nightly/cpu",
         ]
@@ -59,7 +59,7 @@ def main():
     args = parser.parse_args()
 
     # Install package with dev extras
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-e",  ".[dev]"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", ".[dev]"])
 
     # Install nightly dependencies
     if not args.skip_override_torch:
