@@ -36,7 +36,6 @@ def quantize_model_(
         IntxWeightOnlyConfig,
         quantize_,
     )
-    from torchao.utils import unwrap_tensor_subclass
 
     if qembedding_config:
         if qlinear_config == "8w":
@@ -104,5 +103,3 @@ def quantize_model_(
             eager_model,
             linear_config,
         )
-
-    unwrap_tensor_subclass(eager_model)
