@@ -16,6 +16,8 @@ import logging
 from typing import Optional
 
 import torch
+from packaging.version import parse
+from torch import __version__ as torch_version
 
 
 def quantize_model_(
@@ -105,4 +107,6 @@ def quantize_model_(
             linear_config,
         )
 
-    unwrap_tensor_subclass(eager_model)
+    # TODO: remove after ExecuTorch dep on Torch >= 2.10.0.
+    if parse(torch_version) < parse("2.10.0.dev20251104"):
+        unwrap_tensor_subclass(eager_model)
