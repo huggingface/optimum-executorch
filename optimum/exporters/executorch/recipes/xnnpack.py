@@ -15,7 +15,9 @@
 import logging
 from typing import Dict, Union
 
+from packaging.version import parse
 from tabulate import tabulate
+from torch import __version__ as torch_version
 from torch.export import ExportedProgram
 from torchao.utils import unwrap_tensor_subclass
 
@@ -105,6 +107,9 @@ def export_to_executorch_with_xnnpack(
             )
         return {pte_name: et_prog}
 
+    # TODO: remove after ExecuTorch dep on Torch >= 2.10.0.
+    if parse(torch_version) < parse("2.10.0.dev20251104"):
+        model = unwrap_tensor_subclass(model)
     exported_progs = model.export()
 
     if (

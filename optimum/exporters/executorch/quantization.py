@@ -16,6 +16,8 @@ import logging
 from typing import Optional
 
 import torch
+from packaging.version import parse
+from torch import __version__ as torch_version
 
 
 def quantize_model_(
@@ -36,6 +38,7 @@ def quantize_model_(
         IntxWeightOnlyConfig,
         quantize_,
     )
+    from torchao.utils import unwrap_tensor_subclass
 
     if qembedding_config:
         if qlinear_config == "8w":
@@ -104,3 +107,6 @@ def quantize_model_(
             linear_config,
         )
 
+    # TODO: remove after ExecuTorch dep on Torch >= 2.10.0.
+    if parse(torch_version) < parse("2.10.0.dev20251104"):
+        unwrap_tensor_subclass(eager_model)
