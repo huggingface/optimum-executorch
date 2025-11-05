@@ -49,8 +49,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 shell=True,
                 check=True,
             )
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/encoder.pte"))
-            self.assertTrue(os.path.exists(f"{tempdir}/executorch/decoder.pte"))
+            self.assertTrue(os.path.exists(f"{tempdir}/executorch/model.pte"))
             model = ExecuTorchModelForSpeechSeq2Seq.from_pretrained(f"{tempdir}/executorch")
             self._test_whisper_transcription(model_id, model)
 
@@ -59,16 +58,17 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         self.assertIsInstance(model, ExecuTorchModelForSpeechSeq2Seq)
-        self.assertTrue(hasattr(model, "encoder"))
-        self.assertIsInstance(model.encoder, ExecuTorchModule)
-        self.assertTrue(hasattr(model, "text_decoder"))
-        self.assertIsInstance(model.decoder, ExecuTorchModule)
+        self.assertTrue(hasattr(model, "model"))
+        self.assertIsInstance(model.model, ExecuTorchModule)
 
         dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
         sample = dataset[0]["audio"]
 
         input_features = processor(
-            sample["array"], return_tensors="pt", truncation=False, sampling_rate=sample["sampling_rate"]
+            sample["array"],
+            return_tensors="pt",
+            truncation=False,
+            sampling_rate=sample["sampling_rate"],
         ).input_features
         # Current implementation of the transcibe method accepts up to 30 seconds of audio, therefore I trim the audio here.
         input_features_trimmed = input_features[:, :, :3000].contiguous()
@@ -99,3 +99,36 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     )
     def test_whisper_transcription_portable(self):
         self._helper_whisper_transcription(recipe="portable")
+
+    @slow
+    @pytest.mark.run_slow
+    def test_whisper_large_v3_turbo_export_bfloat16(self):
+        """Test exporting whisper-large-v3-turbo with bfloat16 and check file size is ~1.6GB"""
+        model_id = "openai/whisper-large-v3-turbo"
+        task = "automatic-speech-recognition"
+        recipe = "xnnpack"
+        dtype = "bfloat16"
+        with tempfile.TemporaryDirectory() as tempdir:
+            subprocess.run(
+                f"optimum-cli export executorch --model {model_id} --task {task} --recipe {recipe} --output_dir {tempdir}/executorch --dtype {dtype}",
+                shell=True,
+                check=True,
+            )
+
+            # Check that model.pte exists
+            model_path = os.path.join(tempdir, "executorch", "model.pte")
+            self.assertTrue(os.path.exists(model_path), f"model.pte not found at {model_path}")
+
+            # Check file size is approximately 1.6GB (allow 10% tolerance)
+            file_size_bytes = os.path.getsize(model_path)
+            file_size_gb = file_size_bytes / (1024**3)
+            expected_size_gb = 1.6
+            tolerance = 0.1  # 10% tolerance
+
+            logging.info(f"model.pte size: {file_size_gb:.2f} GB")
+            self.assertAlmostEqual(
+                file_size_gb,
+                expected_size_gb,
+                delta=expected_size_gb * tolerance,
+                msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
+            )

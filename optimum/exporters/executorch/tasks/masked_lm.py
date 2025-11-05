@@ -42,7 +42,13 @@ def load_masked_lm_model(model_name_or_path: str, **kwargs) -> MaskedLMExportabl
     eager_model = AutoModelForMaskedLM.from_pretrained(model_name_or_path).to("cpu").eval()
 
     qlinear_config = kwargs.get("qlinear", None)
+    qlinear_packing_format = kwargs.get("qlinear_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
-    quantize_model_(eager_model, qlinear_config=qlinear_config, qembedding_config=qembedding_config)
+    quantize_model_(
+        eager_model,
+        qlinear_config=qlinear_config,
+        qlinear_packing_format=qlinear_packing_format,
+        qembedding_config=qembedding_config,
+    )
 
     return MaskedLMExportableModule(eager_model)

@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         test-modeling: ${{ fromJson(needs.discover-tests.outputs.model_names) }}
-        executorch-version: ['0.7.0', 'nightly']
+        executorch-version: ['1.0.0', 'nightly']
         python-version: ['3.11']
         # os: [macos-15, ubuntu-22.04]  # TODO(#122): Re-enable the mac tests after fixing seg fault.
         os: [ubuntu-22.04]
@@ -55,9 +55,8 @@ jobs:
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
             python install_dev.py
           else
-            pip install '.[tests]'
+            pip install '.[dev]'
             pip install executorch==${{ matrix.executorch-version }}
-            pip install git+https://github.com/pytorch-labs/tokenizers
           fi
           pip list
       - name: Run tests

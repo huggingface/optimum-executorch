@@ -40,7 +40,10 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.processing_utils import ProcessorMixin
 from transformers.utils import is_offline_mode
 
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule, _load_for_executorch
+from executorch.extension.pybindings.portable_lib import (
+    ExecuTorchModule,
+    _load_for_executorch,
+)
 from executorch.kernels import quantized  # noqa
 
 from ..exporters import TasksManager
@@ -457,29 +460,27 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         config: "PretrainedConfig",
     ):
         super().__init__(models=models, config=config)
-        if not hasattr(self, "encoder"):
-            raise AttributeError("Expected attribute 'encoder' not found in the instance.")
-        if not hasattr(self, "text_decoder"):
-            raise AttributeError("Expected attribute 'decoder' not found in the instance.")
-        metadata = self.decoder.method_names()
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+        metadata = self.model.method_names()
         if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.decoder.run_method("use_kv_cache")[0]
+            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
-            self.max_cache_size = self.decoder.run_method("get_max_seq_len")[0]
+            self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
         if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.decoder.run_method("get_max_batch_size")[0]
+            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
         if "get_dtype" in metadata:
-            self.dtype = self.decoder.run_method("get_dtype")[0]
+            self.dtype = self.model.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
-            self.bos_token_id = self.decoder.run_method("get_bos_id")[0]
+            self.bos_token_id = self.model.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
-            self.eos_token_id = self.decoder.run_method("get_eos_id")[0]
+            self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
-            self.vocab_size = self.decoder.run_method("get_vocab_size")[0]
+            self.vocab_size = self.model.run_method("get_vocab_size")[0]
         if "max_hidden_seq_length" in metadata:
-            self.max_hidden_seq_length = self.decoder.run_method("max_hidden_seq_length")[0]
+            self.max_hidden_seq_length = self.model.run_method("max_hidden_seq_length")[0]
         if "decoder_start_token_id" in metadata:
-            self.decoder_start_token_id = self.decoder.run_method("decoder_start_token_id")[0]
+            self.decoder_start_token_id = self.model.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
@@ -488,14 +489,16 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         cache_position: torch.Tensor,
         encoder_outputs: Optional[torch.Tensor] = None,
     ):
-        # Encode if needed (first prediction pass)
         is_first_prediction = encoder_outputs is None
         self.stats.on_model_execution_start()
         if is_first_prediction:
-            encoder_outputs = self.encoder.forward((input_ids,))[0]
+            encoder_outputs = self.model.run_method("encoder", (input_ids,))[0]
             self.stats.on_prompt_eval_end()
 
-        result = (self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
+        result = (
+            self.model.run_method("text_decoder", (decoder_input_ids, encoder_outputs, cache_position))[0],
+            encoder_outputs,
+        )
         self.stats.on_model_execution_end()
         return result
 
@@ -524,9 +527,6 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         Returns:
             List[int]: List of generated token IDs.
 
-        Note:
-            Temporarily implemented this method in Python due to limited access to ExecuTorch's c++ LLM runner via pybind.
-            Expect improvements to the pybind interface in ExecuTorch version 0.4.1.
         """
         self.device = torch.device("cpu")
         if max_seq_len is None:
@@ -544,7 +544,6 @@ class ExecuTorchModelForSeq2SeqLM(ExecuTorchModelBase):
         encoder_input_ids = input_ids
         encoder_outputs = None
         generated_ids = [0]
-
         first_token_generated = False
 
         # Generate tokens one by one
@@ -1022,29 +1021,27 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         config: "PretrainedConfig",
     ):
         super().__init__(models=models, config=config)
-        if not hasattr(self, "encoder"):
-            raise AttributeError("Expected attribute 'encoder' not found in the instance.")
-        if not hasattr(self, "text_decoder"):
-            raise AttributeError("Expected attribute 'decoder' not found in the instance.")
-        metadata = self.decoder.method_names()
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+        metadata = self.model.method_names()
         if "use_kv_cache" in metadata:
-            self.use_kv_cache = self.decoder.run_method("use_kv_cache")[0]
+            self.use_kv_cache = self.model.run_method("use_kv_cache")[0]
         if "get_max_seq_len" in metadata:
-            self.max_cache_size = self.decoder.run_method("get_max_seq_len")[0]
+            self.max_cache_size = self.model.run_method("get_max_seq_len")[0]
         if "get_max_batch_size" in metadata:
-            self.max_batch_size = self.decoder.run_method("get_max_batch_size")[0]
+            self.max_batch_size = self.model.run_method("get_max_batch_size")[0]
         if "get_dtype" in metadata:
-            self.dtype = self.decoder.run_method("get_dtype")[0]
+            self.dtype = self.model.run_method("get_dtype")[0]
         if "get_bos_id" in metadata:
-            self.bos_token_id = self.decoder.run_method("get_bos_id")[0]
+            self.bos_token_id = self.model.run_method("get_bos_id")[0]
         if "get_eos_id" in metadata:
-            self.eos_token_id = self.decoder.run_method("get_eos_id")[0]
+            self.eos_token_id = self.model.run_method("get_eos_id")[0]
         if "get_vocab_size" in metadata:
-            self.vocab_size = self.decoder.run_method("get_vocab_size")[0]
+            self.vocab_size = self.model.run_method("get_vocab_size")[0]
         if "max_hidden_seq_length" in metadata:
-            self.max_hidden_seq_length = self.decoder.run_method("max_hidden_seq_length")[0]
+            self.max_hidden_seq_length = self.model.run_method("max_hidden_seq_length")[0]
         if "decoder_start_token_id" in metadata:
-            self.decoder_start_token_id = self.decoder.run_method("decoder_start_token_id")[0]
+            self.decoder_start_token_id = self.model.run_method("decoder_start_token_id")[0]
 
     def forward(
         self,
@@ -1056,10 +1053,13 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
         is_first_prediction = encoder_outputs is None
         self.stats.on_model_execution_start()
         if is_first_prediction:
-            encoder_outputs = self.encoder.forward((input_features,))[0]
+            encoder_outputs = self.model.run_method("encoder", (input_features,))[0]
             self.stats.on_prompt_eval_end()
 
-        result = (self.decoder.forward((decoder_input_ids, encoder_outputs, cache_position))[0], encoder_outputs)
+        result = (
+            self.model.run_method("text_decoder", (decoder_input_ids, encoder_outputs, cache_position))[0],
+            encoder_outputs,
+        )
         self.stats.on_model_execution_end()
         return result
 
@@ -1117,6 +1117,7 @@ class ExecuTorchModelForSpeechSeq2Seq(ExecuTorchModelBase):
             if not first_token_generated:
                 self.stats.on_first_token()
                 first_token_generated = True
+
             # Get next token
             next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
             generated_ids.append(next_token)

@@ -22,13 +22,17 @@ from torch.nn.attention import SDPBackend
 from transformers import (
     AutoConfig,
     AutoProcessor,
+    DynamicCache,
+    EncoderDecoderCache,
     PreTrainedModel,
     StaticCache,
     T5ForConditionalGeneration,
     WhisperForConditionalGeneration,
 )
-from transformers.generation.configuration_utils import GenerationConfig
-from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM, sdpa_mask_without_vmap
+from transformers.integrations.executorch import (
+    TorchExportableModuleForDecoderOnlyLM,
+    sdpa_mask_without_vmap,
+)
 from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
@@ -50,7 +54,10 @@ class VisionExportableModule(torch.nn.Module):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://llava-vl.github.io/static/images/view.jpg",
+                    },
                 ],
             },
         ]
@@ -337,7 +344,10 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 mutated_gm,
                 args=(),
                 # For the ET runner, it's important to have cache position as the 2nd arg.
-                kwargs={"inputs_embeds": inputs_embeds, "cache_position": cache_position},
+                kwargs={
+                    "inputs_embeds": inputs_embeds,
+                    "cache_position": cache_position,
+                },
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
@@ -400,7 +410,12 @@ class CausalLMExportableModule(torch.nn.Module):
     """
 
     def __init__(
-        self, model, max_seq_len=2048, use_custom_kv_cache=False, use_custom_sdpa=False, disable_dynamic_shapes=False
+        self,
+        model,
+        max_seq_len=2048,
+        use_custom_kv_cache=False,
+        use_custom_sdpa=False,
+        disable_dynamic_shapes=False,
     ):
         super().__init__()
         self.model = model
@@ -409,7 +424,10 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_sdpa = use_custom_sdpa
         self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(
-            model.config, model.generation_config, get_max_seq_len=max_seq_len
+            model.config,
+            model.generation_config,
+            get_max_seq_len=max_seq_len,
+            enable_dynamic_shape=not self.disable_dynamic_shapes,
         )
         logging.info(f"Metadata to be recorded in PTE: {self.metadata}")
 
@@ -424,8 +442,8 @@ class CausalLMExportableModule(torch.nn.Module):
             strict (bool): Whether to use strict export mode.
         """
         # Default values for legacy or fallback cases
-        example_input_ids = torch.tensor([[1]], dtype=torch.long)
-        example_cache_position = torch.tensor([0], dtype=torch.long)
+        example_input_ids = torch.tensor([[1]], dtype=torch.long, device=self.model.device)
+        example_cache_position = torch.tensor([0], dtype=torch.long, device=self.model.device)
         dynamic_shapes = None
         strict = True
 
@@ -438,8 +456,8 @@ class CausalLMExportableModule(torch.nn.Module):
         if not self.disable_dynamic_shapes and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
             # Prepare inputs with dynamic shapes
             seq_length = 3  # Sequence length > 1 to avoid specialization issues
-            example_input_ids = torch.zeros((1, seq_length), dtype=torch.long)
-            example_cache_position = torch.arange(seq_length, dtype=torch.long)
+            example_input_ids = torch.zeros((1, seq_length), dtype=torch.long, device=self.model.device)
+            example_cache_position = torch.arange(seq_length, dtype=torch.long, device=self.model.device)
             max_seq_len = self.metadata.get("get_max_seq_len")
             sliding_window = self.metadata.get("sliding_window", float("inf"))
             max_dim = min(max_seq_len, sliding_window) - 1
@@ -497,7 +515,10 @@ class CausalLMExportableModule(torch.nn.Module):
 
         with torch.no_grad():
             exported_program = exportable_module.export(
-                input_ids=input_ids, cache_position=cache_position, dynamic_shapes=dynamic_shapes, strict=strict
+                input_ids=input_ids,
+                cache_position=cache_position,
+                dynamic_shapes=dynamic_shapes,
+                strict=strict,
             )
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
@@ -546,7 +567,9 @@ class VisionEncoderExportableModule(torch.nn.Module):
             num_channels = self.config.num_channels
             height = self.config.image_size
             width = self.config.image_size
-            pixel_values = torch.rand(batch_size, num_channels, height, width)
+            pixel_values = torch.rand(
+                batch_size, num_channels, height, width, dtype=self.model.dtype, device=self.model.device
+            )
 
         with torch.no_grad():
             return {
@@ -585,12 +608,14 @@ class MaskedLMExportableModule(torch.nn.Module):
 
         # Create example inputs (no need for tokenizer)
         dummy_input_ids = (
-            torch.randint(0, vocab_size, (batch_size, seq_length), dtype=torch.long)
+            torch.randint(0, vocab_size, (batch_size, seq_length), dtype=torch.long, device=self.model.device)
             if input_ids is None
             else input_ids
         )
         dummy_attention_mask = (
-            torch.ones((batch_size, seq_length), dtype=torch.long) if attention_mask is None else attention_mask
+            torch.ones((batch_size, seq_length), dtype=torch.long, device=self.model.device)
+            if attention_mask is None
+            else attention_mask
         )
 
         # Define dynamic shapes with Dim objects, always use Auto
@@ -645,26 +670,38 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             self.proj_out = model.lm_head
         self.config = model.config
 
-        # Initialize static cache
-        self.static_cache = StaticCache(
+        # Initialize self attention cache
+        self.self_attention_cache = StaticCache(
             config=self.config,
             max_batch_size=batch_size,
             max_cache_len=max_static_cache_length,
-            device="cpu",
-            dtype=torch.float32,
+            device=model.device,
+            dtype=model.dtype,
         )
+        head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
+        num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
+        self.self_attention_cache.early_initialization(batch_size, num_heads, head_dim, model.dtype, model.device)
 
-        # Register cache buffers to make them exportable
-        for i in range(len(self.static_cache.key_cache)):
-            self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
-            self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
+        # Initialize cross attention cache
+        self.dynamic_cache = DynamicCache(config=self.config)
+        self.cache = EncoderDecoderCache(self.self_attention_cache, self.dynamic_cache)
+
+        # Register cache buffers to make them exportable.
+        # Cross attention cache buffer is not registered since it's not actually being used atm.
+        for i in range(len(self.self_attention_cache)):
+            self.register_buffer(
+                f"self_attention_key_cache_{i}", self.self_attention_cache.layers[i].keys, persistent=False
+            )
+            self.register_buffer(
+                f"self_attention_value_cache_{i}", self.self_attention_cache.layers[i].values, persistent=False
+            )
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Get outputs from decoder
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=self.static_cache,
+            past_key_values=self.cache,
             use_cache=True,
             cache_position=cache_position,
         )
@@ -679,26 +716,18 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         self,
         model: PreTrainedModel,
         batch_size=1,
-        max_hidden_seq_length=4096,
-        cache_implementation="static",
-        max_cache_length=1024,
+        max_seq_len=1024,
+        max_hidden_seq_len=4096,
     ):
         super().__init__()
 
-        self.full_model = model
+        self.model = model
         self.encoder = model.get_encoder()
         self.config = model.config
-        self.max_hidden_seq_length = max_hidden_seq_length
-        self.generation_config = GenerationConfig(
-            use_cache=True,
-            max_length=max_cache_length,
-            cache_implementation=cache_implementation,
-            cache_config={
-                "batch_size": batch_size,
-                "max_cache_len": max_cache_length,
-            },
-        )
-        if isinstance(self.full_model, WhisperForConditionalGeneration):
+        self.max_hidden_seq_len = max_hidden_seq_len
+        self.batch_size = batch_size
+        self.max_seq_len = max_seq_len
+        if isinstance(self.model, WhisperForConditionalGeneration):
             self._processor = AutoProcessor.from_pretrained(model.config._name_or_path)
             self._expected_encoder_input_shape = torch.Size(
                 (
@@ -707,33 +736,27 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                     self._processor.feature_extractor.nb_max_frames,
                 )
             )
-        additional_configs = {}
-        additional_configs["max_hidden_seq_length"] = max_hidden_seq_length
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(
-            self.config,
-            self.generation_config,
-            **additional_configs,
-        )
+        self.metadata = save_config_to_constant_methods(self.config, get_max_seq_len=max_seq_len)
         self.exported_encoder = None
         self.exported_decoder = None
 
     def _export_encoder(self, encoder_input_ids):
-        wrapped_encoder = Seq2SeqLMEncoderExportableModule(self.encoder).to("cpu").eval()
+        wrapped_encoder = Seq2SeqLMEncoderExportableModule(self.encoder).to(self.model.device).eval()
 
         # Define dynamic sequence length for encoder
-        if isinstance(self.full_model, WhisperForConditionalGeneration):
+        if isinstance(self.model, WhisperForConditionalGeneration):
             assert (
                 encoder_input_ids.shape == self._expected_encoder_input_shape
             ), f"""This version of Whisper only accepts encoder input of shape {self._expected_encoder_input_shape}, passed shape: {encoder_input_ids.shape}.
                 For more infromation, please refer to the Whisper preprocessor config."""
             dynamic_shapes = None
-        elif isinstance(self.full_model, T5ForConditionalGeneration):
-            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
+        elif isinstance(self.model, T5ForConditionalGeneration):
+            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_len)
             dynamic_shapes = {"input_ids": {1: encoder_seq_len_dim}}
         else:
             raise ValueError(
-                f"Unsupported model type {type(self.full_model)} for Seq2SeqLMExportableModule encoder export."
+                f"Unsupported model type {type(self.model)} for Seq2SeqLMExportableModule encoder export."
             )
 
         # Export the encoder
@@ -749,19 +772,19 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
     def _export_decoder(self, decoder_input_ids, encoder_hidden_states, cache_position):
         wrapped_decoder = (
             Seq2SeqLMDecoderExportableModuleWithStaticCache(
-                model=self.full_model,
-                max_static_cache_length=self.generation_config.cache_config.get("max_cache_len"),
-                batch_size=self.generation_config.cache_config.get("batch_size"),
+                model=self.model,
+                max_static_cache_length=self.max_seq_len,
+                batch_size=self.batch_size,
             )
-            .to("cpu")
+            .to(self.model.device)
             .eval()
         )
 
-        if isinstance(self.full_model, WhisperForConditionalGeneration):
+        if isinstance(self.model, WhisperForConditionalGeneration):
             dynamic_shapes = None
-        elif isinstance(self.full_model, T5ForConditionalGeneration):
+        elif isinstance(self.model, T5ForConditionalGeneration):
             # Define dynamic dimension for encoder output sequence length
-            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
+            encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_len)
             dynamic_shapes = {
                 "decoder_input_ids": None,
                 "encoder_hidden_states": {1: encoder_seq_len_dim},
@@ -769,7 +792,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             }
         else:
             raise ValueError(
-                f"Unsupported model type {type(self.full_model)} for Seq2SeqLMExportableModule decoder export."
+                f"Unsupported model type {type(self.model)} for Seq2SeqLMExportableModule decoder export."
             )
 
         # Export the decoder
@@ -791,10 +814,12 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         cache_position=None,
     ) -> Dict[str, ExportedProgram]:
         if encoder_input_ids is None:
-            if isinstance(self.full_model, WhisperForConditionalGeneration):
-                example_encoder_input_ids = torch.rand(self._expected_encoder_input_shape)
+            if isinstance(self.model, WhisperForConditionalGeneration):
+                example_encoder_input_ids = torch.rand(
+                    self._expected_encoder_input_shape, device=self.model.device, dtype=self.model.dtype
+                )
             else:
-                example_encoder_input_ids = torch.ones((1, 10), dtype=torch.long)
+                example_encoder_input_ids = torch.ones((1, 10), dtype=torch.long, device=self.model.device)
         else:
             example_encoder_input_ids = encoder_input_ids
 
@@ -806,9 +831,15 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             example_encoder_hidden_states = encoder_hidden_states
 
         example_decoder_input_ids = (
-            decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long)
+            decoder_input_ids
+            if decoder_input_ids is not None
+            else torch.tensor([[0]], dtype=torch.long, device=self.model.device)
         )
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
+        example_cache_position = (
+            cache_position
+            if cache_position is not None
+            else torch.tensor([0], dtype=torch.long, device=self.model.device)
+        )
 
         self.exported_decoder = self._export_decoder(
             example_decoder_input_ids,
