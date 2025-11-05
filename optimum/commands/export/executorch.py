@@ -92,12 +92,24 @@ def parse_args_executorch(parser):
         "--qlinear_group_size", type=int, required=False, help="Group size for decoder linear quantization."
     )
     required_group.add_argument(
+        "--qlinear_packing_format",
+        type=str,
+        choices=["tile_packed_to_4d"],
+        required=False,
+        help=(
+            "Packing format for decoder linear layers.\n"
+            "Only applicable to certain backends such as CUDA and Metal\n\n"
+            "Options:\n"
+            "  tile_packed_to_4d  - int4 4d packing format"
+        ),
+    )
+    required_group.add_argument(
         "--qlinear_encoder",
         type=str,
         choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w"],
         required=False,
         help=(
-            "Quantization config for linear layers.\n\n"
+            "Quantization config for encoder linear layers.\n\n"
             "Options:\n"
             "  8da4w - 8-bit dynamic activation, 4-bit weight\n"
             "  8da8w - 8-bit dynamic activation, 8-bit weight\n"
@@ -108,6 +120,18 @@ def parse_args_executorch(parser):
     )
     required_group.add_argument(
         "--qlinear_encoder_group_size", type=int, required=False, help="Group size for encoder linear quantization."
+    )
+    required_group.add_argument(
+        "--qlinear_encoder_packing_format",
+        type=str,
+        choices=["tile_packed_to_4d"],
+        required=False,
+        help=(
+            "Packing format for encoder linear layers.\n"
+            "Only applicable to certain backends such as CUDA and Metal\n\n"
+            "Options:\n"
+            "  tile_packed_to_4d  - int4 4d packing format"
+        ),
     )
     required_group.add_argument(
         "--qembedding",
@@ -130,6 +154,20 @@ def parse_args_executorch(parser):
         required=False,
         help="Maximum sequence length for the model. If not specified, uses the model's default max_position_embeddings.",
     )
+    required_group.add_argument(
+        "--dtype",
+        type=str,
+        choices=["float32", "float16", "bfloat16"],
+        required=False,
+        help="Data type for model weights. Options: float32, float16, bfloat16. Default: float32. For quantization (int8/int4), use the --qlinear arguments.",
+    )
+    required_group.add_argument(
+        "--device",
+        type=str,
+        choices=["cpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"],
+        required=False,
+        help="Device to run the model on. Options: cpu, cuda. Default: cpu.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -142,6 +180,27 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
     def run(self):
         from ...exporters.executorch import main_export
 
+        # Validate int4 packing format can only be used with CUDA devices and 4w quantization
+        device = getattr(self.args, "device", None)
+        qlinear_packing_format = getattr(self.args, "qlinear_packing_format", None)
+        if qlinear_packing_format:
+            if not device or not device.startswith("cuda"):
+                raise ValueError(
+                    "--qlinear_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
+                )
+            if not self.args.qlinear or self.args.qlinear != "4w":
+                raise ValueError("--qlinear_packing_format can only be used when --qlinear is set to '4w'")
+        qlinear_encoder_packing_format = getattr(self.args, "qlinear_encoder_packing_format", None)
+        if qlinear_encoder_packing_format:
+            if not device or not device.startswith("cuda"):
+                raise ValueError(
+                    "--qlinear_encoder_packing_format can only be used when --device is set to CUDA (e.g., 'cuda', 'cuda:0', etc.)"
+                )
+            if not self.args.qlinear_encoder or self.args.qlinear_encoder != "4w":
+                raise ValueError(
+                    "--qlinear_encoder_packing_format can only be used when --qlinear_encoder is set to '4w'"
+                )
+
         kwargs = {}
         if self.args.use_custom_sdpa:
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
@@ -153,16 +212,24 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qlinear"] = self.args.qlinear
         if self.args.qlinear_group_size:
             kwargs["qlinear_group_size"] = self.args.qlinear_group_size
+        if qlinear_packing_format:
+            kwargs["qlinear_packing_format"] = qlinear_packing_format
         if self.args.qlinear_encoder:
             kwargs["qlinear_encoder"] = self.args.qlinear_encoder
         if self.args.qlinear_encoder_group_size:
             kwargs["qlinear_encoder_group_size"] = self.args.qlinear_encoder_group_size
+        if qlinear_encoder_packing_format:
+            kwargs["qlinear_encoder_packing_format"] = qlinear_encoder_packing_format
         if self.args.qembedding:
             kwargs["qembedding"] = self.args.qembedding
         if self.args.qembedding_group_size:
             kwargs["qembedding_group_size"] = self.args.qembedding_group_size
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
+        if hasattr(self.args, "dtype") and self.args.dtype:
+            kwargs["dtype"] = self.args.dtype
+        if hasattr(self.args, "device") and self.args.device:
+            kwargs["device"] = self.args.device
 
         main_export(
             model_name_or_path=self.args.model,

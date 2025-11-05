@@ -52,6 +52,7 @@ def save_config_to_constant_methods(
         "sliding_window": getattr(config, "sliding_window", None),
         "decoder_start_token_id": getattr(config, "decoder_start_token_id", None),
         "use_sdpa_with_kv_cache": "custom_sdpa" in config._attn_implementation,
+        "enable_dynamic_shape": kwargs.get("enable_dynamic_shape", True),
     }
 
     # Include processor_config keys in metadata if provided

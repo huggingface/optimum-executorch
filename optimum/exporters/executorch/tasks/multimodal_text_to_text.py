@@ -116,7 +116,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         MultiModalTextToTextExportableModule:
             An instance of `MultiModalTextToTextExportableModule` for exporting and lowering to ExecuTorch.
     """
-    device = "cpu"
+    device = kwargs.get("device", "cpu")
     batch_size = 1
     dtype = kwargs.get("dtype", "float32")
     use_custom_sdpa = kwargs.get("use_custom_sdpa", False)
@@ -167,7 +167,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     eager_model = AutoModelForPreTraining.from_pretrained(
         model_name_or_path,
         device_map=device,
-        torch_dtype=dtype,
+        dtype=dtype,
         config=config,
         attn_implementation=attn_implementation,
     )
@@ -178,6 +178,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         cache_config={
             "batch_size": batch_size,
             "max_cache_len": max_length,
+            "device": device,
         },
     )
     decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
@@ -196,8 +197,10 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
 
     qlinear_config = kwargs.get("qlinear", None)
     qlinear_group_size = kwargs.get("qlinear_group_size", None)
+    qlinear_packing_format = kwargs.get("qlinear_packing_format", None)
     qlinear_encoder_config = kwargs.get("qlinear_encoder", None)
     qlinear_encoder_group_size = kwargs.get("qlinear_encoder_group_size", None)
+    qlinear_encoder_packing_format = kwargs.get("qlinear_encoder_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
 
@@ -214,6 +217,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     }
     if qlinear_group_size is not None:
         quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
+    if qlinear_packing_format is not None:
+        quantize_decoder_kwargs["qlinear_packing_format"] = qlinear_packing_format
     quantize_model_(**quantize_decoder_kwargs)
     quantize_model_(**quantize_lm_head_kwargs)
 
@@ -226,6 +231,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     }
     if qlinear_encoder_group_size is not None:
         quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
+    if qlinear_encoder_packing_format is not None:
+        quantize_encoder_kwargs["qlinear_packing_format"] = qlinear_encoder_packing_format
     quantize_model_(**quantize_encoder_kwargs)
 
     # Quantize decoder embeddings.

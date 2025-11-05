@@ -85,7 +85,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         eager_model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             config=config,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
@@ -125,6 +125,8 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
                 batch_size,
                 max_length,
             )
+        else:
+            raise e
 
     # Must disable gradient when exporting a model with a prequantized checkpoint,
     # e.g. "pytorch/Phi-4-mini-instruct-8da4w".
@@ -133,8 +135,14 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
             param.requires_grad = False
 
     qlinear_config = kwargs.get("qlinear", None)
+    qlinear_packing_format = kwargs.get("qlinear_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
-    quantize_model_(eager_model, qlinear_config=qlinear_config, qembedding_config=qembedding_config)
+    quantize_model_(
+        eager_model,
+        qlinear_config=qlinear_config,
+        qlinear_packing_format=qlinear_packing_format,
+        qembedding_config=qembedding_config,
+    )
 
     return CausalLMExportableModule(
         eager_model, max_length, use_custom_kv_cache, use_custom_sdpa, disable_dynamic_shapes

@@ -11,10 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import torchao
 from transformers import AutoModelForSpeechSeq2Seq
 
 from ..integrations import Seq2SeqLMExportableModule
+from ..quantization import quantize_model_
 from ..task_registry import register_task
 
 
@@ -44,15 +45,61 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
         Seq2SeqLMExportableModule:
             An instance of `Seq2SeqLMExportableModule` for exporting and lowering to ExecuTorch.
     """
-    device = "cpu"
+    device = kwargs.get("device", "cpu")
     batch_size = 1
-    max_hidden_seq_length = kwargs.get("max_hidden_seq_length", 4096)
-    max_cache_length = kwargs.get("max_cache_length", 1024)
+    max_hidden_seq_len = kwargs.get("max_hidden_seq_len", 4096)
+    max_seq_len = kwargs.get("max_seq_len", 1024)
+    dtype = kwargs.get("dtype", "float32")
 
-    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path).to(device).eval()
+    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path, dtype=dtype, device_map=device).eval()
+
+    for param in full_model.parameters():
+        if isinstance(param, torchao.utils.TorchAOBaseTensor):
+            param.requires_grad = False
+
+    qlinear_config = kwargs.get("qlinear", None)
+    qlinear_group_size = kwargs.get("qlinear_group_size", None)
+    qlinear_packing_format = kwargs.get("qlinear_packing_format", None)
+    qlinear_encoder_config = kwargs.get("qlinear_encoder", None)
+    qlinear_encoder_group_size = kwargs.get("qlinear_encoder_group_size", None)
+    qlinear_encoder_packing_format = kwargs.get("qlinear_encoder_packing_format", None)
+    qembedding_config = kwargs.get("qembedding", None)
+    qembedding_group_size = kwargs.get("qembedding_group_size", None)
+
+    # Quantize decoder linear weights.
+    quantize_decoder_kwargs = {
+        "eager_model": getattr(full_model.model, "decoder"),
+        "qlinear_config": qlinear_config,
+    }
+    if qlinear_group_size is not None:
+        quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
+    if qlinear_packing_format is not None:
+        quantize_decoder_kwargs["qlinear_packing_format"] = qlinear_packing_format
+    quantize_model_(**quantize_decoder_kwargs)
+
+    # Quantize encoder linear weights.
+    quantize_encoder_kwargs = {
+        "eager_model": getattr(full_model.model, "encoder"),
+        "qlinear_config": qlinear_encoder_config,
+    }
+    if qlinear_encoder_group_size is not None:
+        quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
+    if qlinear_encoder_packing_format is not None:
+        quantize_encoder_kwargs["qlinear_packing_format"] = qlinear_encoder_packing_format
+    quantize_model_(**quantize_encoder_kwargs)
+
+    # Quantize decoder embeddings.
+    quantize_decoder_embedding_kwargs = {
+        "eager_model": full_model,
+        "qembedding_config": qembedding_config,
+    }
+    if qembedding_group_size is not None:
+        quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
+    quantize_model_(**quantize_decoder_embedding_kwargs)
+
     return Seq2SeqLMExportableModule(
         full_model,
         batch_size=batch_size,
-        max_hidden_seq_length=max_hidden_seq_length,
-        max_cache_length=max_cache_length,
+        max_seq_len=max_seq_len,
+        max_hidden_seq_len=max_hidden_seq_len,
     )

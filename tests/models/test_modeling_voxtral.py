@@ -16,12 +16,16 @@
 import gc
 import logging
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
 
 import pytest
 import torch
+from executorch import version
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+from packaging.version import parse
 from transformers import AutoConfig, AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -324,3 +328,58 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertTrue(
             check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
         )
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA backend required")
+    def test_voxtral_export_to_executorch_cuda_recipe(self):
+        model_id = "mistralai/Voxtral-Mini-3B-2507"
+        task = "multimodal-text-to-text"
+        recipe = "cuda"
+        output_subdir = "executorch"
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            output_dir = os.path.join(tempdir, output_subdir)
+            cmd = (
+                "optimum-cli export executorch "
+                f"--model {model_id} "
+                f"--task {task} "
+                f"--recipe {recipe} "
+                "--dtype bfloat16 "
+                "--device cuda:0 "
+                "--max_seq_len 1024 "
+                f"--output_dir {output_dir}"
+            )
+            subprocess.run(cmd, shell=True, check=True)
+            self.assertTrue(os.path.exists(os.path.join(output_dir, "model.pte")))
+            self.assertTrue(os.path.exists(os.path.join(output_dir, "aoti_cuda_blob.ptd")))
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    @pytest.mark.skipif(not torch.mps.is_available(), reason="Metal backend required")
+    @pytest.mark.skipif(
+        parse(torch.__version__) < parse("2.10.0.dev20251010"),
+        reason="Requires torch >= 2.10.0.dev20251010",
+    )
+    @pytest.mark.skipif(
+        parse(version.__version__) < parse("1.1.0.dev20251017"),
+        reason="Requires executorch >= 1.1.0.dev20251017",
+    )
+    def test_voxtral_export_to_executorch_metal_recipe(self):
+        output_subdir = "executorch"
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            output_dir = os.path.join(tempdir, output_subdir)
+            cmd = (
+                "optimum-cli export executorch "
+                "--model mistralai/Voxtral-Mini-3B-2507 "
+                "--task multimodal-text-to-text "
+                "--recipe metal "
+                "--dtype bfloat16 "
+                "--max_seq_len 1024 "
+                f"--output_dir {output_dir}"
+            )
+            subprocess.run(cmd, shell=True, check=True)
+            self.assertTrue(os.path.exists(os.path.join(output_dir, "model.pte")))

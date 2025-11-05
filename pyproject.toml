@@ -1,14 +1,83 @@
+[project]
+name = "optimum-executorch"
+dynamic = ["version"]
+description = "Optimum Executorch is an interface between the Hugging Face libraries and ExecuTorch"
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { text = "Apache" }
+authors = [
+  { name = "HuggingFace Inc. Special Ops Team", email = "hardware@huggingface.co" },
+]
+requires-python = ">=3.10.0"
+keywords = ["transformers", "quantization", "inference", "executorch"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+  "optimum~=1.24",
+  "executorch>=1.0.0",
+  "transformers==4.56.1",
+  "pytorch-tokenizers>=1.0.1",
+  "accelerate>=0.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "accelerate>=0.26.0",
+  "coremltools>=8.2.0",
+  "datasets==3.6.0",
+  "parameterized",
+  "pytest",
+  "safetensors",
+  "sentencepiece",
+  "numba!=0.58.0",
+  "librosa",
+  "soundfile",
+  "tiktoken",
+  "black~=23.1",
+  "ruff==0.4.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/huggingface/optimum-executorch"
+
+# ---- setuptools config ----
+
+[tool.setuptools]
+# Equivalent of include_package_data=True
+include-package-data = true
+
+[tool.setuptools.packages.find]
+# Mirrors find_namespace_packages(include=["optimum*"])
+include = ["optimum*"]
+namespaces = true
+
+[tool.setuptools.dynamic]
+# Pull version from the Python attribute
+version = { attr = "optimum.executorch.version.__version__" }
+
+# ---- your existing tool configs (kept, but one tweak suggested) ----
+
 [tool.black]
 line-length = 119
-target-version = ['py37']
+# Recommended to match your supported interpreters:
+target-version = ["py310", "py311", "py312"]
 
 [tool.ruff]
-# Never enforce `E501` (line length violations).
 ignore = ["C901", "E501", "E741", "W605"]
 select = ["C", "E", "F", "I", "W"]
 line-length = 119
 
-# Ignore import violations in all `__init__.py` files.
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403", "F811"]
 
@@ -18,6 +87,10 @@ known-first-party = ["optimum"]
 
 [tool.pytest.ini_options]
 markers = [
-    "run_slow",
-    "portable",
+  "run_slow",
+  "portable",
 ]
+
+[build-system]
+requires = ["setuptools >= 77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
