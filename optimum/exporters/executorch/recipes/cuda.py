@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -114,10 +114,6 @@ def export_to_executorch_with_cuda(
             )
         return {pte_name: et_prog}
 
-    # Decomposes SDPA since we don't have a flash attention kernel for it yet.
-    with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
-        exported_progs = model.export()
-
     if (
         model.config._attn_implementation == "custom_sdpa"
         or model.config._attn_implementation == "custom_sdpa_ring_kv_cache"
@@ -125,5 +121,9 @@ def export_to_executorch_with_cuda(
         raise NotImplementedError(
             "Custom SDPA implementation is not supported for CUDA yet. Please use 'flash_attention' instead."
         )
+
+    # Decomposes SDPA since we don't have a flash attention kernel for it yet.
+    with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
+        exported_progs = model.export()
 
     return _lower_to_executorch(exported_progs, model.metadata)
