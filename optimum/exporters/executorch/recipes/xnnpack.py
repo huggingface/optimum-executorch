@@ -105,7 +105,6 @@ def export_to_executorch_with_xnnpack(
             )
         return {pte_name: et_prog}
 
-    model = unwrap_tensor_subclass(model)
     exported_progs = model.export()
 
     if (
