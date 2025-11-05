@@ -314,6 +314,20 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             qembedding="8w",
         )
 
+        # Check file size is approximately 3GB (allow 1% tolerance)
+        file_size_bytes = os.path.getsize(os.path.join(model._temp_dir.name, "model.pte"))
+        file_size_gb = file_size_bytes / (1024**3)
+        expected_size_gb = 2.96
+        tolerance = 0.01  # 1% tolerance
+
+        logging.info(f"model.pte size: {file_size_gb:.2f} GB")
+        self.assertAlmostEqual(
+            file_size_gb,
+            expected_size_gb,
+            delta=expected_size_gb * tolerance,
+            msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
+        )
+
         # Generate
         generated_text = model.text_generation(
             processor=processor,

@@ -235,9 +235,9 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_encoder_kwargs["qlinear_packing_format"] = qlinear_encoder_packing_format
     quantize_model_(**quantize_encoder_kwargs)
 
-    # Quantize decoder embeddings.
+    # Quantize embeddings.
     if qembedding_config:
-        logging.info("Quantizing decoder embeddings...")
+        logging.info("Quantizing embeddings...")
     quantize_decoder_embedding_kwargs = {
         "eager_model": eager_model,
         "qembedding_config": qembedding_config,

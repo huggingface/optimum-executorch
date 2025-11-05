@@ -72,7 +72,7 @@ def quantize_model_(
 
     if qlinear_config:
 
-        def build_linear_config(quant_config_key: str, granularity: str, packing_format: Optional[str]):
+        def build_linear_config(quant_config_key: str, granularity: str, packing_format: Optional[str] = None):
             if quant_config_key == "8da4w":
                 return Int8DynamicActivationIntxWeightConfig(
                     weight_dtype=torch.int4,
@@ -81,11 +81,11 @@ def quantize_model_(
             if quant_config_key == "4w":
                 # Determine if we need to use Int4WeightOnlyConfig with int4_packing_format
                 if packing_format:
-                    return  Int4WeightOnlyConfig(
-                    group_size=qlinear_group_size,
-                    int4_packing_format=packing_format,
-                    int4_choose_qparams_algorithm="hqq",
-                )
+                    return Int4WeightOnlyConfig(
+                        group_size=qlinear_group_size,
+                        int4_packing_format=packing_format,
+                        int4_choose_qparams_algorithm="hqq",
+                    )
                 else:
                     return IntxWeightOnlyConfig(
                         weight_dtype=torch.int4,
@@ -126,7 +126,9 @@ def quantize_model_(
             linear_weight_granularity = PerGroup(qlinear_group_size)
 
         logging.info("Quantizing linear layers.")
-        primary_linear_config = build_linear_config(primary_linear_config_key, linear_weight_granularity, qlinear_packing_format)
+        primary_linear_config = build_linear_config(
+            primary_linear_config_key, linear_weight_granularity, qlinear_packing_format
+        )
 
         # First, quantize layers that are compatible with group quantization
         def per_group_filter(module, fqn):
@@ -165,4 +167,3 @@ def quantize_model_(
     # TODO: remove after ExecuTorch dep on Torch >= 2.10.0.
     if parse(torch_version) < parse("2.10.0.dev20251104"):
         unwrap_tensor_subclass(eager_model)
-
