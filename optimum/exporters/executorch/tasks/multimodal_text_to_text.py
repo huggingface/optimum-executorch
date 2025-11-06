@@ -211,16 +211,28 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         "eager_model": getattr(eager_model, decoder_name),
         "qlinear_config": qlinear_config,
     }
-    quantize_lm_head_kwargs = {
-        "eager_model": eager_model.lm_head,
-        "qlinear_config": qlinear_config,
-    }
     if qlinear_group_size is not None:
         quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
     if qlinear_packing_format is not None:
         quantize_decoder_kwargs["qlinear_packing_format"] = qlinear_packing_format
     quantize_model_(**quantize_decoder_kwargs)
-    quantize_model_(**quantize_lm_head_kwargs)
+
+    # Quantize lm head, if it is separate from the decoder model.
+    # e.g. Sometimes  the top-level model will have:
+    # def __init__(self, ...):
+    #     self.decoder = ...
+    #     self.lm_head = ...  # lm_head is not part of the decoder instance
+    #     ...
+    if not hasattr(getattr(eager_model, decoder_name), "lm_head"):
+        if not hasattr(eager_model, "lm_head"):
+            raise AttributeError(
+                f"Could not find `lm_head` for {model_name_or_path} has no `lm_head`, please double check if this is expected."
+            )
+        quantize_lm_head_kwargs = {
+            "eager_model": eager_model.lm_head,
+            "qlinear_config": qlinear_config,
+        }
+        quantize_model_(**quantize_lm_head_kwargs)
 
     # Quantize encoder linear weights.
     if qlinear_encoder_config:
