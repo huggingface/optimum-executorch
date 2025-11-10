@@ -312,6 +312,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             qlinear_encoder="8da4w,8da8w",
             qlinear_encoder_group_size=32,
             qembedding="8w",
+            qembedding_encoder="8w",
         )
 
         # Check file size is approximately 3GB (allow 1% tolerance)

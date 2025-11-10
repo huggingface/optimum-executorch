@@ -149,6 +149,24 @@ def parse_args_executorch(parser):
         "--qembedding_group_size", type=int, required=False, help="Group size for embedding quantization."
     )
     required_group.add_argument(
+        "--qembedding_encoder",
+        type=str,
+        choices=["4w", "8w"],
+        required=False,
+        help=(
+            "Quantization config for encoder embedding layer, for model arcitectures with an encoder.\n\n"
+            "Options:\n"
+            "  4w    - 4-bit weight only\n"
+            "  8w    - 8-bit weight only"
+        ),
+    )
+    required_group.add_argument(
+        "--qembedding_encoder_group_size",
+        type=int,
+        required=False,
+        help="Group size for encoder embedding quantization, for model architectures with an encoder.",
+    )
+    required_group.add_argument(
         "--max_seq_len",
         type=int,
         required=False,
@@ -224,6 +242,10 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qembedding"] = self.args.qembedding
         if self.args.qembedding_group_size:
             kwargs["qembedding_group_size"] = self.args.qembedding_group_size
+        if self.args.qembedding_encoder:
+            kwargs["qembedding_encoder"] = self.args.qembedding_encoder
+        if self.args.qembedding_encoder_group_size:
+            kwargs["qembedding_encoder_group_size"] = self.args.qembedding_encoder_group_size
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
         if hasattr(self.args, "dtype") and self.args.dtype:

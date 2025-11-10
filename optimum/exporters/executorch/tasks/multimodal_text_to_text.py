@@ -203,6 +203,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     qlinear_encoder_packing_format = kwargs.get("qlinear_encoder_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
+    qembedding_encoder_config = kwargs.get("qembedding_encoder", None)
+    qembedding_encoder_group_size = kwargs.get("qembedding_encoder_group_size", None)
 
     # Quantize decoder linear weights.
     if qlinear_config:
@@ -247,16 +249,27 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_encoder_kwargs["qlinear_packing_format"] = qlinear_encoder_packing_format
     quantize_model_(**quantize_encoder_kwargs)
 
-    # Quantize embeddings.
+    # Quantize decoder embeddings.
     if qembedding_config:
         logging.info("Quantizing embeddings...")
     quantize_decoder_embedding_kwargs = {
-        "eager_model": eager_model,
+        "eager_model": getattr(eager_model, decoder_name),
         "qembedding_config": qembedding_config,
     }
     if qembedding_group_size is not None:
         quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
     quantize_model_(**quantize_decoder_embedding_kwargs)
+
+    # Quantize encoder embeddings.
+    if qembedding_encoder_config:
+        logging.info("Quantizing embeddings...")
+    quantize_encoder_embedding_kwargs = {
+        "eager_model": getattr(eager_model, encoder_name),
+        "qembedding_config": qembedding_encoder_config,
+    }
+    if qembedding_encoder_group_size is not None:
+        quantize_encoder_embedding_kwargs["qembedding_group_size"] = qembedding_encoder_group_size
+    quantize_model_(**quantize_encoder_embedding_kwargs)
 
     return MultiModalTextToTextExportableModule(
         model=eager_model,
