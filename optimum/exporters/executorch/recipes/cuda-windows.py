@@ -40,7 +40,7 @@ from ..recipe_registry import register_recipe
 aten = torch.ops.aten
 
 
-@register_recipe("cuda")
+@register_recipe("cuda-windows")
 def export_to_executorch_with_cuda(
     model: Union[
         CausalLMExportableModule,
