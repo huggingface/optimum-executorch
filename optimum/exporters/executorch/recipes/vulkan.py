@@ -64,33 +64,39 @@ def _export_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
         metadata=None,
     ) -> Dict[str, ExecutorchProgram]:
-        et_progs = {}
-        for pte_name, exported_program in exported_programs.items():
-            logging.debug(f"\nExported program for {pte_name}.pte: {exported_program}")
-            et_progs[pte_name] = to_edge_transform_and_lower(
-                exported_program,
-                partitioner=[
-                    VulkanPartitioner(
-                        {"require_dynamic_shapes": True, "force_fp16": True}
-                    )
-                ],
-                compile_config=EdgeCompileConfig(
-                    _check_ir_validity=False,
-                    # In ET 0.7, we can set _skip_dim_order=False
-                    _skip_dim_order=True,
-                ),
-                constant_methods=metadata,
-                transform_passes=[RemovePaddingIdxEmbeddingPass()],
-            ).to_executorch()
+        logging.debug(f"\nExported program: {exported_programs}")
+
+        # If just one exported program, the method name in the .pte for it should be "forward".
+        if len(exported_programs) == 1:
+            exported_programs = {"forward": next(iter(exported_programs.values()))}
+
+        et_prog = to_edge_transform_and_lower(
+            exported_programs,
+            partitioner=[
+                VulkanPartitioner(
+                    {"require_dynamic_shapes": True, "force_fp16": True}
+                )
+            ],
+            compile_config=EdgeCompileConfig(
+                _check_ir_validity=False,
+                # In ET 0.7, we can set _skip_dim_order=False
+                _skip_dim_order=True,
+            ),
+            constant_methods=metadata,
+            transform_passes=[RemovePaddingIdxEmbeddingPass()],
+        ).to_executorch()
+        pte_name = "model"
+        for method in et_prog.methods:
+            logging.debug(f"---------------------- Method: {method} ----------------------")
             logging.debug(
-                f"\nExecuTorch program for {pte_name}.pte: {et_progs[pte_name].exported_program().graph_module}"
+                f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}"
             )
-            delegation_info = get_delegation_info(et_progs[pte_name].exported_program().graph_module)
+            delegation_info = get_delegation_info(et_prog.exported_program(method).graph_module)
             logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
             logging.debug(
                 f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
             )
-        return et_progs
+        return {pte_name: et_prog}
 
     exported_progs = model.export()
     return _lower_to_executorch(exported_progs, model.metadata)
