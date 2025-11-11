@@ -28,7 +28,6 @@ dependencies = [
   "executorch>=1.0.0",
   "transformers==4.56.1",
   "pytorch-tokenizers>=1.0.1",
-  "accelerate>=0.26.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +45,7 @@ dev = [
   "tiktoken",
   "black~=23.1",
   "ruff==0.4.4",
+  "mistral-common",
 ]
 
 [project.urls]
