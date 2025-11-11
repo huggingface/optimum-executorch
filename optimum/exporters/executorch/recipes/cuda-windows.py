@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, Union
+from typing import Dict, List, Union
 
 import torch
 from tabulate import tabulate
@@ -26,6 +26,7 @@ from executorch.exir import (
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
+from executorch.exir.backend.compile_spec_schema import CompileSpec
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
 from ..integrations import (
