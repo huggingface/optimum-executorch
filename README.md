@@ -20,32 +20,27 @@ Optimum ExecuTorch enables efficient deployment of transformer models using Meta
 
 ## ⚡ Quick Installation
 
-### 1. Create a virtual environment
-Install [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) on your machine. Then, create a virtual environment to manage our dependencies.
-```
-conda create -n optimum-executorch python=3.11
-conda activate optimum-executorch
+To install the latest stable version:
+```bash
+pip install optimum-executorch
 ```
 
-### 2. Install optimum-executorch from source
-```
-git clone https://github.com/huggingface/optimum-executorch.git
-cd optimum-executorch
-pip install '.[dev]'
-```
+<details>
+  <summary>Other installation options</summary>
 
-- 🔜 Install from pypi coming soon...
+  ```
+  # Install from source for development in editable mode
+  pip install -e '.[dev]'
 
-### 3. Install dependencies in dev mode
+  # Install from source, using the most recent nightly Torch and Transformers dependencies.
+  # When a new model is released and enabled on Optimum ExecuTorch, it will usually first be
+  # available here as it will require installing recent Transformers from source.
+  python install_dev.py
 
-To access every available optimization and experiment with the newest features, run:
-```
-python install_dev.py
-```
-
-This script will install `executorch`, `torch`, `torchao`, `transformers`, etc. from nightly builds or from source to access the latest models and optimizations.
-
-To leave an existing ExecuTorch installation untouched, run `install_dev.py` with `--skip_override_torch` to prevent it from being overwritten.
+  # Leave existing ExecuTorch installation and other torch dependencies untouched.
+  python install_dev.py --skip_override_torch
+  ```
+</details>
 
 ## 🎯 Quick Start
 
@@ -127,7 +122,11 @@ Optimum transformer models utilize:
 - A **custom KV cache** that uses a custom op for efficient in-place cache update on CPU, boosting performance by **2.5x** compared to default static KV cache.
 
 ### Backends Delegation
-Currently, **Optimum-ExecuTorch** supports the [XNNPACK Backend](https://pytorch.org/executorch/main/backends-xnnpack.html) for CPU and [CoreML Backend](https://docs.pytorch.org/executorch/stable/backends-coreml.html) for GPU on Apple devices.
+Currently, **Optimum-ExecuTorch** supports the following backends:
+- [XNNPACK](https://pytorch.org/executorch/main/backends-xnnpack.html) - this is the most supported backend and will work with all models.
+- [CoreML](https://docs.pytorch.org/executorch/stable/backends-coreml.html)
+- Cuda
+- [Metal](https://docs.pytorch.org/executorch/stable/backends/mps/mps-overview.html) - current only available with `executorch >= 1.1.0.dev20251017`. Please separately install this nightly to use the Metal backend.
 
 For a comprehensive overview of all backends supported by ExecuTorch, please refer to the [ExecuTorch Backend Overview](https://pytorch.org/executorch/main/backends-overview.html).
 
