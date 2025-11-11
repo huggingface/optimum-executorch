@@ -44,7 +44,7 @@ def quantize_model_(
         if qlinear_config == "8w":
             assert (
                 qembedding_group_size == 0
-            ), "8-bit embedding quantization only supports per-channel at the moment, please use qembedding_group_size = 0."
+            ), "8-bit embedding quantization only supports per-token at the moment, please use qembedding_group_size = 0."
         if qembedding_group_size == 0:
             embedding_weight_granularity = PerAxis(0)
         else:
@@ -71,41 +71,98 @@ def quantize_model_(
         )
 
     if qlinear_config:
+
+        def build_linear_config(quant_config_key: str, granularity: str, packing_format: Optional[str] = None):
+            if quant_config_key == "8da4w":
+                return Int8DynamicActivationIntxWeightConfig(
+                    weight_dtype=torch.int4,
+                    weight_granularity=granularity,
+                )
+            if quant_config_key == "4w":
+                # Determine if we need to use Int4WeightOnlyConfig with int4_packing_format
+                if packing_format:
+                    return Int4WeightOnlyConfig(
+                        group_size=qlinear_group_size,
+                        int4_packing_format=packing_format,
+                        int4_choose_qparams_algorithm="hqq",
+                    )
+                else:
+                    return IntxWeightOnlyConfig(
+                        weight_dtype=torch.int4,
+                        granularity=granularity,
+                    )
+            if quant_config_key == "8w":
+                return IntxWeightOnlyConfig(
+                    weight_dtype=torch.int8,
+                    granularity=granularity,
+                )
+            if quant_config_key == "8da8w":
+                return Int8DynamicActivationIntxWeightConfig(
+                    weight_dtype=torch.int8,
+                    weight_granularity=PerAxis(0),
+                )
+            raise ValueError(f"Unsupported linear quantization config '{quant_config_key}'.")
+
+        qlinear_configs = [cfg.strip() for cfg in qlinear_config.split(",")]
+        if any(cfg == "" for cfg in qlinear_configs):
+            raise ValueError("Linear quantization config entries must be non-empty.")
+        if len(qlinear_configs) > 2:
+            raise ValueError("Expected at most one fallback linear quantization config, got more than one comma.")
+
+        primary_linear_config_key = qlinear_configs[0]
+        fallback_linear_config_key = qlinear_configs[1] if len(qlinear_configs) == 2 else None
+
         if qlinear_group_size == 0:
             linear_weight_granularity = PerAxis(0)
+            if fallback_linear_config_key is not None:
+                logging.warning(
+                    "qlinear_group_size is 0, fallback linear config will not be used as all layers will be quantized with per-axis granularity."
+                )
+                fallback_linear_config_key = None
         else:
-            assert qlinear_group_size % 2 == 0, "Linear quantization group size must be a multiple of 2."
+            assert (
+                qlinear_group_size % 2 == 0
+            ), f"Linear quantization group size must be a multiple of 2, got {qlinear_group_size}."
             linear_weight_granularity = PerGroup(qlinear_group_size)
 
         logging.info("Quantizing linear layers.")
+        primary_linear_config = build_linear_config(
+            primary_linear_config_key, linear_weight_granularity, qlinear_packing_format
+        )
 
-        # Determine if we need to use Int4WeightOnlyConfig with int4_packing_format
-        if qlinear_config == "4w" and qlinear_packing_format:
-            linear_config = Int4WeightOnlyConfig(
-                group_size=qlinear_group_size,
-                int4_packing_format=qlinear_packing_format,
-                int4_choose_qparams_algorithm="hqq",
-            )
-        else:
-            linear_config = {
-                "8da4w": Int8DynamicActivationIntxWeightConfig(
-                    weight_dtype=torch.int4,
-                    weight_granularity=linear_weight_granularity,
-                ),
-                "4w": IntxWeightOnlyConfig(
-                    weight_dtype=torch.int4,
-                    granularity=linear_weight_granularity,
-                ),
-                "8w": IntxWeightOnlyConfig(
-                    weight_dtype=torch.int8,
-                    granularity=linear_weight_granularity,
-                ),
-            }[qlinear_config]
+        # First, quantize layers that are compatible with group quantization
+        def per_group_filter(module, fqn):
+            if isinstance(module, torch.nn.Linear):
+                # Check if hidden dimension is divisible by group size
+                # For Linear layers, weight shape is [out_features, in_features]
+                # Group quantization typically applies to the in_features dimension (dim=1)
+                return qlinear_group_size == 0 or (module.weight.shape[1] % qlinear_group_size == 0)
+            return False
 
         quantize_(
             eager_model,
-            linear_config,
+            primary_linear_config,
+            filter_fn=per_group_filter,
         )
+
+        # Then, quantize incompatible layers using the fallback per-axis config
+        if fallback_linear_config_key is not None:
+            fallback_linear_config = build_linear_config(fallback_linear_config_key, PerAxis(0))
+
+            def per_token_filter(module, fqn):
+                if isinstance(module, torch.nn.Linear):
+                    return module.weight.shape[1] % qlinear_group_size != 0
+                return False
+
+            logging.info(
+                f"Applying fallback linear config '{fallback_linear_config_key}' (per-axis)"
+                f" to layers incompatible with group size {qlinear_group_size}."
+            )
+            quantize_(
+                eager_model,
+                fallback_linear_config,
+                filter_fn=per_token_filter,
+            )
 
     # TODO: remove after ExecuTorch dep on Torch >= 2.10.0.
     if parse(torch_version) < parse("2.10.0.dev20251104"):

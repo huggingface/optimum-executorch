@@ -309,9 +309,24 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             use_custom_kv_cache=True,
             qlinear="8da4w",
             qlinear_group_size=32,
-            # Can't quantize the encoder a the moment, hidden dim of 4304 doesn't fit ExecuTorch's
-            # XNNPack 32-group size quantized kernels. See https://github.com/pytorch/executorch/issues/14221.
-            qembedding_config="8w",
+            qlinear_encoder="8da4w,8da8w",
+            qlinear_encoder_group_size=32,
+            qembedding="8w",
+            qembedding_encoder="8w",
+        )
+
+        # Check file size is approximately 3GB (allow 1% tolerance)
+        file_size_bytes = os.path.getsize(os.path.join(model._temp_dir.name, "model.pte"))
+        file_size_gb = file_size_bytes / (1024**3)
+        expected_size_gb = 2.96
+        tolerance = 0.01  # 1% tolerance
+
+        logging.info(f"model.pte size: {file_size_gb:.2f} GB")
+        self.assertAlmostEqual(
+            file_size_gb,
+            expected_size_gb,
+            delta=expected_size_gb * tolerance,
+            msg=f"Expected file size ~{expected_size_gb}GB, but got {file_size_gb:.2f}GB",
         )
 
         # Generate
