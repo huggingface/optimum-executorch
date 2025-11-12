@@ -21,10 +21,10 @@ import warnings
 from pathlib import Path
 
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
-from transformers import PretrainedConfig
-from transformers.utils import is_torch_available
 
 from optimum.utils.import_utils import is_transformers_version
+from transformers import PretrainedConfig
+from transformers.utils import is_torch_available
 
 from ...commands.export.executorch import parse_args_executorch
 from .convert import export_to_executorch
@@ -34,7 +34,8 @@ from .task_registry import discover_tasks, task_registry
 if is_torch_available():
     pass
 
-from typing import Optional, Union
+import math
+from typing import Any, Optional, Union
 
 
 def main_export(
@@ -112,7 +113,9 @@ def main_export(
             FutureWarning,
         )
         if token is not None:
-            raise ValueError("You cannot use both `use_auth_token` and `token` arguments at the same time.")
+            raise ValueError(
+                "You cannot use both `use_auth_token` and `token` arguments at the same time."
+            )
         token = use_auth_token
 
     # Dynamically discover and import registered tasks
