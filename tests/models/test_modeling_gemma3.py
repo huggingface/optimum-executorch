@@ -22,11 +22,15 @@ import tempfile
 import unittest
 
 import pytest
+import torch
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultiModalToText
+from optimum.executorch import (
+    ExecuTorchModelForCausalLM,
+    ExecuTorchModelForMultiModalToText,
+)
 
 from ..utils import check_causal_lm_output_quality, check_multimodal_output_quality
 
@@ -288,7 +292,10 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
         image_url = "https://llava-vl.github.io/static/images/view.jpg"
         conversation = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful assistant."}],
+            },
             {
                 "role": "user",
                 "content": [
@@ -352,3 +359,32 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertTrue(
             check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
         )
+
+    @slow
+    @pytest.mark.run_slow
+    @pytest.mark.skipif(is_linux_ci, reason="OOM")
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA backend required")
+    def test_gemma3_export_to_executorch_in_cuda_recipe(self):
+        model_id = "google/gemma-3-4b-it"
+        task = "multimodal-text-to-text"
+        recipe = "cuda"
+        output_subdir = "executorch"
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            out_dir: str = f"{tempdir}/executorch"
+            subprocess.run(
+                f"optimum-cli export executorch \
+                    --model {model_id} \
+                    --task {task} \
+                    --recipe {recipe} \
+                    --output_dir {tempdir}/{output_subdir} \
+                    --dtype bfloat16 \
+                    --device cuda \
+                    --max_seq_len 64",
+                shell=True,
+                check=True,
+            )
+            pte_full_path: str = f"{out_dir}/model.pte"
+            ptd_full_path: str = f"{out_dir}/aoti_cuda_blob.ptd"
+            self.assertTrue(os.path.exists(pte_full_path))
+            self.assertTrue(os.path.exists(ptd_full_path))

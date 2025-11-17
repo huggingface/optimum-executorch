@@ -64,8 +64,6 @@ def export_to_executorch_with_cuda(
             For encoder-decoder models or multimodal models, it may generate multiple programs.
     """
     # Import here to avoid version conflicts.
-    from torch._inductor.decomposition import conv1d_to_conv2d
-
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
@@ -84,13 +82,7 @@ def export_to_executorch_with_cuda(
             key: [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(key)])]
             for key in exported_programs.keys()
         }
-        # Add decompositions for triton to generate kernels.
-        for key, ep in exported_programs.items():
-            exported_programs[key] = ep.run_decompositions(
-                {
-                    aten.conv1d.default: conv1d_to_conv2d,
-                }
-            )
+
         with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]):
             et_prog = to_edge_transform_and_lower(
                 exported_programs,
