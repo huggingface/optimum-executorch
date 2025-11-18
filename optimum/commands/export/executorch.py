@@ -17,7 +17,8 @@
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ...exporters import TasksManager
+from transformers.pipelines import get_supported_tasks
+
 from ..base import BaseOptimumCLICommand, CommandInfo
 
 
@@ -46,7 +47,7 @@ def parse_args_executorch(parser):
         default="text-generation",
         help=(
             "The task to export the model for. Available tasks depend on the model, but are among:"
-            f" {str(TasksManager.get_all_tasks())}."
+            f" {str(get_supported_tasks())}."
         ),
     )
     required_group.add_argument(

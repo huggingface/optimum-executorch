@@ -31,9 +31,8 @@ from transformers import (
 )
 from transformers.integrations.executorch import (
     TorchExportableModuleForDecoderOnlyLM,
-    sdpa_mask_without_vmap,
 )
-from transformers.masking_utils import AttentionMaskInterface
+from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
@@ -269,7 +268,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         if self.use_custom_sdpa:
             if self.use_custom_kv_cache:
                 AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
-                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", ALL_MASK_ATTENTION_FUNCTIONS["sdpa"])
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
@@ -471,7 +470,6 @@ class CausalLMExportableModule(torch.nn.Module):
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
     def _register_custom_attention(self, exportable_module: torch.nn.Module):
-        from transformers.integrations.executorch import sdpa_mask_without_vmap
         from transformers.masking_utils import AttentionMaskInterface
         from transformers.modeling_utils import AttentionInterface
 
@@ -479,7 +477,7 @@ class CausalLMExportableModule(torch.nn.Module):
             if self.use_custom_kv_cache:
                 _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
                 AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
-                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", ALL_MASK_ATTENTION_FUNCTIONS["sdpa"])
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
