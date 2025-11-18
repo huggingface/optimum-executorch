@@ -24,6 +24,7 @@ def custom_sdpa_with_start_pos_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Union[torch.Tensor, "BlockMask"],  # noqa
+    position_ids: Optional[torch.Tensor] = None,
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
@@ -56,10 +57,10 @@ def custom_sdpa_with_start_pos_forward(
             # Calculate the input pos from attention mask.
             # Branch out for float vs bool mask
             # assert attention_mask.dim() == 2, f"attention_mask must be a 2D matrix."
-            attention_mask = attention_mask.reshape(-1, attention_mask.shape[-1])
-            first_row_mask = attention_mask[0, :]
-            # [0, 0, 0, 0, -inf, -inf, -inf, -inf], start_pos = 3
-            start_pos = torch.argmin(first_row_mask.to(torch.long)).item() - 1
+            assert (
+                position_ids is not None
+            ), "position_ids must be provided to find start position for causal attention"
+            start_pos = position_ids[0][0].item()
         else:
             start_pos = 0
 
@@ -95,6 +96,7 @@ def get_custom_sdpa_for_ring_kv_cache(
         key: torch.Tensor,
         value: torch.Tensor,
         attention_mask: Union[torch.Tensor, "BlockMask"],  # noqa
+        position_ids: Optional[torch.Tensor] = None,
         scaling: Optional[float] = None,
         softcap: Optional[float] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -122,6 +124,7 @@ def get_custom_sdpa_for_ring_kv_cache(
                 key,
                 value,
                 attention_mask,
+                position_ids,
                 scaling,
                 softcap,
                 head_mask,
@@ -134,6 +137,7 @@ def get_custom_sdpa_for_ring_kv_cache(
                 key,
                 value,
                 attention_mask,
+                position_ids,
                 scaling,
                 softcap,
                 head_mask,
