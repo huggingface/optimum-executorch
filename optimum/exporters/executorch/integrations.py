@@ -22,7 +22,6 @@ from torch.nn.attention import SDPBackend
 from transformers import (
     AutoConfig,
     AutoProcessor,
-    DynamicCache,
     EncoderDecoderCache,
     PreTrainedModel,
     StaticCache,
@@ -39,6 +38,7 @@ from transformers.modeling_utils import AttentionInterface
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
+from .whisper_attention import WhisperCrossAttention
 
 
 class VisionExportableModule(torch.nn.Module):
@@ -683,11 +683,29 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.self_attention_cache.early_initialization(batch_size, num_heads, head_dim, model.dtype, model.device)
 
         # Initialize cross attention cache
-        self.dynamic_cache = DynamicCache(config=self.config)
-        self.cache = EncoderDecoderCache(self.self_attention_cache, self.dynamic_cache)
+        cross_attention_heads = getattr(
+            self.config, "decoder_attention_heads", getattr(self.config, "num_attention_heads", None)
+        )
+        if cross_attention_heads is None:
+            raise ValueError("Unable to determine decoder attention heads for cross-attention cache.")
+        hidden_size = getattr(self.config, "hidden_size", getattr(self.config, "d_model", None))
+        if hidden_size is None:
+            raise ValueError("Unable to determine hidden size for cross-attention cache allocation.")
+        cross_head_dim = getattr(self.config, "head_dim", hidden_size // cross_attention_heads)
+
+        self.cross_attention_cache = StaticCache(
+            config=self.config,
+            max_batch_size=batch_size,
+            max_cache_len=getattr(self.config, "max_source_positions", max_static_cache_length), # This is fixed in whisper
+            device=model.device,
+            dtype=model.dtype,
+        )
+        self.cross_attention_cache.early_initialization(
+            batch_size, cross_attention_heads, cross_head_dim, model.dtype, model.device
+        )
+        self.cache = EncoderDecoderCache(self.self_attention_cache, self.cross_attention_cache)
 
         # Register cache buffers to make them exportable.
-        # Cross attention cache buffer is not registered since it's not actually being used atm.
         for i in range(len(self.self_attention_cache)):
             self.register_buffer(
                 f"self_attention_key_cache_{i}", self.self_attention_cache.layers[i].keys, persistent=False
@@ -695,6 +713,26 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(
                 f"self_attention_value_cache_{i}", self.self_attention_cache.layers[i].values, persistent=False
             )
+        for i in range(len(self.cross_attention_cache)):
+            self.register_buffer(
+                f"cross_attention_key_cache_{i}", self.cross_attention_cache.layers[i].keys, persistent=False
+            )
+            self.register_buffer(
+                f"cross_attention_value_cache_{i}", self.cross_attention_cache.layers[i].values, persistent=False
+            )
+
+        # Massage decoder to use cross attention.
+        if isinstance(model, WhisperForConditionalGeneration):
+            for layer in self.decoder.layers:
+                cross_attn = WhisperCrossAttention(
+                    embed_dim=layer.encoder_attn.embed_dim,
+                    num_heads=layer.encoder_attn.num_heads,
+                    dropout=layer.encoder_attn.dropout,
+                    is_decoder=layer.encoder_attn.is_decoder,
+                    layer_idx=layer.encoder_attn.layer_idx,
+                    config=layer.encoder_attn.config,
+                ).to(dtype=model.dtype, device=model.device)
+                layer.encoder_attn = cross_attn
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Get outputs from decoder
