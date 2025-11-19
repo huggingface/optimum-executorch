@@ -16,6 +16,8 @@ import logging
 from typing import Dict, Union
 
 import torch
+from tabulate import tabulate
+from torch.export import ExportedProgram
 
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -26,9 +28,6 @@ from executorch.exir import (
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import (
     RemovePaddingIdxEmbeddingPass,
 )
-from tabulate import tabulate
-from torch.export import ExportedProgram
-from torch.nn.attention import SDPBackend
 
 from ..integrations import (
     CausalLMExportableModule,
@@ -65,11 +64,11 @@ def export_to_executorch_with_cuda(
             A map of exported and optimized program for ExecuTorch.
             For encoder-decoder models or multimodal models, it may generate multiple programs.
     """
-    from executorch.backends.cuda.cuda_backend import CudaBackend
-    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
-
     # Import here to avoid version conflicts.
     from torch._inductor.decomposition import conv1d_to_conv2d
+
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
     def _lower_to_executorch(
         exported_programs: Dict[str, ExportedProgram],
