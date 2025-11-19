@@ -93,7 +93,7 @@ def export_to_executorch_with_cuda(
                     aten.conv1d.default: conv1d_to_conv2d,
                 }
             )
-=        et_prog = to_edge_transform_and_lower(
+        et_prog = to_edge_transform_and_lower(
             exported_programs,
             partitioner=partitioners,
             compile_config=EdgeCompileConfig(
