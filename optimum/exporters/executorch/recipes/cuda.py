@@ -106,18 +106,10 @@ def export_to_executorch_with_cuda(
         et_prog = et_prog.to_executorch()
         pte_name = "model"
         for method in et_prog.methods:
-            logging.debug(
-                f"---------------------- Method: {method} ----------------------"
-            )
-            logging.debug(
-                f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}"
-            )
-            delegation_info = get_delegation_info(
-                et_prog.exported_program(method).graph_module
-            )
-            logging.debug(
-                f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}"
-            )
+            logging.debug(f"---------------------- Method: {method} ----------------------")
+            logging.debug(f"\nExecuTorch program for {pte_name}.pte: {et_prog.exported_program(method).graph_module}")
+            delegation_info = get_delegation_info(et_prog.exported_program(method).graph_module)
+            logging.debug(f"\nDelegation info Summary for {pte_name}.pte: {delegation_info.get_summary()}")
             logging.debug(
                 f"\nDelegation info for {pte_name}.pte: {tabulate(delegation_info.get_operator_delegation_dataframe(), headers='keys', tablefmt='fancy_grid')}"
             )
