@@ -19,8 +19,7 @@ import os
 from pathlib import Path
 from typing import Union
 
-from transformers.integrations.executorch import sdpa_mask_without_vmap
-from transformers.masking_utils import AttentionMaskInterface
+from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import custom_sdpa_with_start_pos_forward
@@ -29,7 +28,7 @@ from .recipe_registry import discover_recipes, recipe_registry
 
 
 AttentionInterface.register("custom_sdpa", custom_sdpa_with_start_pos_forward)
-AttentionMaskInterface.register("custom_sdpa", sdpa_mask_without_vmap)
+AttentionMaskInterface.register("custom_sdpa", ALL_MASK_ATTENTION_FUNCTIONS["sdpa"])
 
 
 def export_to_executorch(
