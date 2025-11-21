@@ -696,7 +696,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.cross_attention_cache = StaticCache(
             config=self.config,
             max_batch_size=batch_size,
-            max_cache_len=getattr(self.config, "max_source_positions", max_static_cache_length), # This is fixed in whisper
+            max_cache_len=getattr(
+                self.config, "max_target_positions", max_static_cache_length
+            ),  # This is fixed in whisper
             device=model.device,
             dtype=model.dtype,
         )
@@ -732,6 +734,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
                     layer_idx=layer.encoder_attn.layer_idx,
                     config=layer.encoder_attn.config,
                 ).to(dtype=model.dtype, device=model.device)
+                cross_attn.k_proj = layer.encoder_attn.k_proj
+                cross_attn.v_proj = layer.encoder_attn.v_proj
+                cross_attn.out_proj = layer.encoder_attn.out_proj
                 layer.encoder_attn = cross_attn
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):

@@ -33,6 +33,7 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 class WhisperCrossAttention(nn.Module):
     """Multi-headed cross attention from 'Attention Is All You Need' paper"""
 
@@ -114,23 +115,21 @@ class WhisperCrossAttention(nn.Module):
             key_value_states: Tensor,
         ) -> tuple[Tensor, Tensor]:
             # Just reuse cached K/V
-            return cached_keys.clone(), cached_values.clone()
+            return torch.ops.executorch.alias(cached_keys, cached_values)
 
         def recompute_kv(
-            cached_keys: Tensor,   # unused
-            cached_values: Tensor, # unused
+            cached_keys: Tensor,  # unused
+            cached_values: Tensor,  # unused
             key_value_states: Tensor,
         ) -> tuple[Tensor, Tensor]:
             # Compute fresh K/V (export-friendly: no cache mutation in here)
-            key_states = self.k_proj(key_value_states).view(
-                bsz, -1, self.num_heads, self.head_dim
-            )
-            value_states = self.v_proj(key_value_states).view(
-                bsz, -1, self.num_heads, self.head_dim
-            )
+            key_states = self.k_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
+            value_states = self.v_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
-            return key_states, value_states
+            k = torch.ops.executorch.update_cross_attn_cache(key_states, cached_keys)
+            v = torch.ops.executorch.update_cross_attn_cache(value_states, cached_values)
+            return k, v
 
         if past_key_values is not None and self.layer_idx is not None:
             # Grab cached tensors (these are Tensors, so they are OK for export)
@@ -150,22 +149,10 @@ class WhisperCrossAttention(nn.Module):
                 operands=(cached_keys, cached_values, key_value_states),
             )
 
-            # Update the KV cache outside of torch.cond.
-            past_key_values.update(
-                key_states,
-                value_states,
-                self.layer_idx,
-                {"cache_position": None},
-            )
-
         else:
             # No cache available: always compute fresh K/V
-            key_states = self.k_proj(key_value_states).view(
-                bsz, -1, self.num_heads, self.head_dim
-            )
-            value_states = self.v_proj(key_value_states).view(
-                bsz, -1, self.num_heads, self.head_dim
-            )
+            key_states = self.k_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
+            value_states = self.v_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
 
