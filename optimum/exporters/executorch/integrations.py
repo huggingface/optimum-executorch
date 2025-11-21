@@ -697,7 +697,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             config=self.config,
             max_batch_size=batch_size,
             max_cache_len=getattr(
-                self.config, "max_target_positions", max_static_cache_length
+                self.config, "max_source_positions", max_static_cache_length
             ),  # This is fixed in whisper
             device=model.device,
             dtype=model.dtype,
