@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Export friendly cross attention implementation for Whisper. Adopted
-# from https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L241
+# from https://github.com/huggingface/transformers/blob/454c0a7ccf33f7fc13e3e2eb9b188a5c09ab708b/src/transformers/models/whisper/modeling_whisper.py#L241
 # Rewritten to replace if branches with torch.cond. Note that unlike
 # the original WhisperAttention, this implementation only works for
 # cross attention (where `key_value_states` is not None).
@@ -22,7 +22,7 @@ from typing import Callable, Optional
 
 import torch
 from torch import Tensor, nn
-from transformers.cache_utils import Cache, EncoderDecoderCache
+from transformers.cache_utils import EncoderDecoderCache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.models.whisper.configuration_whisper import WhisperConfig
@@ -81,7 +81,7 @@ class WhisperCrossAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor,
-        past_key_values: Optional[Cache] = None,
+        past_key_values: EncoderDecoderCache,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -90,7 +90,10 @@ class WhisperCrossAttention(nn.Module):
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
+        torch._assert(
+            isinstance(past_key_values, EncoderDecoderCache),
+            f"past_key_values must be an EncoderDecoderCache, got {type(past_key_values)}",
+        )
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
         q_input_shape = (bsz, tgt_len, -1, self.head_dim)
@@ -131,30 +134,22 @@ class WhisperCrossAttention(nn.Module):
             v = torch.ops.executorch.update_cross_attn_cache(value_states, cached_values)
             return k, v
 
-        if past_key_values is not None and self.layer_idx is not None:
-            # Grab cached tensors (these are Tensors, so they are OK for export)
-            cached_keys = past_key_values.layers[self.layer_idx].keys
-            cached_values = past_key_values.layers[self.layer_idx].values
+        # Grab cached tensors (these are Tensors, so they are OK for export)
+        cached_keys = past_key_values.layers[self.layer_idx].keys
+        cached_values = past_key_values.layers[self.layer_idx].values
 
-            # Tensor predicate: True if any element is non-zero
-            # Result is a 0-dim bool tensor suitable for torch.cond
-            cache_is_initialized = (cached_keys != 0).any()
+        # Tensor predicate: True if any element is non-zero
+        # Result is a 0-dim bool tensor suitable for torch.cond
+        cache_is_initialized = (cached_keys != 0).any()
 
-            # Use torch.cond to select branch in a traceable way.
-            # All operands must be (nested) tensors or simple Python values.
-            key_states, value_states = torch.cond(
-                cache_is_initialized,
-                use_cached_kv,
-                recompute_kv,
-                operands=(cached_keys, cached_values, key_value_states),
-            )
-
-        else:
-            # No cache available: always compute fresh K/V
-            key_states = self.k_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
-            value_states = self.v_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
-            key_states = key_states.transpose(1, 2).contiguous()
-            value_states = value_states.transpose(1, 2).contiguous()
+        # Use torch.cond to select branch in a traceable way.
+        # All operands must be (nested) tensors or simple Python values.
+        key_states, value_states = torch.cond(
+            cache_is_initialized,
+            use_cached_kv,
+            recompute_kv,
+            operands=(cached_keys, cached_values, key_value_states),
+        )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":

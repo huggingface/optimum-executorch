@@ -36,9 +36,9 @@ from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
+from optimum.executorch.attentions.whisper_attention import WhisperCrossAttention
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
-from .whisper_attention import WhisperCrossAttention
 
 
 class VisionExportableModule(torch.nn.Module):
@@ -723,7 +723,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
                 f"cross_attention_value_cache_{i}", self.cross_attention_cache.layers[i].values, persistent=False
             )
 
-        # Massage decoder to use cross attention.
+        # Use custom cross attention for Whisper.
         if isinstance(model, WhisperForConditionalGeneration):
             for layer in self.decoder.layers:
                 cross_attn = WhisperCrossAttention(
@@ -734,6 +734,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
                     layer_idx=layer.encoder_attn.layer_idx,
                     config=layer.encoder_attn.config,
                 ).to(dtype=model.dtype, device=model.device)
+                cross_attn.q_proj = layer.encoder_attn.q_proj
                 cross_attn.k_proj = layer.encoder_attn.k_proj
                 cross_attn.v_proj = layer.encoder_attn.v_proj
                 cross_attn.out_proj = layer.encoder_attn.out_proj
