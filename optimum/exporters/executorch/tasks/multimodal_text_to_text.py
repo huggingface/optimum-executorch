@@ -14,6 +14,7 @@
 
 
 import json
+import logging
 import os.path
 
 import torchao
@@ -202,8 +203,12 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     qlinear_encoder_packing_format = kwargs.get("qlinear_encoder_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
+    qembedding_encoder_config = kwargs.get("qembedding_encoder", None)
+    qembedding_encoder_group_size = kwargs.get("qembedding_encoder_group_size", None)
 
     # Quantize decoder linear weights.
+    if qlinear_config:
+        logging.info("Quantizing decoder linears...")
     quantize_decoder_kwargs = {
         "eager_model": getattr(eager_model, decoder_name),
         "qlinear_config": qlinear_config,
@@ -214,7 +219,26 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_decoder_kwargs["qlinear_packing_format"] = qlinear_packing_format
     quantize_model_(**quantize_decoder_kwargs)
 
+    # Quantize lm head, if it is separate from the decoder model.
+    # e.g. Sometimes  the top-level model will have:
+    # def __init__(self, ...):
+    #     self.decoder = ...
+    #     self.lm_head = ...  # lm_head is not part of the decoder instance
+    #     ...
+    if not hasattr(getattr(eager_model, decoder_name), "lm_head"):
+        if not hasattr(eager_model, "lm_head"):
+            raise AttributeError(
+                f"Could not find `lm_head` for {model_name_or_path} has no `lm_head`, please double check if this is expected."
+            )
+        quantize_lm_head_kwargs = {
+            "eager_model": eager_model.lm_head,
+            "qlinear_config": qlinear_config,
+        }
+        quantize_model_(**quantize_lm_head_kwargs)
+
     # Quantize encoder linear weights.
+    if qlinear_encoder_config:
+        logging.info("Quantizing encoder linears...")
     quantize_encoder_kwargs = {
         "eager_model": getattr(eager_model, encoder_name),
         "qlinear_config": qlinear_encoder_config,
@@ -225,9 +249,9 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_encoder_kwargs["qlinear_packing_format"] = qlinear_encoder_packing_format
     quantize_model_(**quantize_encoder_kwargs)
 
-    # TODO: quantize other parts of the model, e.g. MultimodalProjector?
-
     # Quantize decoder embeddings.
+    if qembedding_config:
+        logging.info("Quantizing embeddings...")
     quantize_decoder_embedding_kwargs = {
         "eager_model": getattr(eager_model, decoder_name),
         "qembedding_config": qembedding_config,
@@ -236,7 +260,16 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
     quantize_model_(**quantize_decoder_embedding_kwargs)
 
-    # TODO: quantize encoder embeddings.
+    # Quantize encoder embeddings.
+    if qembedding_encoder_config:
+        logging.info("Quantizing embeddings...")
+    quantize_encoder_embedding_kwargs = {
+        "eager_model": getattr(eager_model, encoder_name),
+        "qembedding_config": qembedding_encoder_config,
+    }
+    if qembedding_encoder_group_size is not None:
+        quantize_encoder_embedding_kwargs["qembedding_group_size"] = qembedding_encoder_group_size
+    quantize_model_(**quantize_encoder_embedding_kwargs)
 
     return MultiModalTextToTextExportableModule(
         model=eager_model,

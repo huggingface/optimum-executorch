@@ -14,9 +14,6 @@
 
 from typing import Union
 
-import torch
-from torch.nn.attention import SDPBackend
-
 from ..integrations import (
     CausalLMExportableModule,
     MaskedLMExportableModule,
@@ -58,8 +55,6 @@ def export_to_executorch_with_cuda_windows(
             "Custom SDPA implementation is not supported for CUDA yet. Please use 'flash_attention' instead."
         )
 
-    # Decomposes SDPA since we don't have a flash attention kernel for it yet.
-    with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
-        exported_progs = model.export()
+    exported_progs = model.export()
 
     return lower_to_executorch(exported_progs, model.metadata, is_windows=True)

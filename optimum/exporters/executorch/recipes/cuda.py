@@ -18,7 +18,6 @@ from typing import Dict, Union
 import torch
 from tabulate import tabulate
 from torch.export import ExportedProgram
-from torch.nn.attention import SDPBackend
 
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -73,17 +72,16 @@ def lower_to_executorch(
                 aten.conv1d.default: conv1d_to_conv2d,
             }
         )
-    with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]):
-        et_prog = to_edge_transform_and_lower(
-            exported_programs,
-            partitioner=partitioners,
-            compile_config=EdgeCompileConfig(
-                _check_ir_validity=False,
-                _skip_dim_order=True,
-            ),
-            constant_methods=metadata,
-            transform_passes=[RemovePaddingIdxEmbeddingPass()],
-        )
+    et_prog = to_edge_transform_and_lower(
+        exported_programs,
+        partitioner=partitioners,
+        compile_config=EdgeCompileConfig(
+            _check_ir_validity=False,
+            _skip_dim_order=True,
+        ),
+        constant_methods=metadata,
+        transform_passes=[RemovePaddingIdxEmbeddingPass()],
+    )
     et_prog = et_prog.to_executorch()
     pte_name = "model"
     for method in et_prog.methods:
@@ -128,8 +126,6 @@ def export_to_executorch_with_cuda(
             "Custom SDPA implementation is not supported for CUDA yet. Please use 'flash_attention' instead."
         )
 
-    # Decomposes SDPA since we don't have a flash attention kernel for it yet.
-    with torch.nn.attention.sdpa_kernel([SDPBackend.MATH]), torch.no_grad():
-        exported_progs = model.export()
+    exported_progs = model.export()
 
     return lower_to_executorch(exported_progs, model.metadata)
