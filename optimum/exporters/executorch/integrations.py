@@ -37,6 +37,7 @@ from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
 from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
+from optimum.executorch.attentions.whisper_attention import WhisperCustomDecoderLayer
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
 
@@ -695,6 +696,11 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(
                 f"self_attention_value_cache_{i}", self.self_attention_cache.layers[i].values, persistent=False
             )
+
+        # Use custom cross attention for Whisper.
+        if isinstance(model, WhisperForConditionalGeneration):
+            for i in range(len(self.decoder.layers)):
+                self.decoder.layers[i] = WhisperCustomDecoderLayer.from_layer(self.decoder.layers[i])
 
     def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
         # Get outputs from decoder
