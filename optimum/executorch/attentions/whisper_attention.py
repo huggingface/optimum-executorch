@@ -151,7 +151,7 @@ class WhisperCrossAttention(nn.Module):
             operands=(cached_keys, cached_values, key_value_states),
         )
 
-        self.is_cache_initialized.fill_(True)
+        self.is_cache_initialized[0] = True
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
