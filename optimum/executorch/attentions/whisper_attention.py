@@ -21,6 +21,7 @@
 from typing import Callable, Optional
 
 import torch
+from executorch.extension.llm.custom_ops import custom_ops  # noqa
 from torch import Tensor, nn
 from transformers.cache_utils import EncoderDecoderCache
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
@@ -76,6 +77,9 @@ class WhisperCrossAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+        # Force this boolean to be on CPU
+        self.register_buffer("is_cache_initialized", torch.tensor(False, device="cpu"))
 
     def forward(
         self,
@@ -138,18 +142,16 @@ class WhisperCrossAttention(nn.Module):
         cached_keys = past_key_values.layers[self.layer_idx].keys
         cached_values = past_key_values.layers[self.layer_idx].values
 
-        # Tensor predicate: True if any element is non-zero
-        # Result is a 0-dim bool tensor suitable for torch.cond
-        cache_is_initialized = (cached_keys != 0).any()
-
         # Use torch.cond to select branch in a traceable way.
         # All operands must be (nested) tensors or simple Python values.
         key_states, value_states = torch.cond(
-            cache_is_initialized,
+            self.is_cache_initialized,
             use_cached_kv,
             recompute_kv,
             operands=(cached_keys, cached_values, key_value_states),
         )
+
+        self.is_cache_initialized.fill_(True)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
