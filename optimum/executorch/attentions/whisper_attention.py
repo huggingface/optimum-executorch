@@ -79,7 +79,7 @@ class WhisperCrossAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         # Force this boolean to be on CPU
-        self.register_buffer("is_cache_initialized", torch.tensor(False, device="cpu"))
+        self.register_buffer("is_cache_initialized", torch.tensor([False], device="cpu"))
 
     def forward(
         self,
