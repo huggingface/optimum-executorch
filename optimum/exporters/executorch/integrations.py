@@ -705,6 +705,11 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         self.cross_attention_cache.early_initialization(
             batch_size, cross_attention_heads, cross_head_dim, model.dtype, model.device
         )
+        # Add a flag to indicate if the cache has been initialized.
+        # Initialize it as False on CPU so it can be used as a predicate in torch.cond.
+        # After the first forward pass, we'll set it to True to indicate the cache is populated.
+        self.cross_attention_cache.initialized = torch.zeros(batch_size, 2, dtype=torch.bool, device="cpu")
+
         self.cache = EncoderDecoderCache(self.self_attention_cache, self.cross_attention_cache)
 
         # Register cache buffers to make them exportable.
@@ -722,7 +727,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(
                 f"cross_attention_value_cache_{i}", self.cross_attention_cache.layers[i].values, persistent=False
             )
-
+        self.register_buffer(
+            "cross_attention_cache_initialized", self.cross_attention_cache.initialized, persistent=False
+        )
         # Use custom cross attention for Whisper.
         if isinstance(model, WhisperForConditionalGeneration):
             for layer in self.decoder.layers:
@@ -749,6 +756,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             use_cache=True,
             cache_position=cache_position,
         )
+        # Set the cross attention cache as initialized after the first forward pass
+        # This allows torch.cond to branch differently on subsequent runs
+        self.cross_attention_cache_initialized.fill_(True)
 
         # Apply linear projection (lm head) to obtain logits
         logits = self.proj_out(outputs[0])
