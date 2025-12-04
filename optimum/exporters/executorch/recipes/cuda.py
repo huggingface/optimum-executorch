@@ -25,6 +25,8 @@ from executorch.exir import (
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
+from executorch.exir.backend.compile_spec_schema import CompileSpec
+
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import (
     RemovePaddingIdxEmbeddingPass,
 )
@@ -65,8 +67,6 @@ def export_to_executorch_with_cuda(
             For encoder-decoder models or multimodal models, it may generate multiple programs.
     """
     # Import here to avoid version conflicts.
-    from torch._inductor.decomposition import conv1d_to_conv2d
-
     from executorch.backends.cuda.cuda_backend import CudaBackend
     from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
 
@@ -80,18 +80,20 @@ def export_to_executorch_with_cuda(
         if len(exported_programs) == 1:
             exported_programs = {"forward": next(iter(exported_programs.values()))}
 
-        # CUDA backend compile spec with method name.
-        partitioners = {
-            key: [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(key)])]
-            for key in exported_programs.keys()
-        }
-        # Add decompositions for triton to generate kernels.
-        for key, ep in exported_programs.items():
-            exported_programs[key] = ep.run_decompositions(
-                {
-                    aten.conv1d.default: conv1d_to_conv2d,
-                }
-            )
+        # Check if this is a Gemma3 model and prepare appropriate compile specs
+        model_type = getattr(model.config, "model_type", None)
+
+        # For Gemma3 we don't want to use triton sdpa kernels for better performance
+        partitioners = {}
+        for key in exported_programs.keys():
+            compile_specs = [CudaBackend.generate_method_name_compile_spec(key)]
+
+            # Add Gemma3-specific compile spec if needed
+            if model_type == "gemma3":
+                compile_specs.append(CompileSpec(key="triton_kernel_mode", value=b"OFF"))
+
+            partitioners[key] = [CudaPartitioner(compile_specs)]
+
         et_prog = to_edge_transform_and_lower(
             exported_programs,
             partitioner=partitioners,
