@@ -78,6 +78,8 @@ class WhisperCrossAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+        self.register_buffer("cache_initialized", torch.zeros(1, 1, dtype=torch.bool), persistent=False)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -94,10 +96,6 @@ class WhisperCrossAttention(nn.Module):
         torch._assert(
             isinstance(past_key_values, EncoderDecoderCache),
             f"past_key_values must be an EncoderDecoderCache, got {type(past_key_values)}",
-        )
-        torch._assert(
-            hasattr(past_key_values.cross_attention_cache, "initialized"),
-            "Cross attention cache needs to have an `initialized` field."
         )
         # determine input shapes
         bsz, tgt_len = hidden_states.shape[:-1]
@@ -146,11 +144,14 @@ class WhisperCrossAttention(nn.Module):
         # Use torch.cond to select branch in a traceable way.
         # All operands must be (nested) tensors or simple Python values.
         key_states, value_states = torch.cond(
-            past_key_values.initialized,
+            self.cache_initialized,
             use_cached_kv,
             recompute_kv,
             operands=(cached_keys, cached_values, key_value_states),
         )
+
+        # Update the cache_initialized flag to True after first use
+        self.cache_initialized.fill_(True)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
