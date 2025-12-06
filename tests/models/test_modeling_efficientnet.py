@@ -20,11 +20,11 @@ import unittest
 
 import pytest
 import torch
-from executorch import version
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoConfig, AutoModelForImageClassification
 from transformers.testing_utils import slow
 
+from executorch import version
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from optimum.executorch import ExecuTorchModelForImageClassification
 
 from ..utils import check_close_recursively

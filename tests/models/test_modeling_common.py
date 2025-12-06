@@ -22,7 +22,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import torch
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from huggingface_hub import HfApi
 from transformers import (
     AutoModelForCausalLM,
@@ -30,6 +29,7 @@ from transformers import (
     GenerationConfig,
 )
 
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from optimum.executorch import ExecuTorchModelForCausalLM
 from optimum.executorch.modeling import _FILE_PATTERN
 from optimum.exporters.executorch import main_export
@@ -169,7 +169,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         from executorch.exir import to_edge_transform_and_lower
         from executorch.exir.dialects._ops import ops as exir_ops
-
         from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
 
         et_model = to_edge_transform_and_lower(

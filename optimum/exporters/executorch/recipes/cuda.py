@@ -26,7 +26,6 @@ from executorch.exir import (
     to_edge_transform_and_lower,
 )
 from executorch.exir.backend.compile_spec_schema import CompileSpec
-
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import (
     RemovePaddingIdxEmbeddingPass,
 )

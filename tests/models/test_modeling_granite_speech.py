@@ -20,10 +20,10 @@ import sys
 import unittest
 
 import pytest
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from optimum.executorch import ExecuTorchModelForMultiModalToText
 
 from ..utils import check_multimodal_output_quality
