@@ -22,11 +22,11 @@ import unittest
 
 import pytest
 import torchao
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from optimum.executorch import ExecuTorchModelForCausalLM
 
 

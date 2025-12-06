@@ -15,7 +15,6 @@
 from typing import Callable, Optional, Tuple, Union
 
 import torch
-
 from executorch.extension.llm.custom_ops.custom_ops import custom_sdpa  # noqa
 
 

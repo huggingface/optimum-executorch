@@ -22,10 +22,10 @@ import tempfile
 import unittest
 
 import pytest
+from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from transformers import AutoProcessor, AutoTokenizer
 from transformers.testing_utils import slow
 
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from optimum.executorch import ExecuTorchModelForCausalLM, ExecuTorchModelForMultiModalToText
 
 from ..utils import check_causal_lm_output_quality, check_multimodal_output_quality

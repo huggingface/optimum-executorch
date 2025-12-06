@@ -20,11 +20,11 @@ import tempfile
 import unittest
 
 import pytest
+from executorch import version
 from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
-from executorch import version
 from optimum.executorch import ExecuTorchModelForSeq2SeqLM
 
 
