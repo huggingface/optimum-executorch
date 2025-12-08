@@ -26,7 +26,9 @@ from executorch.exir import (
     to_edge_transform_and_lower,
 )
 from executorch.exir.backend.compile_spec_schema import CompileSpec
-from optimum.executorch.passes.remove_padding_idx_embedding_pass import RemovePaddingIdxEmbeddingPass
+from optimum.executorch.passes.remove_padding_idx_embedding_pass import (
+    RemovePaddingIdxEmbeddingPass,
+)
 
 from ..integrations import (
     CausalLMExportableModule,
@@ -44,6 +46,7 @@ def lower_to_executorch(
     exported_programs: Dict[str, ExportedProgram],
     metadata=None,
     is_windows: bool = False,
+    model_config=None,
 ) -> Dict[str, ExecutorchProgram]:
     # Import here to avoid version conflicts.
     from torch._inductor.decomposition import conv1d_to_conv2d
@@ -57,12 +60,20 @@ def lower_to_executorch(
     if len(exported_programs) == 1:
         exported_programs = {"forward": next(iter(exported_programs.values()))}
 
+    # Check if this is a Gemma3 model
+    model_type = getattr(model_config, "model_type", None) if model_config else None
+
     # CUDA backend compile spec with method name.
     partitioners = {}
     for key in exported_programs.keys():
         compile_specs = [CudaBackend.generate_method_name_compile_spec(key)]
         if is_windows:
             compile_specs.append(CompileSpec("platform", "windows".encode("utf-8")))
+
+        # Add Gemma3-specific compile spec if needed
+        if model_type == "gemma3":
+            compile_specs.append(CompileSpec(key="triton_kernel_mode", value=b"OFF"))
+
         partitioners[key] = [CudaPartitioner(compile_specs)]
 
     # Add decompositions for triton to generate kernels.
@@ -128,4 +139,4 @@ def export_to_executorch_with_cuda(
 
     exported_progs = model.export()
 
-    return lower_to_executorch(exported_progs, model.metadata)
+    return lower_to_executorch(exported_progs, model.metadata, model_config=getattr(model, "config", None))

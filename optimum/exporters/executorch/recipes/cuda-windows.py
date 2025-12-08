@@ -57,4 +57,4 @@ def export_to_executorch_with_cuda_windows(
 
     exported_progs = model.export()
 
-    return lower_to_executorch(exported_progs, model.metadata, is_windows=True)
+    return lower_to_executorch(exported_progs, model.metadata, is_windows=True, model_config=getattr(model, "config", None))
