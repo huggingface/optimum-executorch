@@ -49,6 +49,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
+            task="text-generation",
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             use_custom_kv_cache=True,

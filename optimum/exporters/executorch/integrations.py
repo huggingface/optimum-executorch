@@ -211,7 +211,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "image_token_id")
         self.metadata = save_config_to_constant_methods(
             config=model.config.text_config,
-            generation_config=model.generation_config,
+            generation_config=getattr(model, "generation_config", None),
             processor_config=processor_config,
             get_max_seq_len=max_seq_len,
             **additional_metadata_kwargs,
@@ -424,7 +424,7 @@ class CausalLMExportableModule(torch.nn.Module):
         self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(
             model.config,
-            model.generation_config,
+            generation_config=getattr(model, "generation_config", None),
             get_max_seq_len=max_seq_len,
             enable_dynamic_shape=not self.disable_dynamic_shapes,
         )
@@ -552,7 +552,7 @@ class VisionEncoderExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(model.config, getattr(model, "generation_config", None))
 
     def forward(self, pixel_values):
         print(f"DEBUG: pixel_values: {pixel_values.shape}")
@@ -591,7 +591,7 @@ class MaskedLMExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(model.config, getattr(model, "generation_config", None))
 
     def forward(self, input_ids, attention_mask):
         return self.model(input_ids, attention_mask)
