@@ -18,6 +18,52 @@ import torch
 from executorch.extension.llm.custom_ops.custom_ops import custom_sdpa  # noqa
 
 
+def sdpa_mask_passthrough(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    mask_function: Optional[Callable] = None,
+    attention_mask: Optional[torch.Tensor] = None,
+    local_size: Optional[int] = None,
+    allow_is_causal_skip: bool = True,
+    allow_torch_fix: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
+    """
+    Pass-through for attention mask creation since it is never used:
+    - For regular attention, the custom sdpa op in causal mode creates its own attention mask
+    - For sliding window attention, the attention mask from the attention mask API is ditched and re-created during the attention API since it needs to know about cache internals
+
+    Additionally, there were some vmap export issues with sliding window attention mask creation in Transformers.
+
+    Args:
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        local_size (`int`, optional):
+            The size of the local attention, if we do not use full attention. This is used only if `allow_is_causal_skip=True`
+            to try to skip mask creation if possible.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
+            `torch.sdpa` instead. Default to `True`.
+        allow_torch_fix (`bool`, optional):
+            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
+            versions. We need an arg to skip it when using eager. By default `True`.
+
+    """
+    return None
+
+
 def custom_sdpa_with_start_pos_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
