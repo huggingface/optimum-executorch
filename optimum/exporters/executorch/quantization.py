@@ -31,6 +31,7 @@ def quantize_model_(
     if not (qlinear_config or qembedding_config):
         return
 
+    from torchao.experimental.quant_api import UIntxWeightOnlyConfig
     from torchao.quantization.granularity import PerAxis, PerGroup
     from torchao.quantization.quant_api import (
         Int4WeightOnlyConfig,
@@ -42,9 +43,9 @@ def quantize_model_(
 
     if qembedding_config:
         if qlinear_config == "8w":
-            assert (
-                qembedding_group_size == 0
-            ), "8-bit embedding quantization only supports per-token at the moment, please use qembedding_group_size = 0."
+            assert qembedding_group_size == 0, (
+                "8-bit embedding quantization only supports per-token at the moment, please use qembedding_group_size = 0."
+            )
         if qembedding_group_size == 0:
             embedding_weight_granularity = PerAxis(0)
         else:
@@ -101,6 +102,13 @@ def quantize_model_(
                     weight_dtype=torch.int8,
                     weight_granularity=PerAxis(0),
                 )
+            if quant_config_key == "fpa4w":
+                # Need to import to load the ops
+                import torchao.experimental.ops.mps  # noqa: F401
+                return UIntxWeightOnlyConfig(
+                    group_size=qlinear_group_size,
+                    bitwidth=4,
+                )
             raise ValueError(f"Unsupported linear quantization config '{quant_config_key}'.")
 
         qlinear_configs = [cfg.strip() for cfg in qlinear_config.split(",")]
@@ -120,9 +128,9 @@ def quantize_model_(
                 )
                 fallback_linear_config_key = None
         else:
-            assert (
-                qlinear_group_size % 2 == 0
-            ), f"Linear quantization group size must be a multiple of 2, got {qlinear_group_size}."
+            assert qlinear_group_size % 2 == 0, (
+                f"Linear quantization group size must be a multiple of 2, got {qlinear_group_size}."
+            )
             linear_weight_granularity = PerGroup(qlinear_group_size)
 
         logging.info("Quantizing linear layers.")
