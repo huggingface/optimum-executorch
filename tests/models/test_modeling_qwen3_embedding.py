@@ -79,11 +79,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         model_id = "Qwen/Qwen3-Embedding-0.6B"
         prompt = "Explain gravity"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_id,
-            task="text-generation",
-            recipe="portable"
-        )
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, task="text-generation", recipe="portable")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
         generated_text = model.text_generation(
