@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import logging
 from typing import Dict
 
@@ -40,14 +41,34 @@ from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_k
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
 
 
+SUPPORTED_VISION_ENCODER_INPUTS = ["pixel_values", "image_sizes"]
+
+
 class VisionExportableModule(torch.nn.Module):
     def __init__(self, model: torch.nn.Module):
         super().__init__()
         self.model = model
 
     def prepare_export_inputs(self):
+        # Check if the "get_image_features" function has any args that were are unprepared for.
+        required_args = []
+        sig = inspect.signature(self.model.get_image_features)
+        for name, param in sig.parameters.items():
+            if param.default is inspect._empty and name != "kwargs":
+                required_args.append(name)
+
+        if "pixel_values" not in required_args:
+            raise AttributeError(
+                "`pixel_values` is not in in the `get_image_features()` API. This is unexpected - please investigate."
+            )
+        unsupported_args = set(required_args) - set(SUPPORTED_VISION_ENCODER_INPUTS)
+        if unsupported_args:
+            raise AttributeError(f"The following args are not yet supported, please implement: {unsupported_args}.")
+
         # 1. Get export inputs
+        input_kwargs = {}
         model_id = self.model.config.name_or_path
+        config = AutoConfig.from_pretrained(model_id)
         processor = AutoProcessor.from_pretrained(model_id)
         sample_conversation_with_image = [
             {
@@ -60,29 +81,42 @@ class VisionExportableModule(torch.nn.Module):
                 ],
             },
         ]
-        processed_inputs = processor.apply_chat_template(
-            sample_conversation_with_image,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
+
+        if config.model_type == "mistral3":
+            from transformers import MistralCommonBackend
+
+            tokenizer = MistralCommonBackend.from_pretrained(model_id)
+            processed_inputs = tokenizer.apply_chat_template(
+                sample_conversation_with_image, return_tensors="pt", return_dict=True
+            )
+        else:
+            processed_inputs = processor.apply_chat_template(
+                sample_conversation_with_image,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            )
         if "pixel_values" not in processed_inputs:
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'pixel_values' key: {processed_inputs}"
             )
-        export_inputs = processed_inputs["pixel_values"].to(dtype=self.model.dtype)
+
+        input_kwargs["input_features"] = processed_inputs["pixel_values"].to(dtype=self.model.dtype)
+        if "image_sizes" in required_args:
+            input_kwargs["image_sizes"] = [processed_inputs["pixel_values"].shape[-2:]]
 
         # 2. Get export dynamic shapes
         dynamic_shapes = None  # No batching for now.
 
-        return export_inputs, dynamic_shapes
+        return input_kwargs, dynamic_shapes
 
     def forward(
         self,
         input_features: torch.FloatTensor,
+        **kwargs,
     ):
-        image_embeds = self.model.get_image_features(input_features)
+        image_embeds = self.model.get_image_features(input_features, **kwargs)
         if isinstance(image_embeds, list):
             image_embeds = torch.stack(image_embeds)
         return image_embeds
@@ -95,6 +129,7 @@ class AudioExportableModule(torch.nn.Module):
 
     def prepare_export_inputs(self):
         # 1. Get export inputs
+        input_kwargs = {}
         model_id = self.model.config.name_or_path
         processor = AutoProcessor.from_pretrained(model_id)
         config = AutoConfig.from_pretrained(model_id)
@@ -134,10 +169,11 @@ class AudioExportableModule(torch.nn.Module):
             raise ValueError(
                 f"Unable to obtain sample audio encoder inputs for export for {model_id} - the processor did not return formatted inputs with the 'input_features' key: {processed_inputs}"
             )
-        export_inputs = processed_inputs["input_features"].to(dtype=self.model.dtype)
+        audio_features = processed_inputs["input_features"].to(dtype=self.model.dtype)
         # Make sure the export inputs has a batch size > 1 so that it doesn't 0/1 specialize.
-        if export_inputs.shape[0] == 1:
-            export_inputs = export_inputs.repeat(2, 1, 1)
+        if audio_features.shape[0] == 1:
+            audio_features = audio_features.repeat(2, 1, 1)
+        input_kwargs["input_features"] = audio_features
 
         # 2. Get export dynamic shapes
         # For certain models like Voxtral, each 30 seconds represent one batch. So theoretically this caps
@@ -149,15 +185,16 @@ class AudioExportableModule(torch.nn.Module):
             },
         }
 
-        return export_inputs, dynamic_shapes
+        return input_kwargs, dynamic_shapes
 
     def forward(
         self,
         input_features: torch.FloatTensor,
+        **kwargs,
     ):
         # TODO: remove on next Transformers pin bump.
         if hasattr(self.model, "get_audio_embeds"):
-            audio_embeds = self.model.get_audio_embeds(input_features)
+            audio_embeds = self.model.get_audio_embeds(input_features, **kwargs)
         else:
             audio_embeds = self.model.get_audio_features(input_features)
         return audio_embeds.unsqueeze(0)
@@ -380,20 +417,20 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 raise ValueError(
                     f"{self.model.config.name_or_path} has an unsupported modality that is not supported yet for Optimum - please file an issue."
                 )
-            input_features, dynamic_shapes = encoder.prepare_export_inputs()
+            input_kwargs, dynamic_shapes = encoder.prepare_export_inputs()
 
             logging.info(
-                f"Exporting {self.modality} encoder using input_features({input_features.shape}), dynamic_shapes={dynamic_shapes}"
+                f"Exporting {self.modality} encoder using input_features({input_kwargs['input_features'].shape}), dynamic_shapes={dynamic_shapes}"
             )
 
             # Move inputs to the same device as the model
-            input_features = input_features.to(self.model.device)
+            for kwarg, value in input_kwargs.items():
+                if torch.is_tensor(value):
+                    input_kwargs[kwarg] = value.to(self.model.device)
             encoder_exported_program = torch.export.export(
                 encoder,
                 args=(),
-                kwargs={
-                    "input_features": input_features,
-                },
+                kwargs=input_kwargs,
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )

@@ -331,9 +331,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
         # Generate
         generated_text = model.text_generation(
+            input_conversation=conversation,
             processor=processor,
             tokenizer=tokenizer,
-            input_conversation=conversation,
             max_seq_len=64,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")

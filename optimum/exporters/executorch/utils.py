@@ -135,9 +135,9 @@ def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenize
 
 
 def process_conversation_inputs(
-    processor: ProcessorMixin,
-    tokenizer: TokenizersBackend,
     input_conversation: List[Dict[str, Any]],
+    processor: Optional[ProcessorMixin] = None,
+    tokenizer: Optional[TokenizersBackend] = None,
 ):
     """
     Process input conversation for multimodal models.
@@ -154,6 +154,12 @@ def process_conversation_inputs(
     Returns:
         Processed inputs ready for model consumption
     """
+    if not tokenizer:
+        raise ValueError("Must provide tokenizer to process model inputs.")
+    if not processor:
+        # Some models don't use a processor, usually in this case the tokenizer does all of the work.
+        return tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
+
     if isinstance(processor, transformers.models.granite_speech.processing_granite_speech.GraniteSpeechProcessor):
         import requests
         import torchaudio

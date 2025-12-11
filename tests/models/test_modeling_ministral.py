@@ -18,11 +18,10 @@ import logging
 import unittest
 
 import pytest
-from executorch.extension.pybindings.portable_lib import ExecuTorchModule
-from transformers import AutoTokenizer
+from transformers import MistralCommonBackend
 from transformers.testing_utils import slow
 
-from optimum.executorch import ExecuTorchModelForCausalLM
+from optimum.executorch import ExecuTorchModelForMultiModalToText
 
 from ..utils import check_causal_lm_output_quality
 
@@ -33,23 +32,44 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
 
     @slow
     @pytest.mark.run_slow
-    def test_ministral_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
-        model_id = "ministral/Ministral-3b-instruct"
-        prompt = "Give me a brief explanation of gravity in simple terms."
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForCausalLM.from_pretrained(
-            model_id,
-            task="text-generation",
-            recipe="xnnpack",
-            attn_implementation="custom_sdpa",
-            use_custom_kv_cache=True,
-            **{"qlinear": "8da4w", "qembedding": "8w"},
+    def test_ministral_3_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
+        model_id = "mistralai/Ministral-3-3B-Instruct-2512"
+        tokenizer = MistralCommonBackend.from_pretrained(model_id)
+        image_url = (
+            "https://static.wikia.nocookie.net/essentialsdocs/images/7/70/Battle.png/revision/latest?cb=20220523172438"
         )
-        self.assertIsInstance(model, ExecuTorchModelForCausalLM)
-        self.assertIsInstance(model.model, ExecuTorchModule)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "What action do you think I should take in this situation? List all the possible actions and explain why you think they are good or bad.",
+                    },
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            },
+        ]
+        tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
+
+        model = ExecuTorchModelForMultiModalToText.from_pretrained(
+            model_id,
+            recipe="xnnpack",
+            task="multimodal-text-to-text",
+            use_custom_sdpa=True,
+            use_custom_kv_cache=True,
+            qlinear="8da4w",
+            qlinear_group_size=32,
+            qlinear_encoder="8da4w",
+            qlinear_encoder_group_size=32,
+            qembedding="8w",
+            qembedding_encoder="8w",
+        )
+
+        # Generate
         generated_text = model.text_generation(
+            input_conversation=conversation,
             tokenizer=tokenizer,
-            prompt=prompt,
             max_seq_len=64,
         )
         logging.info(f"\nGenerated text:\n\t{generated_text}")
