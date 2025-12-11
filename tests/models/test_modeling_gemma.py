@@ -79,6 +79,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         kwargs = {"qlinear": "8da4w", "qembedding": "8w"}
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,
+            task="text-generation",
             recipe="xnnpack",
             attn_implementation="custom_sdpa",
             **kwargs,
@@ -102,7 +103,11 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # TODO: Switch to use google/gemma-2b once https://github.com/huggingface/optimum/issues/2127 is fixed
         # model_id = "google/gemma-2b"
         model_id = "weqweasdas/RM-Gemma-2B"
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="portable")
+        model = ExecuTorchModelForCausalLM.from_pretrained(
+            model_id,
+            task="text-generation",
+            recipe="portable"
+        )
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertIsInstance(model.model, ExecuTorchModule)
 
