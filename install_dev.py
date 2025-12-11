@@ -15,6 +15,7 @@ def install_torch_nightly_deps():
             "-m",
             "pip",
             "install",
+            "--no-cache-dir",  # Prevent cached CUDA packages
             f"executorch==1.1.0.{EXECUTORCH_NIGHTLY_VERSION}",
             f"torch==2.10.0.{TORCH_NIGHTLY_VERSION}",
             f"torchvision==0.25.0.{TORCH_NIGHTLY_VERSION}",
@@ -58,12 +59,12 @@ def main():
     )
     args = parser.parse_args()
 
-    # Install package with dev extras
-    subprocess.check_call([sys.executable, "-m", "pip", "install", ".[dev]"])
-
-    # Install nightly dependencies
+    # Install nightly torch dependencies FIRST to avoid pulling CUDA versions
     if not args.skip_override_torch:
         install_torch_nightly_deps()
+
+    # Install package with dev extras
+    subprocess.check_call([sys.executable, "-m", "pip", "install", ".[dev]"])
 
     # Install source dependencies
     install_dep_from_source()

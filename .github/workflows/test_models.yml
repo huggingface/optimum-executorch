@@ -52,11 +52,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies for ExecuTorch
         run: |
+          # Clean up cache to save space
+          pip cache purge || true
+          rm -rf ~/.cache/huggingface/hub/* || true
+
           if [ "${{ matrix.executorch-version }}" == "nightly" ]; then
             python install_dev.py
           else
-            pip install '.[dev]'
-            pip install executorch==${{ matrix.executorch-version }}
+            # Use CPU-only torch to avoid CUDA dependencies (saves ~5GB)
+            pip install --no-cache-dir '.[dev]' \
+              --extra-index-url https://download.pytorch.org/whl/cpu
+            pip install --no-cache-dir executorch==${{ matrix.executorch-version }}
           fi
           pip list
       - name: Run tests
