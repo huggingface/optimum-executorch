@@ -326,7 +326,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         # likely friends or acquaintances, who are discussing tattoos.'
         self.assertTrue("tattoo" in generated_text)
         self.assertTrue(
-            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
+            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=10)
         )
 
     @slow

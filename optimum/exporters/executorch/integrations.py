@@ -176,7 +176,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     Args:
         model (torch.nn.Module): The multimodal model to export.
         modality (str): The input modality type ("audio" or "vision").
-        encoder_name (str): Name of the encoder attribute in the model.
+        encoder_model (str): The encoder model within the mutlimodal model.
         processor_config (dict, optional): Preprocessor configuration loaded from preprocessor_config.json.
         use_custom_kv_cache (bool): Whether to use custom key-value caching for optimization.
         use_custom_sdpa (bool): Whether to use custom scaled dot-product attention.
@@ -186,7 +186,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         self,
         model: torch.nn.Module,
         modality: str,
-        encoder_name: str,
+        encoder_model: torch.nn.Module,
         max_seq_len: int,
         processor_config: dict = None,
         use_custom_kv_cache: bool = False,
@@ -194,13 +194,10 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
     ):
         super().__init__()
 
-        if not hasattr(model, encoder_name):
-            raise ValueError(f'Model does not contain encoder "{encoder_name}".')
-
         self.model = model
         self.config = model.config
         self.modality = modality
-        self.encoder_name = encoder_name
+        self.encoder_model = encoder_model
         self.processor_config = processor_config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
@@ -370,7 +367,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
 
             # 3. Export encoder.
             if self.use_custom_sdpa:
-                getattr(self.model, self.encoder_name).config._attn_implementation = "custom_sdpa"
+                self.encoder_model.config._attn_implementation = "custom_sdpa"
 
             if self.modality == "audio":
                 encoder = AudioExportableModule(self.model)
