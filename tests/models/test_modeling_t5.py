@@ -110,7 +110,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer,
             prompt=article,
         )
-        expected_text = 'a year later, she got married again in westchester county, new york. she was married to a different man, but only 18 days after that marriage. she is facing two criminal counts of "offering a false instrument"'
+        expected_text = 'a year later, she got married again in westchester county, new york . she was married to a different man, but only 18 days after that marriage . she is facing two criminal counts of "offering a false instrument"'
         logging.info(f"\nInput text:\n\t{article}\nGenerated text:\n\t{generated_text}")
         self.assertEqual(generated_text, expected_text)
 
