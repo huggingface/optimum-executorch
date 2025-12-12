@@ -1316,9 +1316,9 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
 
     def text_generation(
         self,
-        processor: ProcessorMixin,
-        tokenizer: "PreTrainedTokenizer",
         input_conversation: List[Dict],
+        processor: Optional[ProcessorMixin] = None,
+        tokenizer: Optional["PreTrainedTokenizer"] = None,
         echo: bool = True,
         max_seq_len: Optional[int] = None,
     ):
@@ -1356,9 +1356,9 @@ class ExecuTorchModelForMultiModalToText(ExecuTorchModelBase):
         self.stats.on_inference_start()
 
         inputs = process_conversation_inputs(
+            input_conversation,
             processor,
             tokenizer,
-            input_conversation,
         )
 
         self.stats.on_token_encode_end()

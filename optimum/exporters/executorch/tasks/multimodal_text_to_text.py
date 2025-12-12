@@ -181,7 +181,16 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
             "device": device,
         },
     )
-    decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
+    if hasattr(eager_model, "model"):
+        # For cases where the actual model containing decoder and encoders is in the top level "model" attribute.
+        decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model.model)
+        setattr(eager_model, decoder_name, getattr(eager_model.model, decoder_name))
+        if audio_encoder_name:
+            setattr(eager_model, audio_encoder_name, getattr(eager_model.model, audio_encoder_name))
+        if vision_encoder_name:
+            setattr(eager_model, vision_encoder_name, getattr(eager_model.model, vision_encoder_name))
+    else:
+        decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
     encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
 
     # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
