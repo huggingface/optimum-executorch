@@ -23,7 +23,7 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
 
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, is_offline_mode
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
@@ -38,7 +38,6 @@ from transformers import (
 from transformers.configuration_utils import PretrainedConfig
 from transformers.pipelines import get_task
 from transformers.processing_utils import ProcessorMixin
-from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import (
     ExecuTorchModule,

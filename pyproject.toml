@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
   "optimum~=2.0.0",
   "executorch>=1.0.0",
-  "transformers==5.0.0rc0",
+  "transformers==5.0.0rc1",
   "pytorch-tokenizers>=1.0.1",
   "accelerate>=0.26.0",
 ]
