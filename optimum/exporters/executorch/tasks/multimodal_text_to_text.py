@@ -25,68 +25,6 @@ from ..quantization import quantize_model_
 from ..task_registry import register_task
 
 
-def _validate_multimodal_components(model):
-    """
-    Validates that the multimodal model has required decoder and encoder components.
-
-    Args:
-        model: The loaded model instance
-
-    Returns:
-        tuple: (decoder_name, audio_encoder_name, vision_encoder_name)
-    """
-    POTENTIAL_DECODER_NAMES = [
-        "language_model",
-        "text_model",
-    ]
-    POTENTIAL_AUDIO_ENCODER_NAMES = [
-        "encoder",  # Here mainly for Granite Speech.
-        "audio_tower",
-        "audio_model",
-    ]
-    POTENTIAL_VISION_ENCODER_NAMES = [
-        "vision_tower",
-        "vision_model",
-    ]
-
-    # Find decoder component
-    decoder_name = None
-    for name in POTENTIAL_DECODER_NAMES:
-        if hasattr(model, name):
-            decoder_name = name
-            break
-
-    if decoder_name is None:
-        raise ValueError(
-            "The model does not have any of the expected decoder attributes: "
-            f"{POTENTIAL_DECODER_NAMES}. This is required for multimodal text-to-text models."
-        )
-
-    # Find encoder components
-    audio_encoder_name = None
-    for name in POTENTIAL_AUDIO_ENCODER_NAMES:
-        if hasattr(model, name):
-            audio_encoder_name = name
-            break
-
-    vision_encoder_name = None
-    for name in POTENTIAL_VISION_ENCODER_NAMES:
-        if hasattr(model, name):
-            vision_encoder_name = name
-            break
-
-    if (audio_encoder_name is None) == (vision_encoder_name is None):
-        raise ValueError(
-            "The model does not have one of the expected encoder attributes: "
-            f"{POTENTIAL_AUDIO_ENCODER_NAMES + POTENTIAL_VISION_ENCODER_NAMES}. "
-            "This is required for multimodal text-to-text models."
-            "Currently only a maximum of 1 modality is supported, so there can only be one of these"
-            "encoders in the model."
-        )
-
-    return decoder_name, audio_encoder_name, vision_encoder_name
-
-
 # NOTE: It's important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("image-text-to-text")
@@ -181,13 +119,22 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
             "device": device,
         },
     )
-    decoder_name, audio_encoder_name, vision_encoder_name = _validate_multimodal_components(eager_model)
-    encoder_name = audio_encoder_name if audio_encoder_name else vision_encoder_name
+
+    # Find the modality (only one modality of either image/audio is supported at the moment).
+    if len(eager_model.input_modalities) != 2:
+        raise AttributeError(
+            "Only one modality is supported for multimodal models at the moment. The input modalities must be either ['text', 'image'] or ['text, 'audio']"
+        )
+    for input_modality in eager_model.input_modalities:
+        if input_modality == "text":
+            continue
+        modality = input_modality
+    eager_encoder = eager_model.get_encoder(modality)
 
     # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
     # config, it always comes from the generation_config.json file, not the `generation_config` override
     # from from_pretrained().
-    getattr(eager_model, decoder_name).generation_config = eager_model.generation_config
+    eager_model.get_decoder().generation_config = eager_model.generation_config
 
     # Must disable gradient when exporting a model with a prequantized checkpoint,
     # e.g. "pytorch/Phi-4-mini-instruct-8da4w".
@@ -210,7 +157,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if qlinear_config:
         logging.info("Quantizing decoder linears...")
     quantize_decoder_kwargs = {
-        "eager_model": getattr(eager_model, decoder_name),
+        "eager_model": eager_model.get_decoder(),
         "qlinear_config": qlinear_config,
     }
     if qlinear_group_size is not None:
@@ -225,13 +172,15 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     #     self.decoder = ...
     #     self.lm_head = ...  # lm_head is not part of the decoder instance
     #     ...
-    if not hasattr(getattr(eager_model, decoder_name), "lm_head"):
-        if not hasattr(eager_model, "lm_head"):
+    if not hasattr(eager_model.get_decoder(), "lm_head"):
+        # Voxtral specifically is weird since you need to specifically do eager_model.language_model.lm_head.
+        lm_head = getattr(eager_model, "lm_head", None) or getattr(eager_model.language_model, "lm_head", None)
+        if not lm_head:
             raise AttributeError(
                 f"Could not find `lm_head` for {model_name_or_path} has no `lm_head`, please double check if this is expected."
             )
         quantize_lm_head_kwargs = {
-            "eager_model": eager_model.lm_head,
+            "eager_model": lm_head,
             "qlinear_config": qlinear_config,
         }
         quantize_model_(**quantize_lm_head_kwargs)
@@ -240,7 +189,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if qlinear_encoder_config:
         logging.info("Quantizing encoder linears...")
     quantize_encoder_kwargs = {
-        "eager_model": getattr(eager_model, encoder_name),
+        "eager_model": eager_encoder,
         "qlinear_config": qlinear_encoder_config,
     }
     if qlinear_encoder_group_size is not None:
@@ -253,7 +202,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if qembedding_config:
         logging.info("Quantizing embeddings...")
     quantize_decoder_embedding_kwargs = {
-        "eager_model": getattr(eager_model, decoder_name),
+        "eager_model": eager_model.get_decoder(),
         "qembedding_config": qembedding_config,
     }
     if qembedding_group_size is not None:
@@ -264,7 +213,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if qembedding_encoder_config:
         logging.info("Quantizing embeddings...")
     quantize_encoder_embedding_kwargs = {
-        "eager_model": getattr(eager_model, encoder_name),
+        "eager_model": eager_encoder,
         "qembedding_config": qembedding_encoder_config,
     }
     if qembedding_encoder_group_size is not None:
@@ -273,8 +222,10 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
 
     return MultiModalTextToTextExportableModule(
         model=eager_model,
-        modality="audio" if audio_encoder_name else "vision",
-        encoder_name=audio_encoder_name if audio_encoder_name else vision_encoder_name,
+        modality="vision"
+        if modality == "image"
+        else modality,  # TODO: hack since downstream uses "vision" atm. Change this to match Transformers.
+        encoder_model=eager_encoder,
         max_seq_len=max_length,
         processor_config=processor_config,
         use_custom_kv_cache=use_custom_kv_cache,

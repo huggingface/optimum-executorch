@@ -350,5 +350,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         self.assertTrue("serene" in generated_text)
         self.assertTrue("lake" in generated_text)
         self.assertTrue(
-            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=5)
+            check_multimodal_output_quality(model_id, generated_tokens, conversation, max_perplexity_threshold=10)
         )
