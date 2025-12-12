@@ -31,12 +31,11 @@ from transformers import (
 )
 from transformers.integrations.executorch import (
     TorchExportableModuleForDecoderOnlyLM,
-    sdpa_mask_without_vmap,
 )
 from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
-from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache
+from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache, sdpa_mask_passthrough
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
 
@@ -212,7 +211,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             additional_metadata_kwargs[f"{modality}_token_id"] = getattr(self.config, "image_token_id")
         self.metadata = save_config_to_constant_methods(
             config=model.config.text_config,
-            generation_config=model.generation_config,
+            generation_config=getattr(model, "generation_config", None),
             processor_config=processor_config,
             get_max_seq_len=max_seq_len,
             **additional_metadata_kwargs,
@@ -269,7 +268,7 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         if self.use_custom_sdpa:
             if self.use_custom_kv_cache:
                 AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
-                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_passthrough)
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
@@ -425,7 +424,7 @@ class CausalLMExportableModule(torch.nn.Module):
         self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(
             model.config,
-            model.generation_config,
+            generation_config=getattr(model, "generation_config", None),
             get_max_seq_len=max_seq_len,
             enable_dynamic_shape=not self.disable_dynamic_shapes,
         )
@@ -455,7 +454,7 @@ class CausalLMExportableModule(torch.nn.Module):
 
         if not self.disable_dynamic_shapes and not is_using_hybrid_cache_wo_custom_sdpa_kv_cache:
             # Prepare inputs with dynamic shapes
-            seq_length = 3  # Sequence length > 1 to avoid specialization issues
+            seq_length = 3  # Sequence length > 1 to avoid specialization issue
             example_input_ids = torch.zeros((1, seq_length), dtype=torch.long, device=self.model.device)
             example_cache_position = torch.arange(seq_length, dtype=torch.long, device=self.model.device)
             max_seq_len = self.metadata.get("get_max_seq_len")
@@ -471,7 +470,6 @@ class CausalLMExportableModule(torch.nn.Module):
         return example_input_ids, example_cache_position, dynamic_shapes, strict
 
     def _register_custom_attention(self, exportable_module: torch.nn.Module):
-        from transformers.integrations.executorch import sdpa_mask_without_vmap
         from transformers.masking_utils import AttentionMaskInterface
         from transformers.modeling_utils import AttentionInterface
 
@@ -479,7 +477,7 @@ class CausalLMExportableModule(torch.nn.Module):
             if self.use_custom_kv_cache:
                 _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
                 AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
-                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_without_vmap)
+                AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_passthrough)
                 # Manually set the attention implementation to custom_sdpa_ring_kv_cache
                 # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
@@ -554,7 +552,7 @@ class VisionEncoderExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(model.config, getattr(model, "generation_config", None))
 
     def forward(self, pixel_values):
         print(f"DEBUG: pixel_values: {pixel_values.shape}")
@@ -593,7 +591,7 @@ class MaskedLMExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         # Metadata to be recorded in the pte model file
-        self.metadata = save_config_to_constant_methods(model.config, model.generation_config)
+        self.metadata = save_config_to_constant_methods(model.config, getattr(model, "generation_config", None))
 
     def forward(self, input_ids, attention_mask):
         return self.model(input_ids, attention_mask)

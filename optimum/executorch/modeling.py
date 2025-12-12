@@ -23,7 +23,7 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List, Optional, Union
 
 import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, is_offline_mode
 from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
@@ -34,11 +34,10 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
     PreTrainedTokenizer,
-    add_start_docstrings,
 )
 from transformers.configuration_utils import PretrainedConfig
+from transformers.pipelines import get_task
 from transformers.processing_utils import ProcessorMixin
-from transformers.utils import is_offline_mode
 
 from executorch.extension.pybindings.portable_lib import (
     ExecuTorchModule,
@@ -46,13 +45,11 @@ from executorch.extension.pybindings.portable_lib import (
 )
 from executorch.kernels import quantized  # noqa
 
-from ..exporters import TasksManager
 from ..exporters.executorch import main_export
 from ..exporters.executorch.utils import (
     process_conversation_inputs,
     verify_eos_tokens_in_pretrained_tokenizer,
 )
-from ..modeling_base import FROM_PRETRAINED_START_DOCSTRING, OptimizedModel
 from ..utils.file_utils import find_files_matching_pattern
 from .stats import Stats
 
@@ -63,7 +60,7 @@ _FILE_PATTERN = r".*\.pte$"
 logger = logging.getLogger(__name__)
 
 
-class ExecuTorchModelBase(OptimizedModel, ABC):
+class ExecuTorchModelBase(ABC):
     """
     ExecuTorch model for inference using the ExecuTorch Runtime.
 
@@ -99,8 +96,6 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         models: Dict[str, "ExecuTorchModule"],
         config: "PretrainedConfig",
     ):
-        super().__init__(model=None, config=config)
-
         if self.__class__.auto_model_class is None:
             raise ValueError(
                 f"Class {self.__class__.__name__} must set auto_model_class. "
@@ -268,6 +263,7 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         cls,
         model_id: str,
         recipe: str,
+        task: Optional[str] = None,
         config: Optional[PretrainedConfig] = None,
         token: Optional[Union[bool, str]] = None,
         revision: Optional[str] = None,
@@ -278,9 +274,8 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         local_files_only: bool = False,
         **kwargs,
     ) -> Dict[str, "ExecuTorchModule"]:
-        task = kwargs.pop("task", None)
-        inferred_task = TasksManager.infer_task_from_model(cls.auto_model_class) if not task else task
-        logging.info(f"Inferred task from model class: {inferred_task}")
+        inferred_task = get_task(model_id) if not task else task
+        logging.info(f"Using task: {inferred_task}")
 
         save_dir = TemporaryDirectory(prefix="executorch_export_")
         save_dir_path = Path(save_dir.name)
@@ -316,7 +311,6 @@ class ExecuTorchModelBase(OptimizedModel, ABC):
         raise NotImplementedError
 
     @classmethod
-    @add_start_docstrings(FROM_PRETRAINED_START_DOCSTRING)
     def from_pretrained(
         cls,
         model_id: Union[str, Path],

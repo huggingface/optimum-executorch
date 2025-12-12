@@ -55,7 +55,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def test_load_cached_model_from_hub(self):
         model_id = "optimum-internal-testing/tiny-random-llama"
 
-        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, recipe="xnnpack")
+        model = ExecuTorchModelForCausalLM.from_pretrained(model_id, task="text-generation", recipe="xnnpack")
         self.assertIsInstance(model, ExecuTorchModelForCausalLM)
         self.assertTrue(hasattr(model, "model"))
         self.assertIsInstance(model.model, ExecuTorchModule)

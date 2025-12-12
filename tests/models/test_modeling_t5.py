@@ -49,7 +49,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def _helper_t5_translation(self, recipe: str):
         model_id = "google/flan-t5-small"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
+        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, task="text2text-generation", recipe=recipe)
 
         input_text = "translate English to German: How old are you?"
         generated_text = model.text_generation(
@@ -78,7 +78,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     def _helper_t5_summarization(self, recipe: str):
         model_id = "google-t5/t5-small"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, recipe=recipe)
+        model = ExecuTorchModelForSeq2SeqLM.from_pretrained(model_id, task="text2text-generation", recipe=recipe)
 
         article = (
             " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
@@ -110,7 +110,7 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer,
             prompt=article,
         )
-        expected_text = 'a year later, she got married again in westchester county, new york. she was married to a different man, but only 18 days after that marriage. she is facing two criminal counts of "offering a false instrument"'
+        expected_text = 'a year later, she got married again in westchester county, new york . she was married to a different man, but only 18 days after that marriage . she is facing two criminal counts of "offering a false instrument"'
         logging.info(f"\nInput text:\n\t{article}\nGenerated text:\n\t{generated_text}")
         self.assertEqual(generated_text, expected_text)
 

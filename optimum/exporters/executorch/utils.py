@@ -21,7 +21,7 @@ import torch
 import transformers
 from transformers import GenerationConfig, PretrainedConfig
 from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_tokenizers import TokenizersBackend
 
 
 def save_config_to_constant_methods(
@@ -88,7 +88,7 @@ def apply_chat_template_with_fallback(processor, conversation, **kwargs):
         return processor.apply_chat_template(conversation)
 
 
-def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenizer: PreTrainedTokenizer) -> bool:
+def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenizer: TokenizersBackend) -> bool:
     """
     Verifies that the model's EOS token IDs are present in the tokenizer's
     set of potential end-of-sequence tokens.
@@ -136,7 +136,7 @@ def verify_eos_tokens_in_pretrained_tokenizer(model_eos_ids: List[int], tokenize
 
 def process_conversation_inputs(
     processor: ProcessorMixin,
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: TokenizersBackend,
     input_conversation: List[Dict[str, Any]],
 ):
     """

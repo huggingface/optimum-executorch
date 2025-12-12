@@ -45,8 +45,8 @@ class ETCustomStaticCache(StaticCache):
             device=device,
             dtype=dtype,
         )
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        num_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
         self.early_initialization(
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
