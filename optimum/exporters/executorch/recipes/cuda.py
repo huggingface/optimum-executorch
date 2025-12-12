@@ -22,10 +22,12 @@ from torch.export import ExportedProgram
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
     EdgeCompileConfig,
+    ExecutorchBackendConfig,
     ExecutorchProgram,
     to_edge_transform_and_lower,
 )
 from executorch.exir.backend.compile_spec_schema import CompileSpec
+from executorch.exir.passes import MemoryPlanningPass
 from optimum.executorch.passes.remove_padding_idx_embedding_pass import (
     RemovePaddingIdxEmbeddingPass,
 )
@@ -93,7 +95,13 @@ def lower_to_executorch(
         constant_methods=metadata,
         transform_passes=[RemovePaddingIdxEmbeddingPass()],
     )
-    et_prog = et_prog.to_executorch()
+    et_prog = et_prog.to_executorch(
+        ExecutorchBackendConfig(
+            memory_planning_pass=MemoryPlanningPass(
+                alloc_graph_input=False,
+            )
+        ),
+    )
     pte_name = "model"
     for method in et_prog.methods:
         logging.debug(f"---------------------- Method: {method} ----------------------")
