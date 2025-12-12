@@ -135,7 +135,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         attn_implementation = "custom_sdpa"
         eager_model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            task="text-generation",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
