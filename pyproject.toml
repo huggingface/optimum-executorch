@@ -51,6 +51,9 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/huggingface/optimum-executorch"
 
+[project.entry-points."optimum.commands.register"]
+executorch = "optimum.commands.register.register_export:REGISTER_COMMANDS"
+
 # ---- setuptools config ----
 
 [tool.setuptools]
