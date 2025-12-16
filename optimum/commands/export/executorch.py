@@ -221,6 +221,14 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
                     "--qlinear_encoder_packing_format can only be used when --qlinear_encoder is set to '4w'"
                 )
 
+        # Validate fpa4w quantization requires MPS device
+        qlinear = getattr(self.args, "qlinear", None)
+        qlinear_encoder = getattr(self.args, "qlinear_encoder", None)
+        if qlinear == "fpa4w" and device != "mps":
+            raise ValueError("--qlinear=fpa4w can only be used when --device is set to 'mps'")
+        if qlinear_encoder == "fpa4w" and device != "mps":
+            raise ValueError("--qlinear_encoder=fpa4w can only be used when --device is set to 'mps'")
+
         kwargs = {}
         if self.args.use_custom_sdpa:
             kwargs["use_custom_sdpa"] = self.args.use_custom_sdpa
