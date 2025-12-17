@@ -77,7 +77,7 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qlinear",
         type=str,
-        choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w"],
+        choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w", "fpa4w"],
         required=False,
         help=(
             "Quantization config for decoder linear layers.\n\n"
@@ -86,7 +86,8 @@ def parse_args_executorch(parser):
             "  8da8w - 8-bit dynamic activation, 8-bit weight\n"
             "  8da4w,8da8w - 8-bit dynamic activation, 4-bit weight and 8-bit weight\n"
             "  4w    - 4-bit weight only\n"
-            "  8w    - 8-bit weight only"
+            "  8w    - 8-bit weight only\n"
+            "  fpa4w - floating point activation, 4-bit weight (MPS backend)"
         ),
     )
     required_group.add_argument(
@@ -107,7 +108,7 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--qlinear_encoder",
         type=str,
-        choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w"],
+        choices=["8da4w", "4w", "8w", "8da8w", "8da4w,8da8w", "fpa4w"],
         required=False,
         help=(
             "Quantization config for encoder linear layers.\n\n"
@@ -116,7 +117,8 @@ def parse_args_executorch(parser):
             "  8da8w - 8-bit dynamic activation, 8-bit weight\n"
             "  8da4w,8da8w - 8-bit dynamic activation, 4-bit weight; fallback on 8-bit dynamic activation, 8-bit weight per-channel where group size doesn't divide block size cleanly \n"
             "  4w    - 4-bit weight only\n"
-            "  8w    - 8-bit weight only"
+            "  8w    - 8-bit weight only\n"
+            "  fpa4w - floating point activation, 4-bit weight (MPS backend)"
         ),
     )
     required_group.add_argument(
@@ -183,9 +185,9 @@ def parse_args_executorch(parser):
     required_group.add_argument(
         "--device",
         type=str,
-        choices=["cpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3"],
+        choices=["cpu", "cuda", "cuda:0", "cuda:1", "cuda:2", "cuda:3", "mps"],
         required=False,
-        help="Device to run the model on. Options: cpu, cuda. Default: cpu.",
+        help="Device to run the model on. Options: cpu, cuda, mps. Default: cpu.",
     )
 
 
@@ -219,6 +221,14 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
                 raise ValueError(
                     "--qlinear_encoder_packing_format can only be used when --qlinear_encoder is set to '4w'"
                 )
+
+        # Validate fpa4w quantization requires MPS device
+        qlinear = getattr(self.args, "qlinear", None)
+        qlinear_encoder = getattr(self.args, "qlinear_encoder", None)
+        if qlinear == "fpa4w" and device != "mps":
+            raise ValueError("--qlinear=fpa4w can only be used when --device is set to 'mps'")
+        if qlinear_encoder == "fpa4w" and device != "mps":
+            raise ValueError("--qlinear_encoder=fpa4w can only be used when --device is set to 'mps'")
 
         kwargs = {}
         if self.args.use_custom_sdpa:
