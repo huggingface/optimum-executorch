@@ -51,11 +51,19 @@ class ETCustomStaticCache(StaticCache):
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert device is None or device in [
-            "cpu",
-            "cuda",
-            "mps",
-        ], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
+        # Validate device - handle both string and torch.device types
+        if device is not None:
+            device_type = (
+                device if isinstance(device, str) else (device.type if isinstance(device, torch.device) else None)
+            )
+            # Extract just the device type (e.g., "cuda:0" -> "cuda")
+            if isinstance(device_type, str):
+                device_type = device_type.split(":")[0]
+            assert device_type in [
+                "cpu",
+                "cuda",
+                "mps",
+            ], f"Device must be None or one of 'cpu', 'cuda', 'mps' (with optional index like 'cuda:0'), got {device}"
 
         # Create a list of CustomKVCache instances derived from each layer of the original Transformers cache, one per layer.
         self.kv_cache = torch.nn.ModuleList()
@@ -99,8 +107,7 @@ class ETCustomStaticCache(StaticCache):
 
         # Get cache position from cache_kwargs (used by StaticCache)
         cache_position = cache_kwargs.get("cache_position")
-        assert cache_position is not None
-        assert isinstance(cache_position, torch.Tensor)
+        torch._assert(cache_position is not None, "cache_position must be provided")
 
         # Get the CustomKVCache instance for this layer
         layer_cache = self.kv_cache[layer_idx]
@@ -212,11 +219,19 @@ class ETCustomHybridCache(HybridCache):
             batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
         )
 
-        assert device is None or device in [
-            "cpu",
-            "cuda",
-            "mps",
-        ], "Device must be None or one of 'cpu', 'cuda' or 'mps'."
+        # Validate device - handle both string and torch.device types
+        if device is not None:
+            device_type = (
+                device if isinstance(device, str) else (device.type if isinstance(device, torch.device) else None)
+            )
+            # Extract just the device type (e.g., "cuda:0" -> "cuda")
+            if isinstance(device_type, str):
+                device_type = device_type.split(":")[0]
+            assert device_type in [
+                "cpu",
+                "cuda",
+                "mps",
+            ], f"Device must be None or one of 'cpu', 'cuda', 'mps' (with optional index like 'cuda:0'), got {device}"
 
         self.cache_position = None
         # Create a list of cache instances, one per layer.
