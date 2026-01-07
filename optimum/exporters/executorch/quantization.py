@@ -16,8 +16,6 @@ import logging
 from typing import Optional
 
 import torch
-from packaging.version import parse
-from torch import __version__ as torch_version
 
 
 def quantize_model_(
@@ -31,7 +29,6 @@ def quantize_model_(
     if not (qlinear_config or qembedding_config):
         return
 
-    from torchao.experimental.quant_api import UIntxWeightOnlyConfig
     from torchao.quantization.granularity import PerAxis, PerGroup
     from torchao.quantization.quant_api import (
         Int4WeightOnlyConfig,
@@ -43,9 +40,9 @@ def quantize_model_(
 
     if qembedding_config:
         if qlinear_config == "8w":
-            assert qembedding_group_size == 0, (
-                "8-bit embedding quantization only supports per-token at the moment, please use qembedding_group_size = 0."
-            )
+            assert (
+                qembedding_group_size == 0
+            ), "8-bit embedding quantization only supports per-token at the moment, please use qembedding_group_size = 0."
         if qembedding_group_size == 0:
             embedding_weight_granularity = PerAxis(0)
         else:
@@ -105,6 +102,8 @@ def quantize_model_(
             if quant_config_key == "fpa4w":
                 # Need to import to load the ops
                 import torchao.experimental.ops.mps  # noqa: F401
+                from torchao.experimental.quant_api import UIntxWeightOnlyConfig
+
                 return UIntxWeightOnlyConfig(
                     group_size=qlinear_group_size,
                     bitwidth=4,
@@ -128,9 +127,9 @@ def quantize_model_(
                 )
                 fallback_linear_config_key = None
         else:
-            assert qlinear_group_size % 2 == 0, (
-                f"Linear quantization group size must be a multiple of 2, got {qlinear_group_size}."
-            )
+            assert (
+                qlinear_group_size % 2 == 0
+            ), f"Linear quantization group size must be a multiple of 2, got {qlinear_group_size}."
             linear_weight_granularity = PerGroup(qlinear_group_size)
 
         logging.info("Quantizing linear layers.")
@@ -172,6 +171,4 @@ def quantize_model_(
                 filter_fn=per_token_filter,
             )
 
-    # TODO: remove after ExecuTorch dep on Torch >= 2.10.0.
-    if parse(torch_version) < parse("2.10.0.dev20251104"):
-        unwrap_tensor_subclass(eager_model)
+    unwrap_tensor_subclass(eager_model)

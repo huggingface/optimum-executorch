@@ -222,9 +222,9 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
 
     return MultiModalTextToTextExportableModule(
         model=eager_model,
-        modality="vision"
-        if modality == "image"
-        else modality,  # TODO: hack since downstream uses "vision" atm. Change this to match Transformers.
+        modality=(
+            "vision" if modality == "image" else modality
+        ),  # TODO: hack since downstream uses "vision" atm. Change this to match Transformers.
         encoder_model=eager_encoder,
         max_seq_len=max_length,
         processor_config=processor_config,
