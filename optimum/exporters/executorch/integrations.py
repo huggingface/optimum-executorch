@@ -538,6 +538,69 @@ class CausalLMExportableModule(torch.nn.Module):
         return {"model": exported_program}
 
 
+class ObjectDetectionExportableModule(torch.nn.Module):
+    """
+    A wrapper module designed to make a object detection model exportable with `torch.export`.
+    This module ensures that the exported model is compatible with ExecuTorch.
+    """
+
+    def __init__(self, model, image_size, num_channels=None):
+        super().__init__()
+        self.model = model
+        self.config = model.config
+        self.image_size = image_size
+        self.metadata = save_config_to_constant_methods(model.config, getattr(model, "generation_config", None))
+
+        num_channels_from_config = self._get_num_channels_from_config()
+        if num_channels is not None:
+            self.num_channels = num_channels
+        elif num_channels_from_config is not None:
+            self.num_channels = num_channels_from_config
+        else:
+            # if nothing else, try 3 (RGB)
+            self.num_channels = 3
+
+    def _get_num_channels_from_config(self) -> int | None:
+        """try various config options to get num_channels, and return None if not found."""
+        # unfortunately none of the HF object detection models have consistency in how num_channels is defined
+        if hasattr(self.config, "num_channels"):
+            return self.config.num_channels
+        if hasattr(self.config, "backbone_config") and hasattr(self.config.backbone_config, "num_channels"):
+            return self.config.backbone_config.num_channels
+        if hasattr(self.config, "backbone_config") and hasattr(self.config.backbone_config, "in_chans"):
+            return self.config.backbone_config.in_chans
+        if hasattr(self.config, "backbone") and hasattr(self.config.backbone, "num_channels"):
+            return self.config.backbone.num_channels
+        if hasattr(self.config, "backbone") and hasattr(self.config.backbone, "in_chans"):
+            return self.config.backbone.in_chans
+        if hasattr(self.config, "in_chans"):
+            return self.config.in_chans
+        return None
+
+    def forward(self, pixel_values):
+        return self.model(pixel_values=pixel_values)
+
+    def export(self, pixel_values=None) -> Dict[str, ExportedProgram]:
+        if pixel_values is None:
+            batch_size = 1
+            num_channels = self.num_channels
+            height = self.image_size
+            width = self.image_size
+            pixel_values = torch.rand(
+                batch_size, num_channels, height, width, dtype=self.model.dtype, device=self.model.device
+            )
+
+        with torch.no_grad():
+            return {
+                "model": torch.export.export(
+                    self.model,
+                    args=(),
+                    kwargs={"pixel_values": pixel_values},
+                    strict=False,
+                )
+            }
+
+
 class VisionEncoderExportableModule(torch.nn.Module):
     """
     A wrapper module designed to make a vision encoder-only model exportable with `torch.export`.

@@ -20,7 +20,7 @@ import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from huggingface_hub import hf_hub_download, is_offline_mode
@@ -31,6 +31,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForImageClassification,
     AutoModelForMaskedLM,
+    AutoModelForObjectDetection,
     AutoModelForSeq2SeqLM,
     AutoModelForSpeechSeq2Seq,
     PreTrainedTokenizer,
@@ -924,6 +925,54 @@ class ExecuTorchModelForMaskedLM(ExecuTorchModelBase):
         self.stats.on_inference_end()
         self.stats.print_report()
         return logits
+
+    def generate(self):
+        raise NotImplementedError
+
+
+class ExecuTorchModelForObjectDetection(ExecuTorchModelBase):
+    """
+    ExecuTorch model with an object detection head for inference using the ExecuTorch Runtime.
+
+    This class provides an interface for loading, running, and generating outputs from a vision transformer model
+    optimized for ExecuTorch Runtime. It includes utilities for exporting and loading pre-trained models
+    compatible with ExecuTorch runtime.
+
+    Attributes:
+        auto_model_class (`Type`):
+            Associated Transformers class, `AutoModelForObjectDetection`.
+        model (`ExecuTorchModule`):
+            The loaded ExecuTorch model.
+    """
+
+    auto_model_class = AutoModelForObjectDetection
+
+    def __init__(
+        self,
+        models: Dict[str, "ExecuTorchModule"],
+        config: "PretrainedConfig",
+    ):
+        super().__init__(models, config)
+        if not hasattr(self, "model"):
+            raise AttributeError("Expected attribute 'model' not found in the instance.")
+        metadata = self.model.method_names()
+        logging.debug(f"Load all static methods: {metadata}")
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass of the model.
+
+        Args:
+            pixel_values (`torch.Tensor`): Tensor representing an image input to the model.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Logits and predicted bounding boxes from the model.
+        """
+        outputs = self.model.forward((pixel_values,))
+        return outputs[0], outputs[1]  # logits, pred_boxes
 
     def generate(self):
         raise NotImplementedError
