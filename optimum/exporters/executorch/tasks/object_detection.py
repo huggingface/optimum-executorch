@@ -21,7 +21,7 @@ from ..task_registry import register_task
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
 # This will streamline using inferred task names and make exporting models to Hugging Face pipelines easier.
 @register_task("object-detection")
-def load_image_classification_model(model_name_or_path: str, **kwargs) -> ObjectDetectionExportableModule:
+def load_object_detection_model(model_name_or_path: str, **kwargs) -> ObjectDetectionExportableModule:
     """
     Loads a vision model for object detection and registers it under the task
     'object-detection' using Hugging Face's `AutoModelForImageClassification`.
