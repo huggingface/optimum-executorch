@@ -63,6 +63,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         )
         self.assertIsInstance(et_model, ExecuTorchModelForObjectDetection)
         self.assertIsInstance(et_model.model, ExecuTorchModule)
+        self.assertIsInstance(et_model.id2label, dict)
+        self.assertEqual(et_model.image_size, image_size)
+        self.assertEqual(et_model.num_channels, num_channels)
 
         eager_model = AutoModelForObjectDetection.from_pretrained(model_id).eval().to("cpu")
         with torch.no_grad():

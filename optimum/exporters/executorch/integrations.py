@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import logging
 from typing import Dict
 
@@ -549,8 +548,17 @@ class ObjectDetectionExportableModule(torch.nn.Module):
         self.model = model
         self.config = model.config
         self.image_size = image_size
-        self.metadata = save_config_to_constant_methods(model.config, getattr(model, "generation_config", None))
 
+        # Convert id2label dict into two lists to store properly in pte
+        id2label = getattr(model.config, "id2label", None)
+        if id2label:
+            label_ids = list(id2label.keys())
+            label_names = list(id2label.values())
+        else:
+            label_ids = []
+            label_names = []
+
+        # resolve num_channels
         num_channels_from_config = self._get_num_channels_from_config()
         if num_channels is not None:
             self.num_channels = num_channels
@@ -559,6 +567,14 @@ class ObjectDetectionExportableModule(torch.nn.Module):
         else:
             # if nothing else, try 3 (RGB)
             self.num_channels = 3
+        self.metadata = save_config_to_constant_methods(
+            model.config,
+            getattr(model, "generation_config", None),
+            get_label_ids=label_ids,
+            get_label_names=label_names,
+            image_size=self.image_size,
+            num_channels=self.num_channels,
+        )
 
     def _get_num_channels_from_config(self) -> int | None:
         """try various config options to get num_channels, and return None if not found."""

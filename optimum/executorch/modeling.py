@@ -956,6 +956,17 @@ class ExecuTorchModelForObjectDetection(ExecuTorchModelBase):
         if not hasattr(self, "model"):
             raise AttributeError("Expected attribute 'model' not found in the instance.")
         metadata = self.model.method_names()
+
+        # Reconstruct id2label/label2id dicts from lists
+        if "get_label_ids" in metadata and "get_label_names" in metadata:
+            label_ids = self.model.run_method("get_label_ids")
+            label_names = self.model.run_method("get_label_names")
+            self.id2label = dict(zip(label_ids, label_names))
+            self.label2id = {v: k for k, v in self.id2label.items()}
+        if "image_size" in metadata:
+            self.image_size = self.model.run_method("image_size")[0]
+        if "num_channels" in metadata:
+            self.num_channels = self.model.run_method("num_channels")[0]
         logging.debug(f"Load all static methods: {metadata}")
 
     def forward(
