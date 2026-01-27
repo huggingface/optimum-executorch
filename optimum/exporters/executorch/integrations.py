@@ -763,6 +763,15 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         return logits
 
 
+class ArgmaxExportableModule(torch.nn.Module):
+    def __init__(self, model: torch.nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, logits: torch.FloatTensor):
+        return torch.argmax(logits, dim=-1)
+
+
 class Seq2SeqLMExportableModule(torch.nn.Module):
     def __init__(
         self,
@@ -858,6 +867,17 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         return exported_decoder
 
+    def _export_sampler(self, logits):
+        sampler = ArgmaxExportableModule(self.model).to(self.model.device).eval()
+        with torch.no_grad():
+            exported_sampler = torch.export.export(
+                sampler,
+                (logits,),
+                dynamic_shapes=None,
+                strict=True,
+            )
+        return exported_sampler
+
     def export(
         self,
         encoder_input_ids=None,
@@ -899,9 +919,14 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             example_cache_position,
         )
 
+        self.exported_sampler = self._export_sampler(
+            torch.randn((1, 1, self.config.vocab_size), dtype=self.model.dtype, device=self.model.device)
+        )
+
         return {
             "encoder": self.exported_encoder,  # Not called "text_encoder" because the encoder could be non-text too, e.g. Whisper.
             "text_decoder": self.exported_decoder,
+            "sampler": self.exported_sampler,
         }
 
     def generate(self, prompt_token_ids, max_new_tokens):
