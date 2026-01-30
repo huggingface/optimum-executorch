@@ -42,5 +42,5 @@ def load_object_detection_model(model_name_or_path: str, **kwargs) -> ObjectDete
     if image_size is None:
         raise ValueError("image_size is a required argument for object-detection task")
     num_channels = kwargs.pop("num_channels", None)
-    eager_model = AutoModelForObjectDetection.from_pretrained(model_name_or_path, **kwargs).to("cpu").eval()
+    eager_model = AutoModelForObjectDetection.from_pretrained(model_name_or_path, **kwargs).eval()
     return ObjectDetectionExportableModule(eager_model, image_size, num_channels)

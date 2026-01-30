@@ -545,6 +545,10 @@ class ObjectDetectionExportableModule(torch.nn.Module):
     """
 
     def __init__(self, model, image_size, num_channels=None):
+        """
+        Takes in the model, image_size, and num_channels. note that specifying num_channels
+        will override the value in the model config if it exists
+        """
         super().__init__()
         self.model = model
         self.config = model.config
