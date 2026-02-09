@@ -726,10 +726,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         self.cache = EncoderDecoderCache(self.self_attention_cache, self.cross_attention_cache)
         # Use custom cross attention for Whisper.
-        # Only use WhisperCrossAttention if torch.ops.executorch.alias is available and device is CUDA.
+        # Enable WhisperCrossAttention for CPU/XNNPACK (not just CUDA).
         _has_et_alias = hasattr(torch.ops, "executorch") and hasattr(torch.ops.executorch, "alias")
-        _is_cuda = model.device.type == "cuda"
-        if isinstance(model, WhisperForConditionalGeneration) and _has_et_alias and _is_cuda:
+        if isinstance(model, WhisperForConditionalGeneration) and _has_et_alias:
             for layer in self.decoder.layers:
                 cross_attn = WhisperCrossAttention(
                     embed_dim=layer.encoder_attn.embed_dim,

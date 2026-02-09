@@ -120,7 +120,7 @@ class WhisperCrossAttention(nn.Module):
             cached_values: Tensor,
             key_value_states: Tensor,
         ) -> tuple[Tensor, Tensor]:
-            # Just reuse cached K/V
+            # Just reuse cached K/V via custom op to avoid torch.cond aliasing trace errors
             return torch.ops.executorch.alias(cached_keys, cached_values)
 
         def recompute_kv(
@@ -129,8 +129,16 @@ class WhisperCrossAttention(nn.Module):
             key_value_states: Tensor,
         ) -> tuple[Tensor, Tensor]:
             # Compute fresh K/V (export-friendly: no cache mutation in here)
-            key_states = self.k_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
-            value_states = self.v_proj(key_value_states).view(bsz, -1, self.num_heads, self.head_dim)
+            # Use decomposed linear (matmul + add) instead of nn.Linear to avoid
+            # aten.linear ops which XNNPACK partitioner can't delegate inside torch.cond
+            # k_proj: no bias
+            key_states = torch.matmul(key_value_states, self.k_proj.weight.t())
+            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim)
+            # v_proj: has bias
+            value_states = torch.matmul(key_value_states, self.v_proj.weight.t())
+            if self.v_proj.bias is not None:
+                value_states = value_states + self.v_proj.bias
+            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
             k = torch.ops.executorch.update_cross_attn_cache(key_states, cached_keys)
