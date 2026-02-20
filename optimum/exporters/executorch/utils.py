@@ -174,11 +174,11 @@ def process_conversation_inputs(
 
         # Download and process audio
         try:
-            resp = requests.get(audio_path)
+            resp = requests.get(audio_path, timeout=30)
             resp.raise_for_status()
             buf = io.BytesIO(resp.content)
-        except requests.exceptions.RequestException:
-            print("Could not download input audio file.")
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"Could not download input audio file from '{audio_path}': {e}") from e
 
         wav, sampling_rate = torchaudio.load(buf, normalize=True)
         if wav.shape[0] != 1:
