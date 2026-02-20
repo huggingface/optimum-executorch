@@ -34,7 +34,11 @@ from transformers.integrations.executorch import (
 from transformers.masking_utils import AttentionMaskInterface
 from transformers.modeling_utils import AttentionInterface
 
-from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_kv_cache, sdpa_mask_passthrough
+from optimum.executorch.attentions.custom_sdpa import (
+    get_custom_sdpa_for_attention_sink,
+    get_custom_sdpa_for_ring_kv_cache,
+    sdpa_mask_passthrough,
+)
 from optimum.executorch.attentions.whisper_attention import WhisperCrossAttention
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
@@ -420,6 +424,7 @@ class CausalLMExportableModule(torch.nn.Module):
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
         self.disable_dynamic_shapes = disable_dynamic_shapes
+        self.attention_sink = attention_sink
         self.metadata = save_config_to_constant_methods(
             model.config,
             generation_config=getattr(model, "generation_config", None),
@@ -472,16 +477,17 @@ class CausalLMExportableModule(torch.nn.Module):
         from transformers.modeling_utils import AttentionInterface
 
         if self.use_custom_sdpa:
-            if self.use_custom_kv_cache:
+            if self.attention_sink is not None:
+                _custom_sdpa = get_custom_sdpa_for_attention_sink(exportable_module)
+                AttentionInterface.register("custom_sdpa_attention_sink", _custom_sdpa)
+                AttentionMaskInterface.register("custom_sdpa_attention_sink", sdpa_mask_passthrough)
+                exportable_module.model.model.config._attn_implementation = "custom_sdpa_attention_sink"
+            elif self.use_custom_kv_cache:
                 _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
                 AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
                 AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_passthrough)
-                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
             else:
-                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
     def export(
@@ -507,6 +513,7 @@ class CausalLMExportableModule(torch.nn.Module):
                 self.model.config,
                 self.model.generation_config,
                 self.model.dtype,
+                attention_sink=self.attention_sink,
             )
 
         with torch.no_grad():
