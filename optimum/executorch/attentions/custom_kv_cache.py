@@ -23,6 +23,56 @@ try:
 except ImportError:
     raise ImportError("ExecutorTorch is not installed. Please install it to use Custom Cache.")
 
+try:
+    from executorch.examples.models.llama.source_transformation.attention_sink import (
+        CachePositionsManagerWithSink,
+        _create_causal_mask_for_attention_sink,
+    )
+except ImportError:
+    CachePositionsManagerWithSink = None
+    _create_causal_mask_for_attention_sink = None
+
+
+class CustomRingKVCacheWithSink(CustomKVCache):
+    """Ring buffer KV cache with attention sink — preserves first sink_size tokens."""
+
+    def __init__(
+        self,
+        max_batch_size: int,
+        max_context_length: int,
+        n_heads: int,
+        head_dim: int,
+        sink_size: int,
+        dtype=torch.float32,
+    ):
+        assert CachePositionsManagerWithSink is not None, (
+            "CachePositionsManagerWithSink not available. "
+            "Install ExecuTorch with attention sink support."
+        )
+        super().__init__(max_batch_size, max_context_length, n_heads, head_dim, dtype)
+        self.sink_size = sink_size
+        self.window_size = max_context_length - sink_size
+        self.is_ring_buffer = True
+        self.cache_positions_manager = CachePositionsManagerWithSink(
+            max_context_length, sink_size
+        )
+
+    def update(self, input_pos, k_val, v_val):
+        seq_len = k_val.transpose(1, 2).size(1)
+        indices = self.cache_positions_manager.calculate_positions_and_update_indices(
+            input_pos, seq_len
+        ).unsqueeze(0)
+        return super().update(input_pos, k_val, v_val, indices)
+
+    def create_causal_mask_for_ring_buffer(self, start_pos, seq_len):
+        return _create_causal_mask_for_attention_sink(
+            self.cache_positions_manager.cache_positions,
+            self.window_size,
+            self.sink_size,
+            start_pos,
+            seq_len,
+        )
+
 
 class ETCustomStaticCache(StaticCache):
     """
@@ -333,33 +383,141 @@ class ETCustomHybridCache(HybridCache):
         return self.kv_cache[layer_idx]
 
 
-def replace_with_et_custom_kv_cache(module, config, generation_config, cache_dtype):
+class ETCustomAttentionSinkCache(StaticCache):
     """
-    Replace all KV caches in the module with ETCustomStaticCache or ETCustomHybridCache.
-    This modifies the model in place.
+    KV Cache with attention sink for ExecuTorch. All layers use ring buffer
+    with sink token preservation.
+
+    Sink tokens (first sink_size positions) are never evicted from cache.
+    Remaining positions use a ring buffer for sliding window.
+    """
+
+    def __init__(
+        self,
+        config,
+        max_batch_size: int,
+        max_cache_len: Optional[int] = None,
+        sink_size: int = 4,
+        device: Union[torch.device, str, None] = None,
+        dtype: torch.dtype = torch.float32,
+    ):
+        super().__init__(
+            config=config,
+            max_batch_size=max_batch_size,
+            max_cache_len=max_cache_len,
+            device=device,
+            dtype=dtype,
+        )
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        num_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
+        self.early_initialization(
+            batch_size=max_batch_size, num_heads=num_heads, head_dim=head_dim, dtype=dtype, device=device
+        )
+        self.sink_size = sink_size
+        self.cache_position = None
+
+        self.kv_cache = torch.nn.ModuleList()
+        for layer in self.layers:
+            layer_cache = CustomRingKVCacheWithSink(
+                max_batch_size=layer.max_batch_size,
+                max_context_length=layer.max_cache_len,
+                n_heads=layer.num_heads,
+                head_dim=layer.head_dim,
+                sink_size=sink_size,
+                dtype=dtype,
+            )
+            self.kv_cache.append(layer_cache)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        assert cache_kwargs is not None
+        cache_position = cache_kwargs.get("cache_position")
+        assert cache_position is not None
+        assert isinstance(cache_position, torch.Tensor)
+        self.cache_position = cache_position
+
+        layer_cache = self.kv_cache[layer_idx]
+        k_out, v_out = layer_cache.update(
+            input_pos=cache_position,
+            k_val=key_states,
+            v_val=value_states,
+        )
+        return k_out, v_out
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        if layer_idx is None:
+            layer_idx = 0
+        return self.kv_cache[layer_idx].cache_positions_manager.cache_positions.max().item() + 1
+
+    def get_layer_cache(self, layer_idx: int):
+        return self.kv_cache[layer_idx]
+
+
+def replace_with_et_custom_kv_cache(module, config, generation_config, cache_dtype, attention_sink=None):
+    """
+    Replace all KV caches in the module with ETCustomStaticCache, ETCustomHybridCache,
+    or ETCustomAttentionSinkCache.
 
     Args:
         module: The module to modify
         config: The model configuration
+        attention_sink: Optional tuple (sink_size, window_size) for attention sink mode
 
     Returns:
         The modified module
     """
-    # Recursively replace KV caches
-    return _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dtype)
+    return _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dtype, attention_sink)
 
 
-def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dtype):
+def _replace_with_et_custom_kv_cache(module, config, generation_config, cache_dtype, attention_sink=None):
     """
     Helper function to recursively replace KV caches in the module.
 
     Args:
         module: The module to modify
         config: The model configuration
+        attention_sink: Optional tuple (sink_size, window_size) for attention sink mode
 
     Returns:
         The modified module
     """
+    # Attention sink mode: replace static_cache with ETCustomAttentionSinkCache
+    if attention_sink is not None:
+        sink_size, window_size = attention_sink
+        cache_size = sink_size + window_size
+
+        if hasattr(module, "static_cache"):
+            sink_cache = ETCustomAttentionSinkCache(
+                config=config,
+                max_batch_size=generation_config.cache_config.get("batch_size"),
+                max_cache_len=cache_size,
+                sink_size=sink_size,
+                device=generation_config.cache_config.get("device"),
+                dtype=cache_dtype,
+            )
+            if getattr(module, "replace_cache", None) is not None:
+                module.replace_cache(sink_cache)
+            else:
+                module.static_cache = sink_cache
+                for i in range(len(sink_cache.kv_cache)):
+                    setattr(module, f"key_cache_{i}", sink_cache.kv_cache[i].k_cache)
+                    setattr(module, f"value_cache_{i}", sink_cache.kv_cache[i].v_cache)
+                    module.register_buffer(
+                        f"cache_positions_{i}",
+                        sink_cache.kv_cache[i].cache_positions_manager.cache_positions,
+                        persistent=False,
+                    )
+        else:
+            raise ValueError(
+                "Attention sink requires 'static_cache' attribute on module"
+            )
+        return module
+
     # Check if module has static_cache (TorchExportableModuleWithStaticCache)
     if hasattr(module, "static_cache"):
         assert isinstance(module.static_cache, StaticCache), f"Expected StaticCache, got {type(module.static_cache)}"

@@ -412,6 +412,7 @@ class CausalLMExportableModule(torch.nn.Module):
         use_custom_kv_cache=False,
         use_custom_sdpa=False,
         disable_dynamic_shapes=False,
+        attention_sink=None,
     ):
         super().__init__()
         self.model = model
