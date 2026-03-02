@@ -261,17 +261,13 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
         return example_inputs_embeds, example_cache_position, dynamic_shapes
 
     def _register_custom_attention(self, exportable_module: torch.nn.Module):
-        _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
         if self.use_custom_sdpa:
             if self.use_custom_kv_cache:
+                _custom_sdpa_for_ring_kv_cache = get_custom_sdpa_for_ring_kv_cache(exportable_module)
                 AttentionInterface.register("custom_sdpa_ring_kv_cache", _custom_sdpa_for_ring_kv_cache)
                 AttentionMaskInterface.register("custom_sdpa_ring_kv_cache", sdpa_mask_passthrough)
-                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa_ring_kv_cache"
             else:
-                # Manually set the attention implementation to custom_sdpa_ring_kv_cache
-                # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
     def export(
@@ -327,26 +323,23 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
-            # Apply RemoveTransposes pass to remove
-            # any back-to-back transpose ops that are not needed
-            # e.g. output of update_cache is transposed and
-            # input to custom_sdpa is transposed.
-            from executorch.extension.llm.export.export_passes import (
-                RemoveRedundantTransposes,
-            )
+            # Remove back-to-back transpose ops introduced by custom SDPA + custom KV cache.
+            if self.use_custom_sdpa:
+                from executorch.extension.llm.export.export_passes import (
+                    RemoveRedundantTransposes,
+                )
 
-            mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
-            exported_program = torch.export.export(
-                mutated_gm,
-                args=(),
-                # For the ET runner, it's important to have cache position as the 2nd arg.
-                kwargs={
-                    "inputs_embeds": inputs_embeds,
-                    "cache_position": cache_position,
-                },
-                dynamic_shapes=dynamic_shapes,
-                strict=True,
-            )
+                mutated_gm = RemoveRedundantTransposes()(exported_program.module())[0]
+                exported_program = torch.export.export(
+                    mutated_gm,
+                    args=(),
+                    kwargs={
+                        "inputs_embeds": inputs_embeds,
+                        "cache_position": cache_position,
+                    },
+                    dynamic_shapes=dynamic_shapes,
+                    strict=True,
+                )
             exported_programs["text_decoder"] = exported_program
 
             # 2. Export token embeddings
