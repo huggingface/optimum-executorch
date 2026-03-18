@@ -36,6 +36,16 @@ def parse_args_executorch(parser):
         help="Model ID on huggingface.co or path on disk to load model from.",
     )
     required_group.add_argument(
+        "--gguf_file",
+        type=str,
+        required=False,
+        help="GGUF filename (in a Hub repo) or local path to a GGUF file. "
+        "When set, the model weights and config are loaded from this GGUF file "
+        "instead of safetensors/bin checkpoints. Note: GGUF weights are "
+        "dequantized to float32 before export, which increases peak memory. "
+        "Use --dtype float16 to halve memory usage. Requires: pip install gguf",
+    )
+    required_group.add_argument(
         "-o",
         "--output_dir",
         type=Path,
@@ -271,6 +281,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["device"] = self.args.device
         if hasattr(self.args, "image_size") and self.args.image_size:
             kwargs["image_size"] = self.args.image_size
+        if hasattr(self.args, "gguf_file") and self.args.gguf_file:
+            kwargs["gguf_file"] = self.args.gguf_file
 
         main_export(
             model_name_or_path=self.args.model,

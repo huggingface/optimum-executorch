@@ -61,7 +61,13 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
     max_seq_len = kwargs.get("max_seq_len", None)
     max_length = max_seq_len if max_seq_len is not None else kwargs.get("max_length", 2048)
-    config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
+    gguf_file = kwargs.get("gguf_file", None)
+    if gguf_file:
+        logging.warning(
+            "GGUF weights are dequantized to float32 before export, which increases "
+            "peak memory. Use --dtype float16 to halve memory usage."
+        )
+    config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path, gguf_file=gguf_file)
 
     if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
         # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
@@ -81,6 +87,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         cache_implementation,
         batch_size,
         max_length,
+        gguf_file=None,
     ):
         eager_model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
@@ -88,6 +95,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
             dtype=dtype,
             config=config,
             attn_implementation=attn_implementation,
+            gguf_file=gguf_file,
             generation_config=GenerationConfig(
                 use_cache=True,
                 cache_implementation=cache_implementation,
@@ -110,6 +118,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
             cache_implementation,
             batch_size,
             max_length,
+            gguf_file,
         )
     except ValueError as e:
         if "torch.nn.functional.scaled_dot_product_attention" in str(e):
@@ -124,6 +133,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
                 cache_implementation,
                 batch_size,
                 max_length,
+                gguf_file,
             )
         else:
             raise e
