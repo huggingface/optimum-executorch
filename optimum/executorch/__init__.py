@@ -25,6 +25,7 @@ _import_structure = {
         "ExecuTorchModelForSeq2SeqLM",
         "ExecuTorchModelForSpeechSeq2Seq",
         "ExecuTorchModelForMultiModalToText",
+        "ExecuTorchModelForObjectDetection",
     ],
 }
 
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
         ExecuTorchModelForImageClassification,
         ExecuTorchModelForMaskedLM,
         ExecuTorchModelForMultiModalToText,
+        ExecuTorchModelForObjectDetection,
         ExecuTorchModelForSeq2SeqLM,
         ExecuTorchModelForSpeechSeq2Seq,
     )

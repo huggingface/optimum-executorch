@@ -50,7 +50,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         CausalLMExportableModule:
             An instance of `CausalLMExportableModule` for exporting and lowering to ExecuTorch.
     """
-    device = "cpu"
+    device = kwargs.get("device", "cpu")
     batch_size = 1
     dtype = kwargs.get("dtype", "float32")
     disable_dynamic_shapes = kwargs.get("disable_dynamic_shapes", False)

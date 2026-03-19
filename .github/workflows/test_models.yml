@@ -60,9 +60,8 @@ jobs:
             python install_dev.py
           else
             # Use CPU-only torch to avoid CUDA dependencies (saves ~5GB)
-            pip install --no-cache-dir '.[dev]' \
+            pip install --no-cache-dir '.[dev]' executorch==${{ matrix.executorch-version }} \
               --extra-index-url https://download.pytorch.org/whl/cpu
-            pip install --no-cache-dir executorch==${{ matrix.executorch-version }}
           fi
           pip list
       - name: Run tests

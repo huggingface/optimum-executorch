@@ -189,6 +189,12 @@ def parse_args_executorch(parser):
         required=False,
         help="Device to run the model on. Options: cpu, cuda, mps. Default: cpu.",
     )
+    required_group.add_argument(
+        "--image_size",
+        type=int,
+        required=False,
+        help="Image size for object detection models. Required for object-detection task.",
+    )
 
 
 class ExecuTorchExportCommand(BaseOptimumCLICommand):
@@ -263,6 +269,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["dtype"] = self.args.dtype
         if hasattr(self.args, "device") and self.args.device:
             kwargs["device"] = self.args.device
+        if hasattr(self.args, "image_size") and self.args.image_size:
+            kwargs["image_size"] = self.args.image_size
 
         main_export(
             model_name_or_path=self.args.model,
