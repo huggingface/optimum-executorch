@@ -62,7 +62,8 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     attn_implementation = kwargs.get("attn_implementation", "custom_sdpa" if use_custom_sdpa else "sdpa")
     cache_implementation = kwargs.get("cache_implementation", "static")
     use_custom_sdpa = use_custom_sdpa or attn_implementation == "custom_sdpa"
-    max_length = kwargs.get("max_length", 2048)
+    max_seq_len = kwargs.get("max_seq_len", None)
+    max_length = max_seq_len if max_seq_len is not None else kwargs.get("max_length", 2048)
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path)
 
     # Load preprocessor_config.json if it exists
