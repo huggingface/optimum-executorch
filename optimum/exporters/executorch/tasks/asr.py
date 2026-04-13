@@ -65,11 +65,13 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
     qlinear_encoder_packing_format = kwargs.get("qlinear_encoder_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
+    qparams_algorithm = kwargs.get("qparams_algorithm", None)
 
     # Quantize decoder linear weights.
     quantize_decoder_kwargs = {
         "eager_model": getattr(full_model.model, "decoder"),
         "qlinear_config": qlinear_config,
+        "qparams_algorithm": qparams_algorithm,
     }
     if qlinear_group_size is not None:
         quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
@@ -81,6 +83,7 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
     quantize_encoder_kwargs = {
         "eager_model": getattr(full_model.model, "encoder"),
         "qlinear_config": qlinear_encoder_config,
+        "qparams_algorithm": qparams_algorithm,
     }
     if qlinear_encoder_group_size is not None:
         quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
@@ -92,6 +95,7 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
     quantize_decoder_embedding_kwargs = {
         "eager_model": full_model,
         "qembedding_config": qembedding_config,
+        "qparams_algorithm": qparams_algorithm,
     }
     if qembedding_group_size is not None:
         quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size

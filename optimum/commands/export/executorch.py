@@ -180,6 +180,13 @@ def parse_args_executorch(parser):
         help="Group size for encoder embedding quantization, for model architectures with an encoder.",
     )
     required_group.add_argument(
+        "--qparams_algorithm",
+        type=str,
+        choices=["affine", "hqq_scale_only"],
+        required=False,
+        help="Algorithm for choosing quantization parameters. Default: hqq_scale_only.",
+    )
+    required_group.add_argument(
         "--max_seq_len",
         type=int,
         required=False,
@@ -273,6 +280,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qembedding_encoder"] = self.args.qembedding_encoder
         if self.args.qembedding_encoder_group_size:
             kwargs["qembedding_encoder_group_size"] = self.args.qembedding_encoder_group_size
+        if self.args.qparams_algorithm:
+            kwargs["qparams_algorithm"] = self.args.qparams_algorithm
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
         if hasattr(self.args, "dtype") and self.args.dtype:
