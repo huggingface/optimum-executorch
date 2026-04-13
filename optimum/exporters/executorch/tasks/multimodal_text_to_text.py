@@ -152,6 +152,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     qembedding_group_size = kwargs.get("qembedding_group_size", None)
     qembedding_encoder_config = kwargs.get("qembedding_encoder", None)
     qembedding_encoder_group_size = kwargs.get("qembedding_encoder_group_size", None)
+    quantize_dtype = kwargs.get("quantize_dtype", None)
 
     # Quantize decoder linear weights.
     if qlinear_config:
@@ -159,6 +160,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     quantize_decoder_kwargs = {
         "eager_model": eager_model.get_decoder(),
         "qlinear_config": qlinear_config,
+        "quantize_dtype": quantize_dtype,
     }
     if qlinear_group_size is not None:
         quantize_decoder_kwargs["qlinear_group_size"] = qlinear_group_size
@@ -182,6 +184,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         quantize_lm_head_kwargs = {
             "eager_model": lm_head,
             "qlinear_config": qlinear_config,
+            "quantize_dtype": quantize_dtype,
         }
         quantize_model_(**quantize_lm_head_kwargs)
 
@@ -191,6 +194,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     quantize_encoder_kwargs = {
         "eager_model": eager_encoder,
         "qlinear_config": qlinear_encoder_config,
+        "quantize_dtype": quantize_dtype,
     }
     if qlinear_encoder_group_size is not None:
         quantize_encoder_kwargs["qlinear_group_size"] = qlinear_encoder_group_size
@@ -204,6 +208,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     quantize_decoder_embedding_kwargs = {
         "eager_model": eager_model.get_decoder(),
         "qembedding_config": qembedding_config,
+        "quantize_dtype": quantize_dtype,
     }
     if qembedding_group_size is not None:
         quantize_decoder_embedding_kwargs["qembedding_group_size"] = qembedding_group_size
@@ -215,6 +220,7 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     quantize_encoder_embedding_kwargs = {
         "eager_model": eager_encoder,
         "qembedding_config": qembedding_encoder_config,
+        "quantize_dtype": quantize_dtype,
     }
     if qembedding_encoder_group_size is not None:
         quantize_encoder_embedding_kwargs["qembedding_group_size"] = qembedding_encoder_group_size
