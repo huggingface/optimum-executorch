@@ -44,6 +44,24 @@ class VisionExportableModule(torch.nn.Module):
     def __init__(self, model: torch.nn.Module):
         super().__init__()
         self.model = model
+        self._precomputed_pos = False
+
+    def _precompute_vision_positions(self, image_grid_thw: torch.Tensor):
+        """Pre-compute position-related values for M-RoPE vision encoders (e.g. Qwen3-VL).
+
+        The visual encoder uses grid_thw values in data-dependent ops (torch.linspace,
+        repeat_interleave) that torch.export cannot trace. We compute them eagerly and
+        store as buffers so they become constants in the exported graph.
+        """
+        visual = self.model.model.visual
+        with torch.no_grad():
+            self.register_buffer("_pos_embeds", visual.fast_pos_embed_interpolate(image_grid_thw))
+            self.register_buffer("_rotary_pos_emb", visual.rot_pos_emb(image_grid_thw))
+            cu = torch.repeat_interleave(
+                image_grid_thw[:, 1] * image_grid_thw[:, 2], image_grid_thw[:, 0]
+            ).cumsum(dim=0, dtype=torch.int32)
+            self.register_buffer("_cu_seqlens", torch.nn.functional.pad(cu, (1, 0), value=0))
+        self._precomputed_pos = True
 
     def prepare_export_inputs(self):
         # 1. Get export inputs
@@ -73,15 +91,40 @@ class VisionExportableModule(torch.nn.Module):
             )
         export_inputs = processed_inputs["pixel_values"].to(dtype=self.model.dtype)
 
+        if "image_grid_thw" in processed_inputs:
+            self._precompute_vision_positions(processed_inputs["image_grid_thw"])
+
         # 2. Get export dynamic shapes
         dynamic_shapes = None  # No batching for now.
 
         return export_inputs, dynamic_shapes
 
+    def _forward_with_precomputed_pos(self, input_features: torch.FloatTensor):
+        """Forward through the visual encoder using pre-computed position data."""
+        visual = self.model.model.visual
+        hidden_states = visual.patch_embed(input_features.type(visual.dtype))
+        hidden_states = hidden_states + self._pos_embeds
+
+        seq_len, _ = hidden_states.size()
+        hidden_states = hidden_states.reshape(seq_len, -1)
+        rotary = self._rotary_pos_emb.reshape(seq_len, -1)
+        emb = torch.cat((rotary, rotary), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
+        for blk in visual.blocks:
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=self._cu_seqlens,
+                position_embeddings=position_embeddings,
+            )
+        return visual.merger(hidden_states)
+
     def forward(
         self,
         input_features: torch.FloatTensor,
     ):
+        if self._precomputed_pos:
+            return self._forward_with_precomputed_pos(input_features)
         image_embeds = self.model.get_image_features(input_features)
         if isinstance(image_embeds, list):
             image_embeds = torch.stack(image_embeds)
@@ -274,6 +317,31 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
                 # This handles both regular sdpa and one for sliding window/local attention
                 exportable_module.model.model.config._attn_implementation = "custom_sdpa"
 
+    def _register_mrope_hook(self):
+        """Register a forward pre-hook on M-RoPE models (e.g. Qwen3-VL) to inject position_ids.
+
+        During text decoder export, only inputs_embeds and cache_position are provided (no
+        input_ids). M-RoPE models try to compute position_ids via get_rope_index which
+        requires input_ids and crashes. This hook injects position_ids derived from
+        cache_position so the model skips that code path entirely.
+
+        Returns the hook handle (or None if not applicable) so the caller can remove it.
+        """
+        inner_model = getattr(self.model, "model", None)
+        if inner_model is None or not hasattr(inner_model, "get_rope_index"):
+            return None
+
+        def _inject_mrope_position_ids(module, args, kwargs):
+            if kwargs.get("position_ids") is None and kwargs.get("input_ids") is None:
+                inputs_embeds = kwargs.get("inputs_embeds")
+                cache_position = kwargs.get("cache_position")
+                if inputs_embeds is not None and cache_position is not None:
+                    batch_size = inputs_embeds.shape[0]
+                    kwargs["position_ids"] = cache_position.view(1, 1, -1).expand(3, batch_size, -1)
+            return args, kwargs
+
+        return inner_model.register_forward_pre_hook(_inject_mrope_position_ids, with_kwargs=True)
+
     def export(
         self,
     ) -> Dict[str, ExportedProgram]:
@@ -321,12 +389,22 @@ class MultiModalTextToTextExportableModule(torch.nn.Module):
             # Move inputs to the same device as the model
             inputs_embeds = inputs_embeds.to(self.model.device)
             cache_position = cache_position.to(self.model.device)
+
+            # M-RoPE models (e.g. Qwen3-VL) compute position_ids via get_rope_index which
+            # requires input_ids. During text decoder export only inputs_embeds is provided,
+            # so we inject position_ids derived from cache_position to skip that code path.
+            # For text-only decode, all 3 M-RoPE dimensions equal cache_position.
+            mrope_hook = self._register_mrope_hook()
+
             exported_program = exportable_module.export(
                 inputs_embeds=inputs_embeds,
                 cache_position=cache_position,
                 dynamic_shapes=dynamic_shapes,
                 strict=True,
             )
+            if mrope_hook is not None:
+                mrope_hook.remove()
+
             # Apply RemoveTransposes pass to remove
             # any back-to-back transpose ops that are not needed
             # e.g. output of update_cache is transposed and

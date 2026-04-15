@@ -18,7 +18,7 @@ import logging
 import os.path
 
 import torchao
-from transformers import AutoConfig, AutoModelForPreTraining, GenerationConfig
+from transformers import AutoConfig, AutoModelForImageTextToText, AutoModelForPreTraining, GenerationConfig
 
 from ..integrations import MultiModalTextToTextExportableModule
 from ..quantization import quantize_model_
@@ -96,19 +96,19 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True
 
-    # Using `AutoModelForPreTraining` since it usually routes to the correct model variant and there is no
-    # auto model class that captures both audio and image.
-    # The correct model variant we are looking for is <Model>ForConditionalGeneration, since it is the top-level
-    # model and thus will always contain the necessary model components. As an example of why this is needed,
-    # if you just use Gemma3Model instead of Gemma3ForConditionalGeneration, Gemma3Model (which is the decoder part)
-    # will not contain the LM head, which is only applied in the latter.
-    eager_model = AutoModelForPreTraining.from_pretrained(
-        model_name_or_path,
+    # We want the <Model>ForConditionalGeneration variant since it's the top-level model containing all
+    # necessary components (decoder + LM head + encoder). AutoModelForPreTraining works for some models
+    # (e.g. Gemma3) but not all (e.g. Qwen3-VL), so we fall back to AutoModelForImageTextToText.
+    from_pretrained_kwargs = dict(
         device_map=device,
         dtype=dtype,
         config=config,
         attn_implementation=attn_implementation,
     )
+    try:
+        eager_model = AutoModelForPreTraining.from_pretrained(model_name_or_path, **from_pretrained_kwargs)
+    except ValueError:
+        eager_model = AutoModelForImageTextToText.from_pretrained(model_name_or_path, **from_pretrained_kwargs)
     eager_model.generation_config = GenerationConfig(
         use_cache=True,
         cache_implementation=cache_implementation,
@@ -120,15 +120,20 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
         },
     )
 
-    # Find the modality (only one modality of either image/audio is supported at the moment).
-    if len(eager_model.input_modalities) != 2:
+    # Find the primary non-text modality. We pick the first of "image" or "audio" since those
+    # are the modalities supported downstream. Models like Qwen3-VL report ("image", "video", "text")
+    # but video shares the same visual encoder as image, so "image" is the right pick.
+    non_text_modalities = [m for m in eager_model.input_modalities if m != "text"]
+    modality = None
+    for candidate in ("image", "audio"):
+        if candidate in non_text_modalities:
+            modality = candidate
+            break
+    if modality is None:
         raise AttributeError(
-            "Only one modality is supported for multimodal models at the moment. The input modalities must be either ['text', 'image'] or ['text, 'audio']"
+            f"No supported non-text modality found for {model_name_or_path}. "
+            f"Got modalities: {eager_model.input_modalities}. Expected 'image' or 'audio'."
         )
-    for input_modality in eager_model.input_modalities:
-        if input_modality == "text":
-            continue
-        modality = input_modality
     eager_encoder = eager_model.get_encoder(modality)
 
     # Need to do this since apparently when nested modules (e.g. model.language_model) access the .property
