@@ -44,11 +44,13 @@ def load_masked_lm_model(model_name_or_path: str, **kwargs) -> MaskedLMExportabl
     qlinear_config = kwargs.get("qlinear", None)
     qlinear_packing_format = kwargs.get("qlinear_packing_format", None)
     qembedding_config = kwargs.get("qembedding", None)
+    qparams_algorithm = kwargs.get("qparams_algorithm", None)
     quantize_model_(
         eager_model,
         qlinear_config=qlinear_config,
         qlinear_packing_format=qlinear_packing_format,
         qembedding_config=qembedding_config,
+        qparams_algorithm=qparams_algorithm,
     )
 
     return MaskedLMExportableModule(eager_model)
