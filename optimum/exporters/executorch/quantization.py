@@ -31,6 +31,7 @@ def quantize_model_(
     qembedding_config: Optional[str] = None,
     qembedding_group_size: Optional[int] = 0,
     qparams_algorithm: Optional[str] = None,
+    quantize_dtype: Optional[str] = None,
 ) -> torch.nn.Module:
     # qparams_algorithm is applied to IntxWeightOnlyConfig and Int8DynamicActivationIntxWeightConfig.
     # Not applied to Int4WeightOnlyConfig (different API) or UIntxWeightOnlyConfig (no such param).
@@ -38,6 +39,11 @@ def quantize_model_(
         qparams_algorithm = DEFAULT_QPARAMS_ALGORITHM
     if not (qlinear_config or qembedding_config):
         return
+
+    original_dtype = None
+    if quantize_dtype is not None:
+        original_dtype = next(eager_model.parameters()).dtype
+        eager_model.to(dtype=getattr(torch, quantize_dtype))
 
     from torchao.quantization.granularity import PerAxis, PerGroup
     from torchao.quantization.quant_api import (
@@ -187,4 +193,6 @@ def quantize_model_(
                 filter_fn=per_token_filter,
             )
 
+    if original_dtype is not None:
+        eager_model.to(dtype=original_dtype)
     unwrap_tensor_subclass(eager_model)

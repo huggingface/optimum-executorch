@@ -180,6 +180,13 @@ def parse_args_executorch(parser):
         help="Group size for encoder embedding quantization, for model architectures with an encoder.",
     )
     required_group.add_argument(
+        "--quantize_dtype",
+        type=str,
+        choices=["float32", "float16", "bfloat16"],
+        required=False,
+        help="Dtype to use during quantization. Useful when the quantization dtype should differ from --dtype, e.g. to match QAT training precision.",
+    )
+    required_group.add_argument(
         "--max_seq_len",
         type=int,
         required=False,
@@ -273,6 +280,8 @@ class ExecuTorchExportCommand(BaseOptimumCLICommand):
             kwargs["qembedding_encoder"] = self.args.qembedding_encoder
         if self.args.qembedding_encoder_group_size:
             kwargs["qembedding_encoder_group_size"] = self.args.qembedding_encoder_group_size
+        if self.args.quantize_dtype:
+            kwargs["quantize_dtype"] = self.args.quantize_dtype
         if self.args.max_seq_len:
             kwargs["max_seq_len"] = self.args.max_seq_len
         if hasattr(self.args, "dtype") and self.args.dtype:
