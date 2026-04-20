@@ -191,3 +191,56 @@ def get_custom_sdpa_for_ring_kv_cache(
             )
 
     return _custom_sdpa_for_ring_kv_cache
+
+
+def get_custom_sdpa_for_attention_sink(
+    exportable_module: torch.nn.Module,
+) -> Callable:
+    """Create SDPA function for attention sink models.
+    ALL layers use ring buffer mask with sink token preservation."""
+
+    from optimum.executorch.attentions.custom_kv_cache import (
+        CustomRingKVCacheWithSink,
+        ETCustomAttentionSinkCache,
+    )
+
+    def _custom_sdpa_for_attention_sink(
+        module: torch.nn.Module,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_mask: Union[torch.Tensor, "BlockMask"],  # noqa
+        position_ids: Optional[torch.Tensor] = None,
+        scaling: Optional[float] = None,
+        softcap: Optional[float] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, None]:
+        layer_idx = module.layer_idx
+        assert layer_idx is not None, "layer_idx is not set."
+        sink_cache = exportable_module.model.static_cache
+        assert isinstance(sink_cache, ETCustomAttentionSinkCache), (
+            f"Expected ETCustomAttentionSinkCache, got {type(sink_cache)}"
+        )
+        ring_cache = sink_cache.get_layer_cache(layer_idx)
+        assert isinstance(ring_cache, CustomRingKVCacheWithSink), (
+            f"Expected CustomRingKVCacheWithSink, got {type(ring_cache)}"
+        )
+        input_pos = sink_cache.cache_position[0].item()
+        seqlen = query.shape[2]
+        attention_mask = ring_cache.create_causal_mask_for_ring_buffer(input_pos, seqlen)
+        kwargs.update({"is_sliding": True})
+        return custom_sdpa_with_start_pos_forward(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            position_ids,
+            scaling,
+            softcap,
+            head_mask,
+            **kwargs,
+        )
+
+    return _custom_sdpa_for_attention_sink
