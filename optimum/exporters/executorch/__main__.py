@@ -119,10 +119,11 @@ def main_export(
     discover_tasks()
 
     # Load the model for specific task
-    try:
-        task_func = task_registry.get(task)
-    except KeyError as e:
-        raise RuntimeError(f"The task '{task}' isn't registered. Detailed error: {e}")
+    if task not in task_registry:
+        raise RuntimeError(
+            f"The task '{task}' isn't registered. Available tasks: {list(task_registry.keys())}"
+        )
+    task_func = task_registry[task]
 
     kwargs["cache_dir"] = cache_dir
     kwargs["trust_remote_code"] = trust_remote_code
