@@ -75,6 +75,7 @@ def export_to_executorch_with_xnnpack(
         backend_config_dict = {
             "extract_delegate_segments": True,
             "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
+            "run_reinplace_pass": True,
         }
         backend_config_dict["do_quant_fusion_and_const_prop"] = True
         logging.debug(f"\nExported program: {exported_programs}")
