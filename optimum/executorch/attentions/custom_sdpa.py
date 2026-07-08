@@ -81,11 +81,7 @@ def custom_sdpa_with_start_pos_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
-    # Convert the hell out of the inputs to fp32 and back
     input_dtype = query.dtype
-    query = query.to(torch.float32)
-    key = key.to(torch.float32)
-    value = value.to(torch.float32)
 
     # Ignore the causal flag from kwargs but use the one in module
     kwargs.pop("is_causal", None)
