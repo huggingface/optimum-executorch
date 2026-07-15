@@ -12,9 +12,8 @@ STABLE_TORCH_DEPS = [
 
 NIGHTLY_TORCH_DEPS = [
     "executorch==1.4.0.dev20260714+cpu",
-    # Torch nightly should stay aligned with the pinned nightly in:
-    # https://github.com/pytorch/executorch/blob/main/torch_pin.py#L2
-    "torch==2.14.0.dev20260714+cpu",
+    # Keep torch aligned with the published torchvision nightly dependency.
+    "torch==2.14.0.dev20260713+cpu",
     "torchvision==0.29.0.dev20260714+cpu",
     "torchaudio==2.11.0.dev20260714+cpu",
     "torchao==0.18.0.dev20260714+cpu",

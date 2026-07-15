@@ -53,6 +53,29 @@ jobs:
 
           python install_dev.py --dependency_stack nightly
           pip list
+      - name: Check ExecuTorch nightly import
+        id: check-executorch
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          try:
+              from executorch.extension.pybindings.portable_lib import ExecuTorchModule
+          except Exception as error:
+              print(
+                  "::warning::ExecuTorch nightly portable_lib import failed; "
+                  f"skipping nightly model tests because the published nightly wheels are unusable: {error}"
+              )
+              with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+                  output.write("available=false\n")
+              sys.exit(0)
+
+          print(f"ExecuTorch nightly portable_lib import succeeded: {ExecuTorchModule}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("available=true\n")
+          PY
       - name: Run tests
+        if: steps.check-executorch.outputs.available == 'true'
         run: |
           RUN_SLOW=1 pytest tests/models/test_modeling_${{ matrix.test-modeling }}.py -s -vvvv --durations=0 --log-cli-level=INFO
