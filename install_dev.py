@@ -3,12 +3,32 @@ import subprocess
 import sys
 
 
-def install_torch_nightly_deps():
-    """Install torch related dependencies from pinned nightly"""
-    EXECUTORCH_NIGHTLY_VERSION = "dev20260317"
-    TORCHAO_NIGHTLY_VERSION = "dev20260317"
-    # Torch nightly is aligned with pinned nightly in https://github.com/pytorch/executorch/blob/main/torch_pin.py#L2
-    TORCH_NIGHTLY_VERSION = "dev20260317"
+STABLE_TORCH_DEPS = [
+    "executorch==1.3.1+cpu",
+    "torch==2.12.0+cpu",
+    "torchvision==0.27.0+cpu",
+    "torchao==0.17.0+cpu",
+]
+
+NIGHTLY_TORCH_DEPS = [
+    "executorch==1.4.0.dev20260714+cpu",
+    # Torch nightly should stay aligned with the pinned nightly in:
+    # https://github.com/pytorch/executorch/blob/main/torch_pin.py#L2
+    "torch==2.14.0.dev20260714+cpu",
+    "torchvision==0.29.0.dev20260714+cpu",
+    "torchaudio==2.11.0.dev20260714+cpu",
+    "torchao==0.18.0.dev20260714+cpu",
+]
+
+
+def install_torch_deps(dependency_stack: str):
+    """Install torch related dependencies from pinned CPU wheels."""
+    torch_deps = STABLE_TORCH_DEPS if dependency_stack == "stable" else NIGHTLY_TORCH_DEPS
+    index_url = (
+        "https://download.pytorch.org/whl/cpu"
+        if dependency_stack == "stable"
+        else "https://download.pytorch.org/whl/nightly/cpu"
+    )
     subprocess.check_call(
         [
             sys.executable,
@@ -16,13 +36,9 @@ def install_torch_nightly_deps():
             "pip",
             "install",
             "--no-cache-dir",  # Prevent cached CUDA packages
-            f"executorch==1.3.0.{EXECUTORCH_NIGHTLY_VERSION}",
-            f"torch==2.12.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchvision==0.26.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchaudio==2.11.0.{TORCH_NIGHTLY_VERSION}",
-            f"torchao==0.17.0.{TORCHAO_NIGHTLY_VERSION}",
+            *torch_deps,
             "--extra-index-url",
-            "https://download.pytorch.org/whl/nightly/cpu",
+            index_url,
         ]
     )
 
@@ -38,30 +54,27 @@ def install_dep_from_source():
             "git+https://github.com/huggingface/transformers@bdc85cb85c8772d37aa29ce447860b44d7fad6ef#egg=transformers",  # v5.0.0rc0
         ]
     )
-    subprocess.check_call(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "git+https://github.com/pytorch-labs/tokenizers@3aada3fe28c945d14d5ec62254eb56ccdf10eb11#egg=pytorch-tokenizers",
-        ]
-    )
 
 
 def main():
-    """Install optimum-executorch in dev mode with nightly dependencies"""
+    """Install optimum-executorch in dev mode with pinned dependencies."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--skip_override_torch",
         action="store_true",
-        help="Skip installation of nightly executorch and torch dependencies",
+        help="Skip installation of pinned executorch and torch dependencies",
+    )
+    parser.add_argument(
+        "--dependency_stack",
+        choices=["stable", "nightly"],
+        default="stable",
+        help="Pinned dependency stack to install",
     )
     args = parser.parse_args()
 
-    # Install nightly torch dependencies FIRST to avoid pulling CUDA versions
+    # Install pinned torch dependencies FIRST to avoid pulling CUDA versions.
     if not args.skip_override_torch:
-        install_torch_nightly_deps()
+        install_torch_deps(args.dependency_stack)
 
     # Install package with dev extras
     subprocess.check_call([sys.executable, "-m", "pip", "install", ".[dev]"])
