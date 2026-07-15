@@ -55,7 +55,10 @@ def export_to_executorch(
         output_dir (`Union[str, Path]`):
             Path to the directory where the resulting ExecuTorch model will be saved.
         **kwargs:
-            Additional configuration options passed to the recipe.
+            Additional configuration options passed to the recipe. Notably `generate_etrecord`
+            (`bool`, defaults to `False`): if `True`, saves an ETRecord (`{name}_etrecord.bin`) alongside
+            the `.pte` file for use with the ExecuTorch Inspector. Currently only honored by the
+            `xnnpack` recipe; other recipes ignore the flag and no ETRecord is produced.
 
     Returns:
         `ExecuTorchProgram`:
@@ -66,6 +69,9 @@ def export_to_executorch(
         - The exported model is stored in the specified output directory with the fixed filename `model.pte`.
         - The resulting ExecuTorch program is serialized and saved to the output directory.
     """
+
+    # Extract generate_etrecord from kwargs (default: False to avoid unwanted files)
+    generate_etrecord = kwargs.get("generate_etrecord", False)
 
     # Dynamically discover and import registered recipes
     discover_recipes()
@@ -86,5 +92,26 @@ def export_to_executorch(
                 f"Saved exported program to {full_path} ({os.path.getsize(full_path) / (1024 * 1024):.2f} MB)"
             )
         prog.write_tensor_data_to_file(output_dir)
+
+        # Save ETRecord only if explicitly requested
+        if generate_etrecord:
+            try:
+                etrecord = prog.get_etrecord()
+            except RuntimeError:
+                # Raised when the recipe didn't generate an ETRecord (e.g. only the xnnpack
+                # recipe currently forwards generate_etrecord to the lowering pipeline).
+                logging.warning(
+                    f"generate_etrecord=True was requested but no ETRecord was produced for {name}; "
+                    "the selected recipe may not support ETRecord generation yet."
+                )
+            else:
+                etrecord_path = os.path.join(output_dir, f"{name}_etrecord.bin")
+                try:
+                    etrecord.save(etrecord_path)
+                except Exception as e:
+                    logging.warning(f"Failed to save ETRecord for {name}: {e}")
+                else:
+                    etrecord_size_kb = os.path.getsize(etrecord_path) / 1024
+                    logging.info(f"Saved ETRecord to {etrecord_path} ({etrecord_size_kb:.2f} KB)")
 
     return executorch_progs

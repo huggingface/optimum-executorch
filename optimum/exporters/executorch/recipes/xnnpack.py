@@ -61,6 +61,8 @@ def export_to_executorch_with_xnnpack(
             The PyTorch model to be exported to ExecuTorch.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.
+            `generate_etrecord` (`bool`, defaults to `False`): if `True`, generates an ETRecord during
+            lowering so `convert.py` can save it alongside the `.pte` file.
 
     Returns:
         Dict[str, ExecutorchProgram]:
@@ -92,6 +94,7 @@ def export_to_executorch_with_xnnpack(
             ),
             constant_methods=metadata,
             transform_passes=[RemovePaddingIdxEmbeddingPass()],
+            generate_etrecord=kwargs.get("generate_etrecord", False),
         )
         et_prog = et_prog.to_executorch(
             config=ExecutorchBackendConfig(**backend_config_dict),
