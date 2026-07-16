@@ -100,13 +100,13 @@ def custom_sdpa_with_start_pos_forward(
     else:
         attn_mask = None
         if is_causal:
-            # Calculate the input pos from attention mask.
-            # Branch out for float vs bool mask
-            # assert attention_mask.dim() == 2, f"attention_mask must be a 2D matrix."
-            assert (
-                position_ids is not None
-            ), "position_ids must be provided to find start position for causal attention"
-            start_pos = position_ids[0][0].item()
+            cache_position = kwargs.get("cache_position")
+            if position_ids is not None:
+                start_pos = position_ids[0][0].item()
+            elif cache_position is not None:
+                start_pos = cache_position[0].item()
+            else:
+                start_pos = 0
         else:
             start_pos = 0
 

@@ -43,9 +43,9 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
         parse(torchao.__version__) < parse("0.11.0"),
         reason="Quantization is only available on torchao >= 0.11.0.",
     )
-    def test_gpt2sw3_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
-        model_id = "AI-Sweden-Models/gpt-sw3-126m"
-        prompt = "Träd är fina för att"
+    def test_gpt2_text_generation_with_custom_sdpa_and_kv_cache_8da4w_8we(self):
+        model_id = "openai-community/gpt2"
+        prompt = "The weather is nice because"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = ExecuTorchModelForCausalLM.from_pretrained(
             model_id,

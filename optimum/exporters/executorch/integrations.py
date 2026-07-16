@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict
+from typing import Any, Dict, Optional
 
 import torch
 from packaging.version import parse
@@ -28,6 +28,7 @@ from transformers import (
     T5ForConditionalGeneration,
     WhisperForConditionalGeneration,
 )
+from transformers.cache_utils import StaticLayer
 from transformers.integrations.executorch import (
     TorchExportableModuleForDecoderOnlyLM,
 )
@@ -38,6 +39,43 @@ from optimum.executorch.attentions.custom_sdpa import get_custom_sdpa_for_ring_k
 from optimum.executorch.attentions.whisper_attention import WhisperCrossAttention
 
 from .utils import apply_chat_template_with_fallback, save_config_to_constant_methods
+
+
+class _AlwaysFalseDict(dict):
+    @classmethod
+    def fromkeys(cls, sequence, value=False):
+        return cls()
+
+    def get(self, key, default=None):
+        return False
+
+    def __setitem__(self, key, value):
+        return None
+
+
+class _Seq2SeqCrossAttentionStaticLayer(StaticLayer):
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_kwargs: Optional[dict[str, Any]] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if not self.is_initialized:
+            self.lazy_initialization(key_states)
+
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
+        cache_position = (
+            cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
+        )
+
+        try:
+            self.keys.index_copy_(2, cache_position, key_states)
+            self.values.index_copy_(2, cache_position, value_states)
+        except NotImplementedError:
+            self.keys[:, :, cache_position] = key_states
+            self.values[:, :, cache_position] = value_states
+
+        return key_states, value_states
 
 
 class VisionExportableModule(torch.nn.Module):
@@ -705,10 +743,10 @@ class MaskedLMExportableModule(torch.nn.Module):
             else attention_mask
         )
 
-        # Define dynamic shapes with Dim objects, always use Auto
+        seq_len_dim = torch.export.Dim("seq_length_dim", max=max_seq_length)
         dynamic_shapes = {
-            "input_ids": {1: torch.export.Dim.AUTO},
-            "attention_mask": {1: torch.export.Dim.AUTO},
+            "input_ids": {1: seq_len_dim},
+            "attention_mask": {1: seq_len_dim},
         }
 
         # Export the model with dynamic dimensions
@@ -789,6 +827,11 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             device=model.device,
             dtype=model.dtype,
         )
+        if isinstance(model, T5ForConditionalGeneration):
+            self.cross_attention_cache.layers = [
+                _Seq2SeqCrossAttentionStaticLayer(layer.max_cache_len)
+                for layer in self.cross_attention_cache.layers
+            ]
         self.cross_attention_cache.early_initialization(
             batch_size, cross_attention_heads, cross_head_dim, model.dtype, model.device
         )
@@ -817,6 +860,8 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         # self.cross_attention_cache._initialized = self.cross_attention_cache_initialized
 
         self.cache = EncoderDecoderCache(self.self_attention_cache, self.cross_attention_cache)
+        if isinstance(model, T5ForConditionalGeneration):
+            self.cache.is_updated = _AlwaysFalseDict.fromkeys(range(len(self.cross_attention_cache)), False)
         # Use custom cross attention for Whisper.
         # Only use WhisperCrossAttention if torch.ops.executorch.alias is available and device is CUDA.
         _has_et_alias = hasattr(torch.ops, "executorch") and hasattr(torch.ops.executorch, "alias")

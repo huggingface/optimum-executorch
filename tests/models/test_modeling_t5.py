@@ -20,8 +20,6 @@ import tempfile
 import unittest
 
 import pytest
-from executorch import version
-from packaging.version import parse
 from transformers import AutoTokenizer
 from transformers.testing_utils import slow
 
@@ -68,10 +66,6 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
-    @pytest.mark.skipif(
-        parse(version.__version__) < parse("0.7.0"),
-        reason="Fixed on executorch >= 0.7.0",
-    )
     def test_t5_translation_portable(self):
         self._helper_t5_translation(recipe="portable")
 
@@ -122,9 +116,5 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
     @slow
     @pytest.mark.run_slow
     @pytest.mark.portable
-    @pytest.mark.skipif(
-        parse(version.__version__) < parse("0.7.0"),
-        reason="Fixed on executorch >= 0.7.0",
-    )
     def test_t5_summarization_portable(self):
         self._helper_t5_summarization(recipe="portable")
