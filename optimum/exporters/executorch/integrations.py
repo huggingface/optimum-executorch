@@ -829,8 +829,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         )
         if isinstance(model, T5ForConditionalGeneration):
             self.cross_attention_cache.layers = [
-                _Seq2SeqCrossAttentionStaticLayer(layer.max_cache_len)
-                for layer in self.cross_attention_cache.layers
+                _Seq2SeqCrossAttentionStaticLayer(layer.max_cache_len) for layer in self.cross_attention_cache.layers
             ]
         self.cross_attention_cache.early_initialization(
             batch_size, cross_attention_heads, cross_head_dim, model.dtype, model.device
