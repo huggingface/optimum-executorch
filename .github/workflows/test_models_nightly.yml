@@ -38,6 +38,9 @@ jobs:
 
     name: ${{ matrix.test-modeling }} (et=nightly, py=${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Fail cleanly on a hang instead of dragging the run for hours; large-model
+    # export can be slow (especially once paging to swap), so keep this generous.
+    timeout-minutes: 180
     env:
       MODEL_NAME: ${{ matrix.test-modeling }}
     steps:
@@ -46,6 +49,31 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Free up disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h /
+          # Reclaim space from preinstalled toolchains we don't use, so there's
+          # room for a large swapfile and downloaded model weights.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo apt-get clean || true
+          echo "Disk space after cleanup:"
+          df -h /
+      - name: Increase swap space
+        run: |
+          # Large models (e.g. phi4 ~14.7B) exceed the 16GB RAM on standard
+          # runners and get OOM-killed during load/quantization (exit 143). A
+          # big swapfile lets them page to disk instead of being killed.
+          echo "Memory before:"
+          free -h
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          sudo fallocate -l 24G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=24576
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          echo "Memory after:"
+          free -h
       - name: Install dependencies for ExecuTorch nightly
         run: |
           pip cache purge || true
