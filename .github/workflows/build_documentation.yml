@@ -12,7 +12,6 @@ jobs:
   build_documentation:
     runs-on: ubuntu-22.04
     env:
-      COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.number }}
       EVENT_CONTEXT: ${{ toJSON(github.event) }}
       PR_CLONE_URL: ${{ github.event.pull_request.head.repo.clone_url }}
@@ -66,9 +65,10 @@ jobs:
 
       - name: Push documentation
         env:
+          COMMIT_SHA: ${{ github.sha }}
           HF_TOKEN: ${{ secrets.HF_DOC_BUILD_PUSH }}
         run: |
           sudo chmod -R ugo+rwx executorch-doc-build
           cd executorch-doc-build
           sudo mv optimum.executorch optimum-executorch
-          doc-builder push optimum-executorch --doc_build_repo_id "hf-doc-build/doc-build" --token "$HF_TOKEN" --commit_msg "Updated with commit ${COMMIT_SHA} See: https://github.com/huggingface/optimum-executorch/commit/${COMMIT_SHA}" --n_retries 5
+          doc-builder push optimum-executorch --doc_build_repo_id "hf-doc-build/doc-build" --token "$HF_TOKEN" --commit_msg "Updated with commit $COMMIT_SHA See: https://github.com/huggingface/optimum-executorch/commit/$COMMIT_SHA" --n_retries 5
