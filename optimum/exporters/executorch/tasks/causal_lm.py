@@ -20,6 +20,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
 from ..integrations import CausalLMExportableModule
 from ..quantization import quantize_model_
 from ..task_registry import register_task
+from ..utils import disable_dynamic_rope_for_export
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
@@ -69,11 +70,9 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
         )
     config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path, gguf_file=gguf_file)
 
-    if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-        # NOTE: To make the model exportable we need to set the rope scaling to default to avoid hitting
-        # the data-dependent control flow in _longrope_frequency_update. Alternatively, users should rewrite
-        # that function to avoid the data-dependent control flow.
-        config.rope_scaling["type"] = "default"
+    # Downgrade longrope/dynamic RoPE to the static "default" RoPE, otherwise export fails on the
+    # data-dependent control flow in the RoPE frequency update. See helper for version details.
+    disable_dynamic_rope_for_export(config)
 
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True

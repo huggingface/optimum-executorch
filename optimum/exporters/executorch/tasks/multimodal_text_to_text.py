@@ -23,6 +23,7 @@ from transformers import AutoConfig, AutoModelForPreTraining, GenerationConfig
 from ..integrations import MultiModalTextToTextExportableModule
 from ..quantization import quantize_model_
 from ..task_registry import register_task
+from ..utils import disable_dynamic_rope_for_export
 
 
 # NOTE: It's important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
@@ -90,9 +91,9 @@ def load_multimodal_text_to_text_model(model_name_or_path: str, **kwargs):
     if not (hasattr(config, "text_config")):
         raise ValueError(f"The model {model_name_or_path} does not have a `text_config`.")
 
-    if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-        # NOTE: Avoid hitting the data-dependent control flow in _longrope_frequency_update.
-        config.rope_scaling["type"] = "default"
+    # Avoid hitting the data-dependent control flow in the longrope/dynamic RoPE frequency update
+    # during export. See helper for version details.
+    disable_dynamic_rope_for_export(config)
     if hasattr(config, "use_cache") and config.use_cache is False:
         config.use_cache = True
 

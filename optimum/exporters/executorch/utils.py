@@ -64,6 +64,39 @@ def save_config_to_constant_methods(
     return combined_metadata
 
 
+def disable_dynamic_rope_for_export(config: PretrainedConfig) -> None:
+    """
+    Force RoPE variants that use data-dependent control flow to the static ``"default"`` RoPE so the
+    model can be exported.
+
+    ``longrope`` and ``dynamic`` RoPE recompute their frequencies inside the forward pass based on the
+    current sequence length (e.g. ``if seq_len > original_max_position_embeddings``). ``torch.export``
+    /Dynamo cannot trace this data-dependent branching, so export fails. These RoPE types are downgraded
+    to ``"default"`` (which is static and traceable); other RoPE types (``linear``/``llama3``/``yarn``/...)
+    are static already and are left untouched.
+
+    transformers>=5 renamed ``rope_scaling`` to ``rope_parameters`` (``rope_scaling`` is kept as an alias)
+    and dispatches on the ``"rope_type"`` key, whereas older versions read ``"type"``. Both keys are set so
+    the workaround is effective regardless of the installed transformers version. In transformers>=5 the
+    params may also be a nested dict keyed by layer type, which is handled here too.
+    """
+    rope_params = getattr(config, "rope_scaling", None)
+    if not rope_params:
+        return
+
+    # `rope_params` is either a single global dict or, in transformers>=5, a dict of per-layer-type dicts.
+    if all(isinstance(v, dict) for v in rope_params.values()):
+        param_dicts = list(rope_params.values())
+    else:
+        param_dicts = [rope_params]
+
+    for params in param_dicts:
+        rope_type = params.get("rope_type", params.get("type"))
+        if rope_type == "longrope" or (isinstance(rope_type, str) and "dynamic" in rope_type):
+            params["type"] = "default"
+            params["rope_type"] = "default"
+
+
 def apply_chat_template_with_fallback(processor, conversation, **kwargs):
     """
     Apply chat template with fallback for external processors.
