@@ -49,33 +49,38 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Increase swap space
+      - name: Free disk and increase swap space
         run: |
           # Large models (e.g. gemma-3-4b, Phi-4-mini) push past the 16GB RAM on
-          # standard runners and get OOM-killed during load/quantization
-          # (exit 143). A big swapfile lets them page to disk instead of being killed.
-          # Prefer /mnt (local scratch disk); fall back to the root FS if /mnt is
-          # too small. Free space on both varies across the runner pool, so print
-          # df before and after for debugging.
-          echo "Memory + disk before:"
-          free -h
-          df -h / /mnt || true
+          # standard runners and get OOM-killed during load/quantization (exit 143);
+          # a swapfile lets them page to disk. Runner disks vary widely (root seen
+          # from ~15GB to ~87GB free; /mnt is not always a separate disk), so:
+          #   1. reclaim space from unused preinstalled toolchains -- but NOT the
+          #      Python tool-cache ($AGENT_TOOLSDIRECTORY), which setup-python needs;
+          #   2. size the swapfile from the free space that remains, leaving headroom
+          #      for downloaded model weights.
+          # df/free are printed before and after for future debugging.
+          echo "Before:"; free -h; df -h /
           sudo swapoff -a || true
           sudo rm -f /mnt/swapfile /swapfile || true
-          if sudo fallocate -l 24G /mnt/swapfile; then
-            SWAP_FILE=/mnt/swapfile
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune --all --force || true
+          sudo apt-get clean || true
+          AVAIL_GB="$(df -BG --output=avail / | tail -1 | tr -dc '0-9')"
+          if [ -z "$AVAIL_GB" ]; then AVAIL_GB=0; fi
+          RESERVE_GB=12   # leave room for model weights + exported artifacts
+          SWAP_GB=$(( AVAIL_GB - RESERVE_GB ))
+          if [ "$SWAP_GB" -gt 24 ]; then SWAP_GB=24; fi
+          echo "Root avail=${AVAIL_GB}G -> swap=${SWAP_GB}G (reserve ${RESERVE_GB}G)"
+          if [ "$SWAP_GB" -ge 2 ]; then
+            sudo fallocate -l "${SWAP_GB}G" /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=$(( SWAP_GB * 1024 ))
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
           else
-            echo "fallocate on /mnt failed (insufficient space?); falling back to root FS."
-            sudo rm -f /mnt/swapfile || true
-            SWAP_FILE=/swapfile
-            sudo fallocate -l 24G "$SWAP_FILE" || sudo dd if=/dev/zero of="$SWAP_FILE" bs=1M count=24576
+            echo "::warning::Not enough free disk for a useful swapfile (avail=${AVAIL_GB}G); continuing without extra swap."
           fi
-          sudo chmod 600 "$SWAP_FILE"
-          sudo mkswap "$SWAP_FILE"
-          sudo swapon "$SWAP_FILE"
-          echo "Memory + disk after (swap at ${SWAP_FILE}):"
-          free -h
-          df -h / /mnt || true
+          echo "After:"; free -h; df -h /
       - name: Install dependencies for ExecuTorch nightly
         run: |
           pip cache purge || true
