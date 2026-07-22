@@ -54,14 +54,17 @@ jobs:
           # Large models (e.g. gemma-3-4b, Phi-4-mini) push past the 16GB RAM on
           # standard runners and get OOM-killed during load/quantization
           # (exit 143). A big swapfile lets them page to disk instead of being killed.
-          echo "Memory before:"
+          # Put the swapfile on the root FS: /mnt varies across runners and is
+          # often too small for a 24GB file, while / reliably has tens of GB free.
+          echo "Memory + disk before:"
           free -h
+          df -h / /mnt || true
           sudo swapoff -a || true
-          sudo rm -f /mnt/swapfile || true
-          sudo fallocate -l 24G /mnt/swapfile || sudo dd if=/dev/zero of=/mnt/swapfile bs=1M count=24576
-          sudo chmod 600 /mnt/swapfile
-          sudo mkswap /mnt/swapfile
-          sudo swapon /mnt/swapfile
+          sudo rm -f /mnt/swapfile /swapfile || true
+          sudo fallocate -l 24G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=24576
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
           echo "Memory after:"
           free -h
       - name: Install dependencies for ExecuTorch nightly
