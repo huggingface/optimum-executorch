@@ -58,19 +58,28 @@ jobs:
           # Large models (e.g. gemma-3-4b, Phi-4-mini) push past the 16GB RAM on
           # standard runners and get OOM-killed during load/quantization
           # (exit 143). A big swapfile lets them page to disk instead of being killed.
-          # Put the swapfile on the root FS: /mnt varies across runners and is
-          # often too small for a 24GB file, while / reliably has tens of GB free.
+          # Prefer /mnt (local scratch disk); fall back to the root FS if /mnt is
+          # too small. Free space on both varies across the runner pool, so print
+          # df before and after for debugging.
           echo "Memory + disk before:"
           free -h
           df -h / /mnt || true
           sudo swapoff -a || true
           sudo rm -f /mnt/swapfile /swapfile || true
-          sudo fallocate -l 24G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=24576
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "Memory after:"
+          if sudo fallocate -l 24G /mnt/swapfile; then
+            SWAP_FILE=/mnt/swapfile
+          else
+            echo "fallocate on /mnt failed (insufficient space?); falling back to root FS."
+            sudo rm -f /mnt/swapfile || true
+            SWAP_FILE=/swapfile
+            sudo fallocate -l 24G "$SWAP_FILE" || sudo dd if=/dev/zero of="$SWAP_FILE" bs=1M count=24576
+          fi
+          sudo chmod 600 "$SWAP_FILE"
+          sudo mkswap "$SWAP_FILE"
+          sudo swapon "$SWAP_FILE"
+          echo "Memory + disk after (swap at ${SWAP_FILE}):"
           free -h
+          df -h / /mnt || true
       - name: Install dependencies for ExecuTorch
         run: |
           # Clean up cache to save space
