@@ -12,10 +12,60 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from typing import Callable, Optional, Tuple, Union
 
 import torch
 from executorch.extension.llm.custom_ops.custom_ops import custom_sdpa  # noqa
+
+
+_HALF_DTYPES = (torch.float16, torch.bfloat16)
+
+
+def _custom_sdpa_traces_half() -> bool:
+    """
+    Whether `llama.custom_sdpa` can be traced with an f16/bf16 query.
+
+    ExecuTorch only taught the op about half dtypes in 1.4; earlier versions assert float32 in the
+    meta kernel, which surfaces as an opaque dynamo failure rather than something we can catch
+    around the call site. Probe the meta kernel once instead of comparing versions, since source
+    builds report versions such as `1.4.0a0+<sha>` that no version predicate can classify.
+    """
+    from torch._subclasses.fake_tensor import FakeTensorMode
+
+    # A failing probe is an expected outcome, so don't let the meta kernel log its traceback.
+    fake_tensor_logger = logging.getLogger("torch._subclasses.fake_tensor")
+    previously_disabled = fake_tensor_logger.disabled
+    fake_tensor_logger.disabled = True
+    try:
+        with FakeTensorMode():
+            qkv = torch.empty(1, 1, 1, 8, dtype=torch.bfloat16)
+            torch.ops.llama.custom_sdpa(
+                qkv,
+                qkv,
+                qkv,
+                start_pos=0,
+                attn_mask=None,
+                drpout_p=0.0,
+                is_causal=False,
+                scale=None,
+            )
+    except Exception:
+        return False
+    finally:
+        fake_tensor_logger.disabled = previously_disabled
+    return True
+
+
+# Evaluated at import time: the probe traces the op, so it must not run inside an export trace.
+_CUSTOM_SDPA_TRACES_HALF = _custom_sdpa_traces_half()
+
+
+def _is_tracing(tensor: torch.Tensor) -> bool:
+    """Whether we are building an exported graph rather than actually computing."""
+    # `is_compiling` is constant-folded by dynamo (strict export); non-strict export never enters
+    # dynamo but does hand the forward fake tensors.
+    return torch.compiler.is_compiling() or isinstance(tensor, torch._subclasses.FakeTensor)
 
 
 def sdpa_mask_passthrough(
@@ -81,11 +131,7 @@ def custom_sdpa_with_start_pos_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
-    # Convert the hell out of the inputs to fp32 and back
     input_dtype = query.dtype
-    query = query.to(torch.float32)
-    key = key.to(torch.float32)
-    value = value.to(torch.float32)
 
     # Ignore the causal flag from kwargs but use the one in module
     kwargs.pop("is_causal", None)
@@ -109,6 +155,15 @@ def custom_sdpa_with_start_pos_forward(
                 start_pos = 0
         else:
             start_pos = 0
+
+    # Keep half dtypes only where they are known to work: inside an exported graph, running against
+    # an ExecuTorch that supports them. Eager calls go through the AOT op library, whose f16/bf16
+    # kernel needs a temp allocator it is never given, so it silently returns garbage. Everywhere
+    # else, upcast to fp32 and cast back.
+    if input_dtype in _HALF_DTYPES and not (_CUSTOM_SDPA_TRACES_HALF and _is_tracing(query)):
+        query = query.to(torch.float32)
+        key = key.to(torch.float32)
+        value = value.to(torch.float32)
 
     output = torch.ops.llama.custom_sdpa(
         query,

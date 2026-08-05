@@ -174,7 +174,7 @@ class ETCustomStaticCache(StaticCache):
             dtype = legacy_cache.k_cache.dtype
 
         # assert device is None or device == "cpu"
-        assert dtype is None or dtype == torch.float32
+        assert dtype is None or dtype in (torch.float32, torch.bfloat16, torch.float16)
 
         # Use the legacy cache's max_seq_len if max_cache_len is not specified
         if max_cache_len is None and hasattr(legacy_cache, "max_seq_len"):

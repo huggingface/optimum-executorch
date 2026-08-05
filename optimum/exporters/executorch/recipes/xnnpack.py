@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import logging
 from typing import Dict, Union
 
+import torch
 from packaging.version import parse
 from tabulate import tabulate
 from torch import __version__ as torch_version
 from torch.export import ExportedProgram
 from torchao.utils import unwrap_tensor_subclass
 
+from executorch import version as executorch_version
 from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 from executorch.devtools.backend_debug import get_delegation_info
 from executorch.exir import (
@@ -39,6 +42,28 @@ from ..integrations import (
     Seq2SeqLMExportableModule,
 )
 from ..recipe_registry import register_recipe
+
+
+# First ExecuTorch nightly whose XNNPACK partitioner understands `enable_bf16`.
+_MIN_ET_FOR_BF16_DELEGATION = "1.4.0.dev20260801"
+
+
+@functools.lru_cache(maxsize=1)
+def _xnnpack_honors_enable_bf16() -> bool:
+    """
+    Whether the installed XNNPACK partitioner actually acts on `enable_bf16`.
+
+    The flag is forwarded through `**kwargs` into every partitioner config, so an ExecuTorch that
+    predates it accepts `enable_bf16=True` and silently ignores it. Probe the behavior rather than
+    comparing versions: source builds report versions such as `1.4.0a0+<sha>`, which PEP 440 sorts
+    *after* every `1.4.0.devN` nightly and would pass a version check whether or not they carry the
+    feature.
+    """
+    try:
+        configs = XnnpackPartitioner(enable_bf16=True).target_partitioner_configs.values()
+    except Exception:  # Partitioner internals differ across versions; assume unsupported.
+        return False
+    return any(getattr(config, "enable_bf16", False) for config in configs)
 
 
 @register_recipe("xnnpack")
@@ -83,9 +108,39 @@ def export_to_executorch_with_xnnpack(
         if len(exported_programs) == 1:
             exported_programs = {"forward": next(iter(exported_programs.values()))}
 
+        # bf16 delegation is opt-in in the backend. A bf16 model always carries bf16 tensors
+        # (e.g. RMSNorm weights), even when its linears are quantized.
+        enable_bf16 = any(
+            getattr(tensor, "dtype", None) == torch.bfloat16
+            for exported_program in exported_programs.values()
+            for tensor in exported_program.state_dict.values()
+        )
+        if enable_bf16 and not _xnnpack_honors_enable_bf16():
+            reason = (
+                f"the installed ExecuTorch ({executorch_version.__version__}) cannot delegate bf16 to XNNPACK "
+                f"(that needs ExecuTorch >= {_MIN_ET_FOR_BF16_DELEGATION})"
+            )
+            # ExecuTorch has no portable kernels for these, so leaving them undelegated makes
+            # `to_executorch` die later with a far less obvious "Missing out variants: torchao::...".
+            has_affine_quant_ops = any(
+                node.op == "call_function" and "torchao" in str(node.target) and "affine" in str(node.target)
+                for exported_program in exported_programs.values()
+                for node in exported_program.graph.nodes
+            )
+            if has_affine_quant_ops:
+                raise RuntimeError(
+                    "Quantized linears (--qlinear) lower only through XNNPACK delegation, since torchao's "
+                    f"affine quant ops have no portable ExecuTorch kernels, but {reason}. "
+                    "Upgrade ExecuTorch, or re-export with --dtype float32 or --dtype float16."
+                )
+            logging.warning(
+                f"Exporting a bf16 model but {reason}, so every bf16 operator will fall back to the portable "
+                "kernels and inference will be slow. Upgrade ExecuTorch to delegate bf16 to XNNPACK."
+            )
+
         et_prog = to_edge_transform_and_lower(
             exported_programs,
-            partitioner=[XnnpackPartitioner()],
+            partitioner=[XnnpackPartitioner(enable_bf16=enable_bf16)],
             compile_config=EdgeCompileConfig(
                 _check_ir_validity=False,
                 _skip_dim_order=True,
