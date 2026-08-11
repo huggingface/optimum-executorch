@@ -750,7 +750,8 @@ class ExecuTorchModelForCausalLM(ExecuTorchModelBase):
                 cache_position=torch.arange(len(prompt_tokens), dtype=torch.long, device=self.device),
             )
             self.stats.on_sampling_end()
-            next_token = torch.argmax(logits, dim=-1)[0, -1].item()
+            # Slice first: prefill returns logits for every position, we need one.
+            next_token = torch.argmax(logits[:, -1, :], dim=-1).item()
         else:
             # Sequential prefill is preserved for backwards compatibility in order to run PTE generated w/o dynamic shapes.
             # TODO: We can remove this block once the executorch runtime supports `cache_position`.
