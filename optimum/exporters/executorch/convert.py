@@ -71,10 +71,11 @@ def export_to_executorch(
     discover_recipes()
 
     # Export and lower the model to ExecuTorch with the recipe
-    try:
-        recipe_func = recipe_registry.get(recipe)
-    except KeyError as e:
-        raise RuntimeError(f"The recipe '{recipe}' isn't registered. Detailed error: {e}")
+    if recipe not in recipe_registry:
+        raise RuntimeError(
+            f"The recipe '{recipe}' isn't registered. Available recipes: {list(recipe_registry.keys())}"
+        )
+    recipe_func = recipe_registry[recipe]
 
     executorch_progs = recipe_func(model, **kwargs)
 
