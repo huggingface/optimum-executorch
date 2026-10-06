@@ -11,12 +11,12 @@ STABLE_TORCH_DEPS = [
 ]
 
 NIGHTLY_TORCH_DEPS = [
-    "executorch==1.4.0.dev20260802+cpu",
-    # Keep torch aligned with the published torchvision nightly dependency.
-    "torch==2.14.0.dev20260801+cpu",
-    "torchvision==0.29.0.dev20260802+cpu",
-    "torchaudio==2.11.0.dev20260802+cpu",
-    "torchao==0.19.0.dev20260802+cpu",
+    "executorch==1.6.0.dev20261005+cpu",
+    # Keep the published PyTorch CPU nightlies on the same build date.
+    "torch==2.15.0.dev20261005+cpu",
+    "torchvision==0.30.0.dev20261005+cpu",
+    "torchaudio==2.11.0.dev20261005+cpu",
+    "torchao==0.19.0.dev20261005+cpu",
 ]
 
 
