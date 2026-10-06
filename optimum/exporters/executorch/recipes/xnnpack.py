@@ -74,6 +74,7 @@ def export_to_executorch_with_xnnpack(
         Seq2SeqLMExportableModule,
         MultiModalTextToTextExportableModule,
     ],
+    run_reinplace_pass: bool = True,
     **kwargs,
 ):
     """
@@ -84,6 +85,7 @@ def export_to_executorch_with_xnnpack(
     Args:
         model (Union[CausalLMExportableModule, MaskedLMExportableModule, Seq2SeqLMExportableModule, MultiModalTextToTextExportableModule]):
             The PyTorch model to be exported to ExecuTorch.
+        run_reinplace_pass (bool): Whether to reinplace eligible ops during lowering. Defaults to True.
         **kwargs:
             Additional keyword arguments for recipe-specific configurations, e.g. export using different example inputs, or different compile/bechend configs.
 
@@ -100,6 +102,7 @@ def export_to_executorch_with_xnnpack(
         backend_config_dict = {
             "extract_delegate_segments": True,
             "memory_planning_pass": MemoryPlanningPass(alloc_graph_input=False),
+            "run_reinplace_pass": run_reinplace_pass,
         }
         backend_config_dict["do_quant_fusion_and_const_prop"] = True
         logging.debug(f"\nExported program: {exported_programs}")
