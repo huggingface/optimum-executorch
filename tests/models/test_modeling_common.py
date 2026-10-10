@@ -33,6 +33,7 @@ from transformers import (
 from optimum.executorch import ExecuTorchModelForCausalLM
 from optimum.executorch.modeling import _FILE_PATTERN
 from optimum.exporters.executorch import main_export
+from optimum.exporters.executorch.integrations import CausalLMExportableModule
 from optimum.utils.file_utils import find_files_matching_pattern
 
 from ..utils import check_causal_lm_output_quality
@@ -183,3 +184,27 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 if node.op == "call_function" and node.target == exir_ops.edge.aten.embedding.default
             )
         )
+
+    def test_custom_kv_cache_auto_disables_dynamic_shapes(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+
+        wrapper = CausalLMExportableModule(
+            model,
+            use_custom_kv_cache=True,
+            disable_dynamic_shapes=False,
+        )
+        self.assertTrue(wrapper.disable_dynamic_shapes)
+        self.assertFalse(wrapper.metadata.get("enable_dynamic_shape", True))
+
+    def test_dynamic_shapes_preserved_without_custom_kv_cache(self):
+        model_id = "optimum-internal-testing/tiny-random-llama"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+
+        wrapper = CausalLMExportableModule(
+            model,
+            use_custom_kv_cache=False,
+            disable_dynamic_shapes=False,
+        )
+        self.assertFalse(wrapper.disable_dynamic_shapes)
+        self.assertTrue(wrapper.metadata.get("enable_dynamic_shape", False))
