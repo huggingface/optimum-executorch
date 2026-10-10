@@ -95,7 +95,7 @@ optimum-cli export executorch \
     --output_dir="hf_smollm2"
 ```
 Explore the various export options by running the command: `optimum-cli export executorch --help`.
-To read more about how to export different types of models on Optimum ExecuTorch, please revert to the export [README](optimum/exporters/executorch/README.md).
+To read more about how to export different types of models on Optimum ExecuTorch, please refer to the export [README](optimum/exporters/executorch/README.md).
 
 #### Step 2: Validate the Exported Model on Host Using the Python API
 Use the exported model for text generation:
