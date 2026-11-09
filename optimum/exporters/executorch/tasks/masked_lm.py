@@ -17,6 +17,7 @@ from transformers import AutoModelForMaskedLM
 from ..integrations import MaskedLMExportableModule
 from ..quantization import quantize_model_
 from ..task_registry import register_task
+from ..utils import get_hub_kwargs
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
@@ -39,7 +40,7 @@ def load_masked_lm_model(model_name_or_path: str, **kwargs) -> MaskedLMExportabl
             An instance of `MaskedLMExportableModule` for exporting and lowering to ExecuTorch.
     """
 
-    eager_model = AutoModelForMaskedLM.from_pretrained(model_name_or_path).to("cpu").eval()
+    eager_model = AutoModelForMaskedLM.from_pretrained(model_name_or_path, **get_hub_kwargs(kwargs)).to("cpu").eval()
 
     qlinear_config = kwargs.get("qlinear", None)
     qlinear_packing_format = kwargs.get("qlinear_packing_format", None)

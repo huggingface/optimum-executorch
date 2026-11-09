@@ -20,7 +20,7 @@ import os
 import warnings
 from pathlib import Path
 
-from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from huggingface_hub.constants import HF_HUB_CACHE
 from transformers import PretrainedConfig
 from transformers.utils import is_torch_available
 
@@ -43,7 +43,7 @@ def main_export(
     recipe: str,
     output_dir: Union[str, Path],
     config: Optional[PretrainedConfig] = None,
-    cache_dir: str = HUGGINGFACE_HUB_CACHE,
+    cache_dir: str = HF_HUB_CACHE,
     trust_remote_code: bool = False,
     pad_token_id: Optional[int] = None,
     subfolder: str = "",
@@ -129,6 +129,8 @@ def main_export(
     kwargs["subfolder"] = subfolder
     kwargs["revision"] = revision
     kwargs["force_download"] = force_download
+    kwargs["local_files_only"] = local_files_only
+    kwargs["token"] = token
     kwargs["config"] = config
 
     # 1. Load model, apply source transformations, and torch.export() into a graph (ExportedProgram).
