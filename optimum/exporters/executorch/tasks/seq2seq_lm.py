@@ -16,6 +16,7 @@ from transformers import AutoModelForSeq2SeqLM
 
 from ..integrations import Seq2SeqLMExportableModule
 from ..task_registry import register_task
+from ..utils import get_hub_kwargs
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
@@ -49,7 +50,7 @@ def load_seq2seq_lm_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExporta
     max_hidden_seq_len = kwargs.get("max_hidden_seq_len", 4096)
     max_seq_len = kwargs.get("max_seq_len", 1024)
 
-    full_model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path).to(device).eval()
+    full_model = AutoModelForSeq2SeqLM.from_pretrained(model_name_or_path, **get_hub_kwargs(kwargs)).to(device).eval()
     return Seq2SeqLMExportableModule(
         full_model,
         batch_size=batch_size,

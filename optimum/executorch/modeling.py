@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from huggingface_hub import hf_hub_download, is_offline_mode
-from huggingface_hub.constants import HUGGINGFACE_HUB_CACHE
+from huggingface_hub.constants import HF_HUB_CACHE
 from torch.ao.quantization.fx._decomposed import quantized_decomposed_lib  # noqa
 from transformers import (
     AutoModel,
@@ -166,7 +166,7 @@ class ExecuTorchModelBase(ABC):
         subfolder: str = "",
         force_download: bool = False,
         local_files_only: bool = False,
-        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        cache_dir: str = HF_HUB_CACHE,
         file_name: Optional[str] = None,
         **kwargs,
     ) -> Dict[str, "ExecuTorchModule"]:
@@ -268,7 +268,7 @@ class ExecuTorchModelBase(ABC):
         config: Optional[PretrainedConfig] = None,
         token: Optional[Union[bool, str]] = None,
         revision: Optional[str] = None,
-        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        cache_dir: str = HF_HUB_CACHE,
         trust_remote_code: bool = False,
         subfolder: str = "",
         force_download: bool = False,
@@ -322,7 +322,7 @@ class ExecuTorchModelBase(ABC):
         trust_remote_code: bool = False,
         force_download: bool = False,
         local_files_only: bool = False,
-        cache_dir: str = HUGGINGFACE_HUB_CACHE,
+        cache_dir: str = HF_HUB_CACHE,
         config: Optional[PretrainedConfig] = None,
         **kwargs,
     ) -> "ExecuTorchModelBase":

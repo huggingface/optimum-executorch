@@ -17,6 +17,7 @@ from transformers import AutoModelForSpeechSeq2Seq
 from ..integrations import Seq2SeqLMExportableModule
 from ..quantization import quantize_model_
 from ..task_registry import register_task
+from ..utils import get_hub_kwargs
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
@@ -51,7 +52,9 @@ def load_seq2seq_speech_model(model_name_or_path: str, **kwargs) -> Seq2SeqLMExp
     max_seq_len = kwargs.get("max_seq_len", 1024)
     dtype = kwargs.get("dtype", "float32")
 
-    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(model_name_or_path, dtype=dtype, device_map=device).eval()
+    full_model = AutoModelForSpeechSeq2Seq.from_pretrained(
+        model_name_or_path, dtype=dtype, device_map=device, **get_hub_kwargs(kwargs)
+    ).eval()
 
     for param in full_model.parameters():
         if isinstance(param, torchao.utils.TorchAOBaseTensor):

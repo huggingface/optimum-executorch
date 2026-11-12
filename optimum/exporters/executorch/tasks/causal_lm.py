@@ -20,7 +20,7 @@ from transformers import AutoConfig, AutoModelForCausalLM, GenerationConfig
 from ..integrations import CausalLMExportableModule
 from ..quantization import quantize_model_
 from ..task_registry import register_task
-from ..utils import disable_dynamic_rope_for_export
+from ..utils import disable_dynamic_rope_for_export, get_hub_kwargs
 
 
 # NOTE: It’s important to map the registered task name to the pipeline name in https://github.com/huggingface/transformers/blob/main/utils/update_metadata.py.
@@ -63,12 +63,13 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
     max_seq_len = kwargs.get("max_seq_len", None)
     max_length = max_seq_len if max_seq_len is not None else kwargs.get("max_length", 2048)
     gguf_file = kwargs.get("gguf_file", None)
+    hub_kwargs = get_hub_kwargs(kwargs)
     if gguf_file:
         logging.warning(
             "GGUF weights are dequantized to float32 before export, which increases "
             "peak memory. Use --dtype float16 to halve memory usage."
         )
-    config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path, gguf_file=gguf_file)
+    config = kwargs.get("config") or AutoConfig.from_pretrained(model_name_or_path, gguf_file=gguf_file, **hub_kwargs)
 
     # Downgrade longrope/dynamic RoPE to the static "default" RoPE, otherwise export fails on the
     # data-dependent control flow in the RoPE frequency update. See helper for version details.
@@ -95,6 +96,7 @@ def load_causal_lm_model(model_name_or_path: str, **kwargs) -> CausalLMExportabl
             config=config,
             attn_implementation=attn_implementation,
             gguf_file=gguf_file,
+            **hub_kwargs,
             generation_config=GenerationConfig(
                 use_cache=True,
                 cache_implementation=cache_implementation,

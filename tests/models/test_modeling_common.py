@@ -20,14 +20,22 @@ import tempfile
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 import torch
 from executorch.extension.pybindings.portable_lib import ExecuTorchModule
 from huggingface_hub import HfApi
+from parameterized import parameterized
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BertConfig,
+    BertForMaskedLM,
     GenerationConfig,
+    LlamaConfig,
+    LlamaForCausalLM,
+    T5Config,
+    T5ForConditionalGeneration,
 )
 
 from optimum.executorch import ExecuTorchModelForCausalLM
@@ -183,3 +191,42 @@ class ExecuTorchModelIntegrationTest(unittest.TestCase):
                 if node.op == "call_function" and node.target == exir_ops.edge.aten.embedding.default
             )
         )
+
+
+class MainExportHubKwargsTest(unittest.TestCase):
+    @parameterized.expand(
+        [
+            ("fill-mask", BertForMaskedLM, BertConfig, {"hidden_size": 32, "num_attention_heads": 2}),
+            ("text-generation", LlamaForCausalLM, LlamaConfig, {"hidden_size": 32, "num_attention_heads": 2}),
+            (
+                "text2text-generation",
+                T5ForConditionalGeneration,
+                T5Config,
+                {"d_model": 32, "d_kv": 16, "num_heads": 2},
+            ),
+        ]
+    )
+    def test_main_export_loads_requested_revision(self, task, model_cls, config_cls, config_kwargs):
+        # A Hub cache (huggingface_hub layout: refs/<ref> holds a commit hash, snapshots/<hash> holds the files)
+        # with two revisions of the same repo that differ in depth: main has 1 layer, v2 has 2.
+        with TemporaryDirectory() as cache_dir:
+            repo_dir = Path(cache_dir) / "models--demo--tiny"
+            for ref, sha, num_layers in [("main", "a" * 40, 1), ("v2", "b" * 40, 2)]:
+                config = config_cls(vocab_size=99, num_hidden_layers=num_layers, **config_kwargs)
+                model_cls(config).save_pretrained(repo_dir / "snapshots" / sha)
+                (repo_dir / "refs").mkdir(parents=True, exist_ok=True)
+                (repo_dir / "refs" / ref).write_text(sha)
+
+            with mock.patch("optimum.exporters.executorch.__main__.export_to_executorch") as export_mock:
+                main_export(
+                    "demo/tiny",
+                    task=task,
+                    recipe="xnnpack",
+                    output_dir=Path(cache_dir) / "out",
+                    cache_dir=cache_dir,
+                    revision="v2",
+                    local_files_only=True,
+                )
+
+            exported = export_mock.call_args.kwargs["model"]
+            self.assertEqual(exported.config.num_hidden_layers, 2)

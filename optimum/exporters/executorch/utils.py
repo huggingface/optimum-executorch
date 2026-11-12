@@ -24,6 +24,22 @@ from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_tokenizers import TokenizersBackend
 
 
+_HUB_KWARGS = (
+    "cache_dir",
+    "force_download",
+    "local_files_only",
+    "revision",
+    "subfolder",
+    "token",
+    "trust_remote_code",
+)
+
+
+def get_hub_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Returns the Hub loading options (revision, cache_dir, token, ...) found in `kwargs`, for `from_pretrained`."""
+    return {key: kwargs[key] for key in _HUB_KWARGS if key in kwargs}
+
+
 def save_config_to_constant_methods(
     config: PretrainedConfig,
     generation_config: Optional[GenerationConfig] = None,
