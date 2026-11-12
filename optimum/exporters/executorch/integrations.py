@@ -456,6 +456,14 @@ class CausalLMExportableModule(torch.nn.Module):
         self.config = model.config
         self.use_custom_kv_cache = use_custom_kv_cache
         self.use_custom_sdpa = use_custom_sdpa
+
+        # update_cache op only supports single-token (decode) inputs
+        if use_custom_kv_cache and not disable_dynamic_shapes:
+            logging.warning(
+                "Custom KV cache requires static shapes. Automatically setting disable_dynamic_shapes=True."
+            )
+            disable_dynamic_shapes = True
+
         self.disable_dynamic_shapes = disable_dynamic_shapes
         self.metadata = save_config_to_constant_methods(
             model.config,
